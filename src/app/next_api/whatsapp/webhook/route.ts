@@ -161,10 +161,13 @@ async function processMessage(message: any): Promise<void> {
 
   } catch (error) {
     console.error('❌ [PROCESS MESSAGE] Erro:', error);
-    await sendWhatsAppMessage(
-      from, 
-      '❌ Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente em alguns instantes.'
-    );
+    // Adicionado o 'from' para garantir que o remetente seja notificado do erro
+    if (from) {
+        await sendWhatsAppMessage(
+            from, 
+            '❌ Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente em alguns instantes.'
+        );
+    }
   }
 }
 
@@ -180,19 +183,14 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
     textoLength: text.length
   });
 
-  // Limpar e formatar número
-  const cleanedTo = to.replace(/\D/g, '');
-  let finalTo = cleanedTo;
-  
-  // Ajustar formato do número se necessário
-  if (cleanedTo.startsWith('55') && cleanedTo.length > 10) {
-    finalTo = cleanedTo.substring(2);
-  }
+  // 💥 CORREÇÃO APLICADA AQUI 💥
+  // O número 'to' (que é o 'from' da mensagem original) já vem no formato E.164
+  // (ex: 55984557096). Apenas limpamos caracteres não numéricos para garantir.
+  const finalTo = to.replace(/\D/g, ''); 
 
   console.log('🔢 [SEND MESSAGE] Formatação do número:', {
     original: to,
-    limpo: cleanedTo,
-    final: finalTo
+    final: finalTo // AGORA MANTÉM O PREFIXO '55'
   });
 
   const url = `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`;
@@ -228,6 +226,7 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
     });
 
     if (!response.ok) {
+      // O erro real da API do Facebook será capturado aqui e jogado para o catch
       throw new Error(`HTTP ${response.status}: ${responseText}`);
     }
 
