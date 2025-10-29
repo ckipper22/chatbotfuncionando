@@ -111,12 +111,15 @@ async function processMessage(message: any, value: any) {
 }
 
 async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
+  // CORREÇÃO APLICADA: Limpeza do número de telefone
+  const cleanedTo = to.replace(/\D/g, ''); // Remove qualquer caractere que não seja dígito
+
   const url = `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 
   const payload = {
     messaging_product: 'whatsapp',
     recipient_type: 'individual',
-    to: to,
+    to: cleanedTo, // Usa o número limpo (apenas dígitos)
     type: 'text',
     text: {
       preview_url: false,
