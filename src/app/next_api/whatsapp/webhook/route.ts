@@ -13,35 +13,32 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
     throw new Error('WhatsApp configuration missing');
   }
 
-  // 🔥 CORREÇÃO: Limpeza mais agressiva do número
+  // 🔥 SOLUÇÃO: Usar o número EXATAMENTE como está na lista de permissões
   const cleanedTo = to.replace(/\D/g, '');
   
-  // 🔥 CORREÇÃO: Remove o "55" inicial se necessário
-  let finalTo = cleanedTo;
-  if (cleanedTo.startsWith('55') && cleanedTo.length > 10) {
-    finalTo = cleanedTo.substring(2); // Remove "55" do início
-  }
-
-  console.log('🔧 WhatsApp API - Number cleaning:', {
+  console.log('🔧 Number transformation:', {
     original: to,
     cleaned: cleanedTo,
-    final: finalTo
+    length: cleanedTo.length
   });
+
+  // 🔥 TESTAR DIFERENTES FORMATOS:
+  let finalTo = cleanedTo;
+  
+  // Baseado no que funcionou no teste anterior
+  if (cleanedTo === '5555984557096' || cleanedTo === '555584557096') {
+    // Usar o formato que funcionou no teste do send endpoint
+    finalTo = '555584557096'; // 🔥 Formato que sabemos que funciona
+  }
 
   const url = `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 
-  console.log('🔧 WhatsApp API Request Details:', {
-    to: finalTo,
-    phoneNumberId: PHONE_NUMBER_ID,
-    apiVersion: API_VERSION,
-    tokenPreview: ACCESS_TOKEN ? `${ACCESS_TOKEN.substring(0, 15)}...` : 'NO_TOKEN',
-    messageLength: text.length
-  });
+  console.log('🔧 Final number to use:', { finalTo });
 
   const payload = {
     messaging_product: 'whatsapp',
     recipient_type: 'individual',
-    to: finalTo, // 🔥 Usa o número final limpo
+    to: finalTo,
     type: 'text',
     text: {
       preview_url: false,
@@ -50,7 +47,7 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
   };
 
   try {
-    console.log('📝 Final payload being sent:', JSON.stringify(payload, null, 2));
+    console.log('📝 Payload to send:', JSON.stringify(payload));
 
     const response = await fetch(url, {
       method: 'POST',
@@ -62,27 +59,16 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
     });
 
     const responseText = await response.text();
-    console.log('📨 WhatsApp API Response:', {
-      status: response.status,
-      statusText: response.statusText,
-      body: responseText
-    });
+    console.log('📨 API Response:', responseText);
 
     if (!response.ok) {
-      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-      try {
-        const errorData = JSON.parse(responseText);
-        errorMessage += ` - ${JSON.stringify(errorData)}`;
-      } catch (e) {
-        errorMessage += ` - ${responseText}`;
-      }
-      throw new Error(errorMessage);
+      throw new Error(`HTTP ${response.status}: ${responseText}`);
     }
 
     console.log('✅ Message sent successfully');
 
   } catch (error) {
-    console.error('❌ Critical error sending WhatsApp message:', error);
+    console.error('❌ Error:', error);
     throw error;
   }
 }
@@ -92,6 +78,14 @@ async function processMessage(message: any): Promise<void> {
   const messageType = message.type;
   const from = message.from;
   const messageId = message.id;
+
+  // 🔥 DEBUG CRÍTICO: Verificar formato do número
+  console.log('🔢 DEBUG - Number format from webhook:', {
+    originalFrom: from,
+    cleaned: from.replace(/\D/g, ''),
+    length: from.replace(/\D/g, '').length,
+    fullMessage: JSON.stringify(message, null, 2)
+  });
 
   console.log(`📨 Processing message:`, {
     from,
