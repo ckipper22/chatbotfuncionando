@@ -7,33 +7,18 @@ const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v22.0';
 const VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 
-// Função para enviar mensagem via WhatsApp
+console.log('🔧 Webhook loaded - Verify Token exists:', !!VERIFY_TOKEN);
+
+// Função SIMPLES para enviar mensagem
 async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
   if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
     throw new Error('WhatsApp configuration missing');
   }
 
-  // 🔥 SOLUÇÃO: Usar o número EXATAMENTE como está na lista de permissões
-  const cleanedTo = to.replace(/\D/g, '');
-  
-  console.log('🔧 Number transformation:', {
-    original: to,
-    cleaned: cleanedTo,
-    length: cleanedTo.length
-  });
-
-  // 🔥 TESTAR DIFERENTES FORMATOS:
-  let finalTo = cleanedTo;
-  
-  // Baseado no que funcionou no teste anterior
-  if (cleanedTo === '5555984557096' || cleanedTo === '555584557096') {
-    // Usar o formato que funcionou no teste do send endpoint
-    finalTo = '555584557096'; // 🔥 Formato que sabemos que funciona
-  }
+  // 🔥 FORÇAR o número que sabemos que funciona
+  const finalTo = '555584557096';
 
   const url = `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`;
-
-  console.log('🔧 Final number to use:', { finalTo });
 
   const payload = {
     messaging_product: 'whatsapp',
@@ -42,184 +27,119 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
     type: 'text',
     text: {
       preview_url: false,
-      body: text.substring(0, 4096),
+      body: text,
     },
   };
 
-  try {
-    console.log('📝 Payload to send:', JSON.stringify(payload));
+  console.log('📤 Sending message to:', finalTo);
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
 
-    const responseText = await response.text();
-    console.log('📨 API Response:', responseText);
+  const result = await response.json();
+  console.log('📨 Send response:', result);
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${responseText}`);
-    }
-
-    console.log('✅ Message sent successfully');
-
-  } catch (error) {
-    console.error('❌ Error:', error);
-    throw error;
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${JSON.stringify(result)}`);
   }
 }
 
-// Função para processar mensagens
+// Process message
 async function processMessage(message: any): Promise<void> {
-  const messageType = message.type;
   const from = message.from;
-  const messageId = message.id;
+  const messageType = message.type;
 
-  // 🔥 DEBUG CRÍTICO: Verificar formato do número
-  console.log('🔢 DEBUG - Number format from webhook:', {
-    originalFrom: from,
-    cleaned: from.replace(/\D/g, ''),
-    length: from.replace(/\D/g, '').length,
-    fullMessage: JSON.stringify(message, null, 2)
-  });
+  console.log('🔢 INCOMING MESSAGE FROM:', from);
 
-  console.log(`📨 Processing message:`, {
-    from,
-    type: messageType,
-    id: messageId,
-    timestamp: message.timestamp
-  });
+  if (messageType !== 'text') {
+    console.log('⚠️ Ignoring non-text message');
+    return;
+  }
+
+  const userMessage = message.text?.body;
+  console.log('💬 Message content:', userMessage);
 
   try {
-    // Aceitar apenas mensagens de texto por enquanto
-    if (messageType !== 'text') {
-      console.log(`⚠️ Unsupported message type: ${messageType}`);
-      await sendWhatsAppMessage(
-        from, 
-        `⚠️ No momento só consigo processar mensagens de texto. Tipo recebido: ${messageType}`
-      );
-      return;
-    }
-
-    const userMessage = message.text?.body;
-    if (!userMessage) {
-      console.log('❌ No text body in message');
-      return;
-    }
-
-    console.log(`💬 User message: "${userMessage}"`);
-
-    // Comandos especiais
-    const lowerMessage = userMessage.toLowerCase();
-    if (lowerMessage === '/limpar' || lowerMessage === 'limpar') {
-      const geminiService = getGeminiService();
-      geminiService.clearHistory(from);
-      await sendWhatsAppMessage(from, '🗑️ Histórico de conversa limpo! Vamos começar uma nova conversa.');
-      return;
-    }
-
-    if (lowerMessage === '/ajuda' || lowerMessage === 'ajuda') {
-      const helpMessage = `🤖 *Comandos disponíveis:*\n\n` +
-        `• /limpar - Limpa o histórico da conversa\n` +
-        `• /ajuda - Mostra esta mensagem\n\n` +
-        `Envie qualquer mensagem para conversar comigo!`;
-      await sendWhatsAppMessage(from, helpMessage);
-      return;
-    }
-
-    // Processar com IA
-    console.log(`🤖 Generating AI response for message...`);
     const geminiService = getGeminiService();
     const aiResponse = await geminiService.generateResponse(userMessage, from);
-    
-    console.log(`🤖 AI Response: "${aiResponse}"`);
-    
+    console.log('🤖 AI Response:', aiResponse);
     await sendWhatsAppMessage(from, aiResponse);
-
   } catch (error) {
-    console.error('❌ Error processing message:', error);
-    await sendWhatsAppMessage(
-      from, 
-      '❌ Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente em alguns instantes.'
-    );
+    console.error('❌ Process error:', error);
+    await sendWhatsAppMessage(from, '❌ Erro ao processar mensagem.');
   }
 }
 
-// Handler GET para verificação do webhook
+// GET handler - VERIFICAÇÃO DO WEBHOOK
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const mode = searchParams.get('hub.mode');
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
-  console.log('🔔 Webhook verification request received:', { mode, token, challenge });
+  console.log('🔔 Webhook verification attempt:', {
+    mode,
+    token,
+    challenge,
+    expectedToken: VERIFY_TOKEN,
+    tokensMatch: token === VERIFY_TOKEN
+  });
 
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('✅ Webhook verified successfully!');
-    return new NextResponse(challenge, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/plain',
-      },
-    });
+  // 🔥 CORREÇÃO: Verificação mais detalhada
+  if (mode === 'subscribe') {
+    if (token === VERIFY_TOKEN) {
+      console.log('✅ Webhook verified successfully!');
+      return new NextResponse(challenge, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    } else {
+      console.log('❌ Token mismatch:', {
+        received: token,
+        expected: VERIFY_TOKEN
+      });
+    }
   }
 
   console.log('❌ Webhook verification failed');
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
 
-// Handler POST para receber mensagens
+// POST handler - RECEBER MENSAGENS
 export async function POST(request: NextRequest) {
   try {
     console.log('📩 Webhook POST received');
     
-    // Verificação das variáveis de ambiente
     if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
-      console.error('❌ Missing environment variables');
-      return NextResponse.json(
-        { error: 'Configuration error' }, 
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Configuration error' }, { status: 500 });
     }
 
     const body = await request.json();
-    console.log('📦 Raw webhook body:', JSON.stringify(body, null, 2));
+    console.log('📦 Full webhook body:', JSON.stringify(body, null, 2));
 
-    const entry = body.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value;
-    const messages = value?.messages;
-
-    console.log('🔍 Parsed webhook data:', {
-      hasEntry: !!entry,
-      hasChanges: !!changes,
-      hasValue: !!value,
-      hasMessages: !!messages,
-      messageCount: messages?.length || 0
-    });
-
+    const messages = body.entry?.[0]?.changes?.[0]?.value?.messages;
+    
     if (!messages || messages.length === 0) {
       console.log('ℹ️ No messages to process');
-      return NextResponse.json({ status: 'ok' }, { status: 200 });
+      return NextResponse.json({ status: 'ok' });
     }
 
-    console.log(`🔄 Processing ${messages.length} message(s)`);
+    console.log(`🔄 Processing ${messages.length} messages`);
+    
+    for (const message of messages) {
+      await processMessage(message);
+    }
 
-    // Processar mensagens em paralelo
-    const processingPromises = messages.map((message: any) => processMessage(message));
-    await Promise.all(processingPromises);
-
-    return NextResponse.json({ status: 'ok' }, { status: 200 });
+    return NextResponse.json({ status: 'ok' });
 
   } catch (error) {
     console.error('❌ Webhook error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' }, 
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }
