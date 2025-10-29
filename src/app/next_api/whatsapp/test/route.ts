@@ -17,6 +17,18 @@ export async function POST(request: Request) {
       apiVersion: API_VERSION
     });
 
+    // Verificar se as variáveis existem
+    if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
+      return NextResponse.json({
+        success: false,
+        error: 'Missing environment variables',
+        details: {
+          WHATSAPP_PHONE_NUMBER_ID: PHONE_NUMBER_ID ? '✅ Present' : '❌ Missing',
+          WHATSAPP_ACCESS_TOKEN: ACCESS_TOKEN ? '✅ Present' : '❌ Missing'
+        }
+      }, { status: 500 });
+    }
+
     const url = `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`;
     
     const payload = {
