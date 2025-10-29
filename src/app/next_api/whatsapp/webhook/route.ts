@@ -5,6 +5,11 @@ const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID!;
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN!;
 const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0';
 
+// Verificar se as variáveis de ambiente estão configuradas
+if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
+  console.error('❌ Missing required WhatsApp environment variables');
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const mode = searchParams.get('hub.mode');
@@ -32,6 +37,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Verificar se o token de acesso está configurado
+    if (!ACCESS_TOKEN || !PHONE_NUMBER_ID) {
+      console.error('❌ WhatsApp access token or phone number ID not configured');
+      return NextResponse.json(
+        { error: 'WhatsApp service not configured' }, 
+        { status: 500 }
+      );
+    }
+
     const body = await request.json();
     console.log('📩 Webhook POST received:', JSON.stringify(body, null, 2));
 
@@ -58,7 +72,10 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('❌ Webhook error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal server error' }, 
+      { status: 500 }
+    );
   }
 }
 
@@ -80,6 +97,7 @@ async function processMessage(message: any, value: any) {
   const userMessage = message.text.body;
   console.log(`💬 User message: "${userMessage}"`);
 
+  // Comandos especiais
   if (userMessage.toLowerCase() === '/limpar') {
     const geminiService = getGeminiService();
     geminiService.clearHistory(from);
@@ -111,15 +129,15 @@ async function processMessage(message: any, value: any) {
 }
 
 async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
-  // CORREÇÃO APLICADA: Limpeza do número de telefone
-  const cleanedTo = to.replace(/\D/g, ''); // Remove qualquer caractere que não seja dígito
+  // Limpeza do número de telefone
+  const cleanedTo = to.replace(/\D/g, '');
 
   const url = `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 
   const payload = {
     messaging_product: 'whatsapp',
     recipient_type: 'individual',
-    to: cleanedTo, // Usa o número limpo (apenas dígitos)
+    to: cleanedTo,
     type: 'text',
     text: {
       preview_url: false,
@@ -128,6 +146,8 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
   };
 
   try {
+    console.log(`📤 Sending message to ${cleanedTo}`);
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -138,9 +158,19 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      console.error('❌ Failed to send WhatsApp message:', error);
-      throw new Error(error.error?.message || 'Failed to send message');
+      const errorText = await response.text();
+      console.error('❌ Failed to send WhatsApp message:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText
+      });
+      
+      // Tratamento específico para token expirado
+      if (response.status === 401) {
+        throw new Error('WhatsApp access token has expired or is invalid');
+      }
+      
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
     const result = await response.json();
