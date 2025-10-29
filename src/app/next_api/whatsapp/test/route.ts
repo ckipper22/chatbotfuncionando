@@ -1,53 +1,74 @@
+import { NextResponse } from 'next/server';
 
-import { NextRequest } from 'next/server';
-import { createSuccessResponse, createErrorResponse } from '@/lib/create-response';
-import { requestMiddleware, validateRequestBody } from '@/lib/api-utils';
-
-export const POST = requestMiddleware(async (request: NextRequest) => {
-  const body = await validateRequestBody(request);
-
-  const { phoneNumberId, accessToken, apiVersion } = body;
-
-  if (!phoneNumberId || !accessToken) {
-    return createErrorResponse({
-      errorMessage: 'phoneNumberId e accessToken são obrigatórios',
-      status: 400,
-    });
-  }
-
+export async function POST(request: Request) {
   try {
-    const version = apiVersion || 'v21.0';
-    const url = `https://graph.facebook.com/${version}/${phoneNumberId}`;
+    const { phoneNumber, message } = await request.json();
+    
+    // Use as mesmas variáveis de ambiente do seu webhook
+    const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID!;
+    const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN!;
+    const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v22.0';
+
+    console.log('🔧 [TEST] Environment check:', {
+      hasPhoneNumberId: !!PHONE_NUMBER_ID,
+      hasAccessToken: !!ACCESS_TOKEN,
+      phoneNumberId: PHONE_NUMBER_ID,
+      tokenPreview: ACCESS_TOKEN ? `${ACCESS_TOKEN.substring(0, 15)}...` : 'NO_TOKEN',
+      apiVersion: API_VERSION
+    });
+
+    const url = `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`;
+    
+    const payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: phoneNumber.replace(/\D/g, ''),
+      type: 'text',
+      text: {
+        preview_url: false,
+        body: message || 'Test message from debug endpoint',
+      },
+    };
+
+    console.log('📤 [TEST] Sending payload:', JSON.stringify(payload, null, 2));
 
     const response = await fetch(url, {
-      method: 'GET',
+      method: 'POST',
       headers: {
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `Bearer ${ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify(payload),
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      return createErrorResponse({
-        errorMessage: error.error?.message || 'Falha ao conectar com a API',
-        errorCode: error.error?.code?.toString(),
-        status: response.status,
-      });
+    const responseText = await response.text();
+    console.log('📨 [TEST] WhatsApp API response:', {
+      status: response.status,
+      statusText: response.statusText,
+      body: responseText
+    });
+
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      result = { raw: responseText };
     }
 
-    const result = await response.json();
+    return NextResponse.json({
+      success: response.ok,
+      status: response.status,
+      response: result
+    });
 
-    return createSuccessResponse({
-      success: true,
-      message: 'Conexão estabelecida com sucesso!',
-      phoneNumber: result.display_phone_number,
-      verifiedName: result.verified_name,
-      quality: result.quality_rating,
-    });
-  } catch (error: any) {
-    return createErrorResponse({
-      errorMessage: error.message || 'Erro ao testar conexão',
-      status: 500,
-    });
+  } catch (error) {
+    console.error('❌ [TEST] Endpoint error:', error);
+    return NextResponse.json(
+      { 
+        error: 'Test failed', 
+        details: error instanceof Error ? error.message : String(error) 
+      },
+      { status: 500 }
+    );
   }
-});
+}
