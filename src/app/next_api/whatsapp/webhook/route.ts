@@ -13,11 +13,25 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
     throw new Error('WhatsApp configuration missing');
   }
 
+  // 🔥 CORREÇÃO: Limpeza mais agressiva do número
   const cleanedTo = to.replace(/\D/g, '');
+  
+  // 🔥 CORREÇÃO: Remove o "55" inicial se necessário
+  let finalTo = cleanedTo;
+  if (cleanedTo.startsWith('55') && cleanedTo.length > 10) {
+    finalTo = cleanedTo.substring(2); // Remove "55" do início
+  }
+
+  console.log('🔧 WhatsApp API - Number cleaning:', {
+    original: to,
+    cleaned: cleanedTo,
+    final: finalTo
+  });
+
   const url = `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 
   console.log('🔧 WhatsApp API Request Details:', {
-    to: cleanedTo,
+    to: finalTo,
     phoneNumberId: PHONE_NUMBER_ID,
     apiVersion: API_VERSION,
     tokenPreview: ACCESS_TOKEN ? `${ACCESS_TOKEN.substring(0, 15)}...` : 'NO_TOKEN',
@@ -27,7 +41,7 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
   const payload = {
     messaging_product: 'whatsapp',
     recipient_type: 'individual',
-    to: cleanedTo,
+    to: finalTo, // 🔥 Usa o número final limpo
     type: 'text',
     text: {
       preview_url: false,
