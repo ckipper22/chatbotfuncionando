@@ -1,106 +1,73 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-interface ChatMessage {
-  role: 'user' | 'model';
-  parts: string;
+export interface GeminiService {
+  generateResponse(message: string, userId: string): Promise<string>;
+  clearHistory(userId: string): void;
 }
 
-interface ConversationHistory {
-  [phoneNumber: string]: ChatMessage[];
-}
-
-class GeminiService {
+class GeminiServiceImpl implements GeminiService {
   private genAI: GoogleGenerativeAI;
-  private model: any;
-  private conversationHistory: ConversationHistory = {};
-  private readonly MAX_HISTORY = 10;
+  private conversationHistory: Map<string, any[]> = new Map();
 
   constructor() {
-    const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
+    const apiKey = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
     
     if (!apiKey) {
-      throw new Error('GOOGLE_GEMINI_API_KEY não configurada');
+      throw new Error('GEMINI_API_KEY não configurada');
     }
-
+    
+    console.log('🤖 [GEMINI] Inicializando serviço com API key configurada');
     this.genAI = new GoogleGenerativeAI(apiKey);
-    this.model = this.genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
-      generationConfig: {
-        temperature: 0.9,
-        topK: 1,
-        topP: 1,
-        maxOutputTokens: 2048,
-      },
-    });
   }
 
-  async generateResponse(userMessage: string, phoneNumber: string): Promise<string> {
+  async generateResponse(message: string, userId: string): Promise<string> {
     try {
-      if (!this.conversationHistory[phoneNumber]) {
-        this.conversationHistory[phoneNumber] = [];
-      }
+      console.log(`🤖 [GEMINI] Gerando resposta para usuário: ${userId}`);
+      console.log(`🤖 [GEMINI] Mensagem: "${message}"`);
 
-      this.conversationHistory[phoneNumber].push({
-        role: 'user',
-        parts: userMessage,
+      // 🎯 USAR MODELO CORRETO - gemini-pro (modelo estável)
+      const model = this.genAI.getGenerativeModel({ 
+        model: 'gemini-pro' // ✅ Modelo que funciona!
       });
 
-      if (this.conversationHistory[phoneNumber].length > this.MAX_HISTORY * 2) {
-        this.conversationHistory[phoneNumber] = this.conversationHistory[phoneNumber].slice(-this.MAX_HISTORY * 2);
-      }
-
-      const history = this.conversationHistory[phoneNumber].map(msg => ({
-        role: msg.role,
-        parts: [{ text: msg.parts }],
-      }));
-
-      const chat = this.model.startChat({
-        history: history.slice(0, -1),
+      // Obter histórico da conversa
+      const history = this.conversationHistory.get(userId) || [];
+      
+      // Iniciar chat com histórico
+      const chat = model.startChat({
+        history: history,
         generationConfig: {
-          temperature: 0.9,
-          topK: 1,
-          topP: 1,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 1000,
+          temperature: 0.7,
         },
       });
 
-      const result = await chat.sendMessage(userMessage);
-      const response = result.response;
-      const responseText = response.text();
-
-      this.conversationHistory[phoneNumber].push({
-        role: 'model',
-        parts: responseText,
-      });
-
-      return responseText;
-
-    } catch (error: any) {
-      console.error('❌ Erro ao gerar resposta do Gemini:', error);
+      console.log(`🤖 [GEMINI] Enviando mensagem para modelo gemini-pro...`);
       
-      if (error.message?.includes('API key')) {
-        return 'Desculpe, há um problema com a configuração da API. Por favor, contate o administrador.';
-      }
-      
-      if (error.message?.includes('quota')) {
-        return 'Desculpe, o limite de uso da API foi atingido. Tente novamente mais tarde.';
-      }
+      // Enviar mensagem
+      const result = await chat.sendMessage(message);
+      const response = await result.response;
+      const aiResponse = response.text();
 
-      return 'Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.';
+      console.log(`🤖 [GEMINI] Resposta recebida (${aiResponse.length} chars)`);
+
+      // Atualizar histórico
+      const updatedHistory = await chat.getHistory();
+      this.conversationHistory.set(userId, updatedHistory);
+
+      return aiResponse;
+
+    } catch (error) {
+      console.error('❌ [GEMINI] Erro ao gerar resposta:', error);
+      
+      // Resposta de fallback amigável
+      return 'Desculpe, estou com dificuldades momentâneas. Pode reformular sua pergunta ou tentar novamente em alguns instantes?';
     }
   }
 
-  clearHistory(phoneNumber: string): void {
-    delete this.conversationHistory[phoneNumber];
-    console.log(`🗑️ Histórico limpo para: ${phoneNumber}`);
-  }
-
-  getHistory(phoneNumber: string): ChatMessage[] {
-    return this.conversationHistory[phoneNumber] || [];
-  }
-
-  hasHistory(phoneNumber: string): boolean {
-    return !!this.conversationHistory[phoneNumber]?.length;
+  clearHistory(userId: string): void {
+    console.log(`🗑️ [GEMINI] Limpando histórico do usuário: ${userId}`);
+    this.conversationHistory.delete(userId);
   }
 }
 
@@ -108,9 +75,8 @@ let geminiServiceInstance: GeminiService | null = null;
 
 export function getGeminiService(): GeminiService {
   if (!geminiServiceInstance) {
-    geminiServiceInstance = new GeminiService();
+    console.log('🤖 [GEMINI] Criando nova instância do serviço');
+    geminiServiceInstance = new GeminiServiceImpl();
   }
   return geminiServiceInstance;
 }
-
-export default GeminiService;
