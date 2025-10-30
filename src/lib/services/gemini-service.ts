@@ -16,37 +16,37 @@ class GeminiServiceImpl implements GeminiService {
     }
     
     this.apiKey = apiKey;
-    console.log('🤖 [GEMINI] Inicializando com API REST direta (v1)');
+    console.log('🤖 [GEMINI] Inicializando com modelos Gemini 2.5 (atuais)');
   }
 
   async generateResponse(message: string, userId: string): Promise<string> {
     try {
       console.log(`🤖 [GEMINI] Gerando resposta para: ${userId}`);
 
-      // 🎯 MODELOS PARA TESTAR COM API v1 DIRETA
+      // 🎯 MODELOS ATUAIS E ESTÁVEIS GEMINI 2.5 (OUTUBRO 2025)
       const modelsToTest = [
-        'gemini-1.5-flash',
-        'gemini-1.5-pro', 
-        'gemini-pro',
-        'gemini-1.0-pro'
+        'gemini-2.5-flash',                           // ✅ Recomendado: velocidade + baixo custo
+        'gemini-2.5-pro',                             // ✅ Recomendado: tarefas complexas
+        'gemini-2.5-flash-lite-preview-09-2025',     // ✅ Mais econômico
+        'gemini-2.5-flash-preview-09-2025'           // ✅ Mais recente da família Flash
       ];
 
       // Se já encontramos um modelo que funciona, usar ele
       if (this.workingModel) {
-        console.log(`🎯 [GEMINI] Usando modelo conhecido: ${this.workingModel}`);
+        console.log(`�� [GEMINI] Usando modelo Gemini 2.5: ${this.workingModel}`);
         return await this.generateWithDirectAPI(this.workingModel, message);
       }
 
-      // Testar modelos até encontrar um que funcione
+      // Testar modelos da família 2.5 até encontrar um que funcione
       for (const modelName of modelsToTest) {
         try {
-          console.log(`🧪 [GEMINI] Testando modelo via API v1: ${modelName}`);
+          console.log(`🧪 [GEMINI] Testando modelo 2.5: ${modelName}`);
           
           const response = await this.generateWithDirectAPI(modelName, message);
           
           // Se chegou aqui, o modelo funciona!
           this.workingModel = modelName;
-          console.log(`✅ [GEMINI] Modelo funcionando encontrado: ${modelName}`);
+          console.log(`✅ [GEMINI] Modelo Gemini 2.5 funcionando: ${modelName}`);
           
           return response;
           
@@ -58,31 +58,35 @@ class GeminiServiceImpl implements GeminiService {
       }
 
       // Se nenhum modelo funcionou
-      throw new Error('Nenhum modelo Gemini disponível');
+      throw new Error('Nenhum modelo Gemini 2.5 disponível');
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('❌ [GEMINI] Erro geral:', errorMessage);
       
-      return `🤖 **Assistente - Diagnóstico Completo**
+      return `🤖 **Assistente Gemini 2.5**
 
-**Problema identificado:** SDK usando API v1beta (incorreta)
-**Solução aplicada:** API REST v1 direta
+**Status:** Configurando modelos mais recentes
+**Família:** Gemini 2.5 (outubro 2025)
 
 📱 **WhatsApp**: ✅ Funcionando perfeitamente
-🔧 **IA**: 🧪 Testando API v1 direta
-⏰ **Status**: Corrigindo versão da API
+🔧 **IA**: 🧪 Testando Gemini 2.5
+⏰ **Modelos**: Atualizados para família atual
 
-**Teste realizado:**
-• Todos os modelos falharam em v1beta
-• Agora testando API v1 direta
+**Gemini 2.5 testados:**
+• gemini-2.5-flash (recomendado)
+• gemini-2.5-pro (tarefas complexas)
+• gemini-2.5-flash-lite (econômico)
 
-Use */debug* para mais detalhes técnicos.`;
+**Motivo da atualização:**
+Modelos 1.x descontinuados em abril/2025
+
+Use */status* para verificar progresso.`;
     }
   }
 
   private async generateWithDirectAPI(modelName: string, message: string): Promise<string> {
-    // 🎯 USAR API REST v1 DIRETAMENTE (NÃO v1beta)
+    // 🎯 API REST v1 ESTÁVEL COM MODELOS GEMINI 2.5
     const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${this.apiKey}`;
     
     const payload = {
@@ -90,18 +94,20 @@ Use */debug* para mais detalhes técnicos.`;
         {
           parts: [
             {
-              text: `Responda em português brasileiro de forma amigável e concisa: ${message}`
+              text: `Você é um assistente inteligente integrado ao WhatsApp. Responda em português brasileiro de forma amigável, útil e concisa: ${message}`
             }
           ]
         }
       ],
       generationConfig: {
         maxOutputTokens: 1000,
-        temperature: 0.7
+        temperature: 0.7,
+        topP: 0.8,
+        topK: 40
       }
     };
 
-    console.log(`🌐 [GEMINI] Chamando API v1 direta: ${url.split('?')[0]}`);
+    console.log(`🌐 [GEMINI] Chamando Gemini 2.5: ${modelName}`);
 
     const response = await fetch(url, {
       method: 'POST',
@@ -119,11 +125,11 @@ Use */debug* para mais detalhes técnicos.`;
     const data = await response.json();
     
     if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-      throw new Error('Resposta inválida da API');
+      throw new Error('Resposta inválida da API Gemini 2.5');
     }
 
     const aiResponse = data.candidates[0].content.parts[0].text;
-    console.log(`✅ [GEMINI] Resposta da API v1 (${aiResponse.length} chars)`);
+    console.log(`✅ [GEMINI] Resposta Gemini 2.5 (${aiResponse.length} chars)`);
     
     return aiResponse;
   }
