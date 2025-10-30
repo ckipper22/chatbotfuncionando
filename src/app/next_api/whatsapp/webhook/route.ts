@@ -9,27 +9,32 @@ console.log('   WHATSAPP_ACCESS_TOKEN:', process.env.WHATSAPP_ACCESS_TOKEN ? `�
 
 // Função para corrigir número com DDD duplicado
 function corrigirNumero(numero: string): string {
-  console.log('🔧 [CORRIGIR NUMERO] Entrada:', numero);
+  console.log('🚨🚨🚨 [CORRIGIR] Entrada:', numero);
+  console.error('🚨🚨🚨 [CORRIGIR] Entrada:', numero);
   
   // Remove caracteres não numéricos
   let limpo = numero.replace(/\D/g, '');
-  console.log('🔧 [CORRIGIR NUMERO] Após limpeza:', limpo);
+  console.log('🚨🚨🚨 [CORRIGIR] Após limpeza:', limpo);
+  console.error('🚨🚨🚨 [CORRIGIR] Após limpeza:', limpo);
   
   // Se começar com 5555, remove um 55 (DDD duplicado)
   if (limpo.startsWith('5555')) {
     limpo = limpo.substring(2); // Remove os primeiros 2 dígitos (55)
-    console.log('🔧 [CORRIGIR NUMERO] Removido DDD duplicado:', limpo);
+    console.log('🚨🚨🚨 [CORRIGIR] Removido DDD duplicado:', limpo);
+    console.error('🚨🚨🚨 [CORRIGIR] Removido DDD duplicado:', limpo);
   }
   
   // Garantir que tenha o código do país (55 para Brasil)
   if (!limpo.startsWith('55')) {
     limpo = '55' + limpo;
-    console.log('🔧 [CORRIGIR NUMERO] Adicionado código 55:', limpo);
+    console.log('🚨🚨🚨 [CORRIGIR] Adicionado código 55:', limpo);
+    console.error('🚨🚨🚨 [CORRIGIR] Adicionado código 55:', limpo);
   }
   
   // Adicionar + no início para formato E.164
   const resultado = '+' + limpo;
-  console.log('🔧 [CORRIGIR NUMERO] Resultado final:', resultado);
+  console.log('��🚨🚨 [CORRIGIR] Resultado final:', resultado);
+  console.error('🚨🚨🚨 [CORRIGIR] Resultado final:', resultado);
   
   return resultado;
 }
@@ -77,7 +82,8 @@ export async function GET(request: NextRequest) {
 // POST handler - Receber mensagens do WhatsApp
 export async function POST(request: NextRequest) {
   try {
-    console.log('📩 [WEBHOOK] Nova mensagem POST recebida');
+    console.log('🚨🚨🚨 [WEBHOOK] Nova mensagem POST recebida');
+    console.error('🚨🚨🚨 [WEBHOOK] Nova mensagem POST recebida');
     
     // Verificar variáveis essenciais
     if (!process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN) {
@@ -89,8 +95,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    console.log('📦 [WEBHOOK] Corpo completo da mensagem:');
+    console.log('🚨🚨🚨 [WEBHOOK] Corpo completo da mensagem:');
     console.log(JSON.stringify(body, null, 2));
+    console.error('🚨🚨🚨 [WEBHOOK] Corpo completo da mensagem:');
+    console.error(JSON.stringify(body, null, 2));
 
     // Processar a estrutura do webhook
     const entry = body.entry?.[0];
@@ -98,7 +106,7 @@ export async function POST(request: NextRequest) {
     const value = changes?.value;
     const messages = value?.messages;
 
-    console.log('🔍 [WEBHOOK] Estrutura analisada:', {
+    console.log('🚨🚨🚨 [WEBHOOK] Estrutura analisada:', {
       hasEntry: !!entry,
       hasChanges: !!changes,
       hasValue: !!value,
@@ -111,7 +119,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: 'ok' }, { status: 200 });
     }
 
-    console.log(`🔄 [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
+    console.log(`🚨🚨🚨 [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
+    console.error(`🚨🚨🚨 [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
 
     // Processar cada mensagem
     for (const message of messages) {
@@ -121,7 +130,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ status: 'ok' }, { status: 200 });
 
   } catch (error) {
-    console.error('❌ [WEBHOOK] Erro geral:', error);
+    console.error('🚨🚨🚨 [WEBHOOK] Erro geral:', error);
     return NextResponse.json(
       { error: 'Internal server error' }, 
       { status: 500 }
@@ -135,7 +144,13 @@ async function processMessage(message: any): Promise<void> {
   const from = message.from;
   const messageId = message.id;
 
-  console.log('📨 [PROCESS MESSAGE] Nova mensagem:', {
+  console.log('🚨🚨🚨 [PROCESS MESSAGE] Nova mensagem:', {
+    from,
+    type: messageType,
+    id: messageId,
+    timestamp: message.timestamp
+  });
+  console.error('🚨🚨🚨 [PROCESS MESSAGE] Nova mensagem:', {
     from,
     type: messageType,
     id: messageId,
@@ -155,7 +170,8 @@ async function processMessage(message: any): Promise<void> {
       return;
     }
 
-    console.log(`💬 [PROCESS MESSAGE] Texto recebido: "${userMessage}"`);
+    console.log(`🚨🚨🚨 [PROCESS MESSAGE] Texto recebido: "${userMessage}"`);
+    console.error(`🚨🚨🚨 [PROCESS MESSAGE] Texto recebido: "${userMessage}"`);
 
     // Comandos especiais
     const lowerMessage = userMessage.toLowerCase().trim();
@@ -181,7 +197,7 @@ async function processMessage(message: any): Promise<void> {
     if (lowerMessage === '/debug' || lowerMessage === 'debug') {
       console.log('🔧 [PROCESS MESSAGE] Comando: Debug');
       const numeroCorrigido = corrigirNumero(from);
-      const debugMessage = `🔧 *Informações de Debug:*\n\n` +
+      const debugMessage = `�� *Informações de Debug:*\n\n` +
         `• Seu número original: ${from}\n` +
         `• Número corrigido: ${numeroCorrigido}\n` +
         `• Tipo: ${typeof from}\n` +
@@ -192,16 +208,18 @@ async function processMessage(message: any): Promise<void> {
     }
 
     // Processar com IA
-    console.log('🤖 [PROCESS MESSAGE] Gerando resposta com IA...');
+    console.log('🚨🚨🚨 [PROCESS MESSAGE] Gerando resposta com IA...');
+    console.error('🚨🚨🚨 [PROCESS MESSAGE] Gerando resposta com IA...');
     const geminiService = getGeminiService();
     const aiResponse = await geminiService.generateResponse(userMessage, from);
     
-    console.log(`🤖 [PROCESS MESSAGE] Resposta da IA: "${aiResponse}"`);
+    console.log(`🚨🚨🚨 [PROCESS MESSAGE] Resposta da IA: "${aiResponse}"`);
+    console.error(`🚨🚨🚨 [PROCESS MESSAGE] Resposta da IA: "${aiResponse}"`);
     
     await sendWhatsAppMessage(from, aiResponse);
 
   } catch (error) {
-    console.error('❌ [PROCESS MESSAGE] Erro:', error);
+    console.error('🚨🚨🚨 [PROCESS MESSAGE] Erro:', error);
     // Adicionado o 'from' para garantir que o remetente seja notificado do erro
     if (from) {
         await sendWhatsAppMessage(
@@ -218,36 +236,52 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
   const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN!;
   const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v22.0';
 
-  console.log('📤 [SEND MESSAGE] Preparando envio:', {
-    para: to,
-    phoneNumberId: PHONE_NUMBER_ID,
-    textoLength: text.length
-  });
+  // 🚨 LOGS FORÇADOS MÚLTIPLOS
+  console.log('🚨🚨🚨 [SEND] INÍCIO - Número original:', to);
+  console.error('🚨🚨🚨 [SEND] INÍCIO - Número original:', to);
+  console.warn('🚨🚨🚨 [SEND] INÍCIO - Número original:', to);
 
   // ✅ CORREÇÃO: Usar a função para corrigir o número
   const finalTo = corrigirNumero(to);
 
-  console.log('🔢 [SEND MESSAGE] Formatação do número:', {
-    original: to,
-    final: finalTo
-  });
+  // 🚨 LOGS FORÇADOS DO RESULTADO
+  console.log('🚨🚨🚨 [SEND] Número final:', finalTo);
+  console.error('🚨🚨🚨 [SEND] Número final:', finalTo);
+  console.warn('🚨🚨🚨 [SEND] Número final:', finalTo);
+
+  // 🚨 VAMOS TESTAR MÚLTIPLOS FORMATOS
+  const formatosTeste = [
+    '+5555984557096',  // Original com DDD duplicado
+    '+55984557096',    // Sem DDD duplicado
+    '+559845570960',   // Com 9 extra
+    '+55984557096',    // Exato da lista
+  ];
+
+  console.log('🚨🚨🚨 [SEND] Formatos para testar:', formatosTeste);
+  console.error('🚨🚨🚨 [SEND] Formatos para testar:', formatosTeste);
+
+  // VAMOS TENTAR O PRIMEIRO FORMATO DA LISTA
+  const numeroTeste = '+55984557096'; // SEM DDD duplicado
+
+  console.log('��🚨🚨 [SEND] Usando número de teste:', numeroTeste);
+  console.error('🚨🚨🚨 [SEND] Usando número de teste:', numeroTeste);
 
   const url = `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 
   const payload = {
     messaging_product: 'whatsapp',
     recipient_type: 'individual',
-    to: finalTo,
+    to: numeroTeste, // USANDO NÚMERO FIXO PARA TESTE
     type: 'text',
     text: {
       preview_url: false,
-      body: text.substring(0, 4096), // Limite do WhatsApp
+      body: text.substring(0, 4096),
     },
   };
 
   try {
-    console.log('📝 [SEND MESSAGE] Payload completo:');
-    console.log(JSON.stringify(payload, null, 2));
+    console.log('��🚨🚨 [SEND] Payload:', JSON.stringify(payload, null, 2));
+    console.error('🚨🚨🚨 [SEND] Payload:', JSON.stringify(payload, null, 2));
 
     const response = await fetch(url, {
       method: 'POST',
@@ -259,20 +293,18 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
     });
 
     const responseText = await response.text();
-    console.log('📨 [SEND MESSAGE] Resposta da API:', {
-      status: response.status,
-      statusText: response.statusText,
-      body: responseText
-    });
+    console.log('🚨🚨🚨 [SEND] Resposta:', responseText);
+    console.error('🚨🚨🚨 [SEND] Resposta:', responseText);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${responseText}`);
     }
 
-    console.log('✅ [SEND MESSAGE] Mensagem enviada com sucesso');
+    console.log('🚨🚨🚨 [SEND] SUCESSO!');
+    console.error('🚨🚨🚨 [SEND] SUCESSO!');
 
   } catch (error) {
-    console.error('❌ [SEND MESSAGE] Erro ao enviar:', error);
+    console.error('🚨🚨🚨 [SEND] ERRO:', error);
     throw error;
   }
 }
