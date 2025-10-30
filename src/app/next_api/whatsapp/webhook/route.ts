@@ -115,6 +115,16 @@ async function processMessage(message: any): Promise<void> {
     timestamp: message.timestamp
   });
 
+  // 🔍 DEBUG AVANÇADO: Vamos ver EXATAMENTE o que está chegando
+  console.log('🔍 [DEBUG CRÍTICO] Número do remetente:', {
+    valor: from,
+    tipo: typeof from,
+    length: from?.length,
+    caracteres: from?.split('').map(c => `'${c}'`).join(', '),
+    isString: typeof from === 'string',
+    isEmpty: !from || from.length === 0
+  });
+
   try {
     // Processar apenas mensagens de texto por enquanto
     if (messageType !== 'text') {
@@ -128,7 +138,7 @@ async function processMessage(message: any): Promise<void> {
       return;
     }
 
-    console.log(`💬 [PROCESS MESSAGE] Texto recebido: "${userMessage}"`);
+    console.log(`�� [PROCESS MESSAGE] Texto recebido: "${userMessage}"`);
 
     // Comandos especiais
     const lowerMessage = userMessage.toLowerCase().trim();
@@ -147,6 +157,18 @@ async function processMessage(message: any): Promise<void> {
         `• /ajuda - Mostra esta mensagem\n\n` +
         `Envie qualquer mensagem para conversar comigo!`;
       await sendWhatsAppMessage(from, helpMessage);
+      return;
+    }
+
+    // 🔍 DEBUG: Comando especial para ver informações
+    if (lowerMessage === '/debug' || lowerMessage === 'debug') {
+      console.log('🔧 [PROCESS MESSAGE] Comando: Debug');
+      const debugMessage = `🔧 *Informações de Debug:*\n\n` +
+        `• Seu número: ${from}\n` +
+        `• Tipo: ${typeof from}\n` +
+        `• Tamanho: ${from?.length}\n` +
+        `• Timestamp: ${message.timestamp}`;
+      await sendWhatsAppMessage(from, debugMessage);
       return;
     }
 
@@ -183,14 +205,64 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
     textoLength: text.length
   });
 
-  // 💥 CORREÇÃO APLICADA AQUI 💥
-  // O número 'to' (que é o 'from' da mensagem original) já vem no formato E.164
-  // (ex: 55984557096). Apenas limpamos caracteres não numéricos para garantir.
-  const finalTo = to.replace(/\D/g, ''); 
+  // 🔍 DEBUG CRÍTICO: Vamos ver EXATAMENTE o que está chegando
+  console.log('🔍 [DEBUG CRÍTICO] Número original recebido:', {
+    valor: to,
+    tipo: typeof to,
+    length: to?.length,
+    caracteres: to?.split('').map(c => `'${c}' (${c.charCodeAt(0)})`).join(', '),
+    startsWithPlus: to?.startsWith('+'),
+    startsWithFive: to?.startsWith('5'),
+    includesPlus: to?.includes('+')
+  });
 
-  console.log('🔢 [SEND MESSAGE] Formatação do número:', {
+  // ✅ MÚLTIPLAS TENTATIVAS: Vamos testar diferentes formatos
+  const formatosTeste = [];
+  
+  // Formato 1: Original
+  formatosTeste.push({
+    nome: 'Original',
+    numero: to
+  });
+  
+  // Formato 2: Só números
+  const apenasNumeros = to.replace(/\D/g, '');
+  formatosTeste.push({
+    nome: 'Apenas números',
+    numero: apenasNumeros
+  });
+  
+  // Formato 3: + números
+  formatosTeste.push({
+    nome: '+ números',
+    numero: '+' + apenasNumeros
+  });
+  
+  // Formato 4: +55 + números (se não começar com 55)
+  let comCodigo55 = apenasNumeros;
+  if (!apenasNumeros.startsWith('55')) {
+    comCodigo55 = '55' + apenasNumeros;
+  }
+  formatosTeste.push({
+    nome: '+55 + números',
+    numero: '+' + comCodigo55
+  });
+  
+  // Formato 5: Sem + mas com 55
+  formatosTeste.push({
+    nome: 'Sem + mas com 55',
+    numero: comCodigo55
+  });
+
+  console.log('�� [DEBUG] Todos os formatos para testar:', formatosTeste);
+
+  // Vamos usar o formato mais provável: +55 + números
+  const finalTo = '+' + comCodigo55;
+
+  console.log('�� [SEND MESSAGE] Formato escolhido:', {
     original: to,
-    final: finalTo // AGORA MANTÉM O PREFIXO '55'
+    final: finalTo,
+    finalLength: finalTo.length
   });
 
   const url = `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`;
@@ -207,7 +279,8 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
   };
 
   try {
-    console.log('📝 [SEND MESSAGE] Payload:', JSON.stringify(payload, null, 2));
+    console.log('📝 [SEND MESSAGE] Payload completo:');
+    console.log(JSON.stringify(payload, null, 2));
 
     const response = await fetch(url, {
       method: 'POST',
@@ -226,7 +299,12 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
     });
 
     if (!response.ok) {
-      // O erro real da API do Facebook será capturado aqui e jogado para o catch
+      console.error('💥 [SEND MESSAGE] ERRO DETALHADO:', {
+        status: response.status,
+        response: responseText,
+        numeroTentativa: finalTo,
+        formatosDisponiveis: formatosTeste
+      });
       throw new Error(`HTTP ${response.status}: ${responseText}`);
     }
 
@@ -234,6 +312,11 @@ async function sendWhatsAppMessage(to: string, text: string): Promise<void> {
 
   } catch (error) {
     console.error('❌ [SEND MESSAGE] Erro ao enviar:', error);
+    console.error('🔍 [SEND MESSAGE] Contexto do erro:', {
+      numeroOriginal: to,
+      numeroFinal: finalTo,
+      formatosTentados: formatosTeste
+    });
     throw error;
   }
 }
