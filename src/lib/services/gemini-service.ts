@@ -16,18 +16,14 @@ export interface GeminiService {
 
 class GeminiServiceImpl implements GeminiService {
   private apiKey: string;
-  // Armazena o histórico da conversa para cada usuário.
   private conversationHistory: Map<string, any[]> = new Map();
-  // Armazena o modelo que funcionou primeiro para uso contínuo.
   private workingModel: string | null = null;
-  // Limita o histórico enviado à API para controle de tokens e custo.
   private readonly MAX_HISTORY_MESSAGES = 10; 
 
   constructor() {
     const apiKey = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      // ❌ Problema: Variável de ambiente não definida
       throw new Error('❌ GEMINI_API_KEY não configurada. Verifique as variáveis de ambiente.');
     }
 
@@ -40,7 +36,6 @@ class GeminiServiceImpl implements GeminiService {
     try {
       console.log(`🤖 [GEMINI] Gerando resposta para: ${userId}`);
 
-      // 🎯 MODELOS MAIS ESTÁVEIS: Focando em modelos canônicos.
       const modelsToTest = [
         'gemini-2.5-flash',
         'gemini-2.5-pro',
@@ -78,7 +73,7 @@ class GeminiServiceImpl implements GeminiService {
       }
 
       // Se nenhum modelo funcionou
-      // 🚨 CORRIGIDO: Sintaxe "throw new new Error" removida.
+      // ✅ CORREÇÃO: Sintaxe "throw new new Error" resolvida.
       throw new Error('Nenhum modelo Gemini 2.5 disponível após testes.');
 
     } catch (error) {
@@ -100,7 +95,6 @@ class GeminiServiceImpl implements GeminiService {
     
     const history = this.conversationHistory.get(userId) || [];
     
-    // Adicionar a mensagem atual do usuário ao histórico (antes de enviar)
     history.push({ role: 'user', parts: [{ text: message }] });
 
     const contents = history.slice(-this.MAX_HISTORY_MESSAGES); 
@@ -112,13 +106,13 @@ class GeminiServiceImpl implements GeminiService {
     const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${this.apiKey}`;
     
     const payload = {
-        config: {
-            systemInstruction: systemInstruction,
-        },
+        // ✅ CORREÇÃO: systemInstruction movida para o nível principal do payload (Sintaxe correta para API V1)
+        systemInstruction: systemInstruction, 
+        
         contents: contents, // Envia o histórico
         generationConfig: {
             maxOutputTokens: 1000,
-            temperature: 0.5, // ⬇️ Baixa para maior factualidade (Contexto de Farmácia)
+            temperature: 0.5, // Factualidade
             topP: 0.8,
             topK: 40
         }
@@ -133,7 +127,6 @@ class GeminiServiceImpl implements GeminiService {
     });
 
     if (!response.ok) {
-      // ❌ Tratamento de Erro de Status HTTP (4xx, 5xx)
       const errorText = await response.text();
       throw new Error(`API Error ${response.status}: ${errorText}`);
     }
@@ -178,7 +171,6 @@ class GeminiServiceImpl implements GeminiService {
     // 4. Se a resposta for válida, extrair e adicionar ao histórico
     const aiResponse = firstCandidate.content.parts[0].text;
     
-    // Adicionar a resposta do modelo ao histórico para o próximo turno
     history.push({ role: 'model', parts: [{ text: aiResponse }] });
     this.conversationHistory.set(userId, history);
     
