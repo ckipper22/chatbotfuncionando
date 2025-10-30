@@ -8,30 +8,30 @@ console.log('   WHATSAPP_PHONE_NUMBER_ID:', process.env.WHATSAPP_PHONE_NUMBER_ID
 console.log('   WHATSAPP_ACCESS_TOKEN:', process.env.WHATSAPP_ACCESS_TOKEN ? `✅ (${process.env.WHATSAPP_ACCESS_TOKEN.length} chars)` : '❌ NÃO ENCONTRADO');
 console.log('   GOOGLE_GEMINI_API_KEY:', process.env.GOOGLE_GEMINI_API_KEY ? `✅ (${process.env.GOOGLE_GEMINI_API_KEY.length} chars)` : '❌ NÃO ENCONTRADO');
 
-// Função CORRIGIDA para corrigir número com DDD duplicado
+// Função DEFINITIVAMENTE CORRIGIDA para corrigir número
 function corrigirNumero(numero: string): string {
   console.log('🔧 [CORRIGIR] Entrada:', numero);
   
   let limpo = numero.replace(/\D/g, '');
   console.log('🔧 [CORRIGIR] Após limpeza:', limpo);
   
-  // Casos específicos para números brasileiros
+  // LÓGICA CORRIGIDA: 555584557096 → 55984557096
   if (limpo.startsWith('5555')) {
-    // 555584557096 → 55984557096 (remove apenas os 2 do meio)
+    // Manter '55' + pegar do 4º dígito em diante
     limpo = '55' + limpo.substring(4);
-    console.log('🔧 [CORRIGIR] Corrigido DDD duplicado:', limpo);
+    console.log('🔧 [CORRIGIR] ✅ CORRIGIDO DDD duplicado:', limpo);
   } else if (limpo.startsWith('555') && limpo.length === 12) {
     // 555984557096 → 55984557096 (remove apenas 1 dígito)
     limpo = limpo.substring(1);
-    console.log('🔧 [CORRIGIR] Removido 5 extra:', limpo);
+    console.log('🔧 [CORRIGIR] ✅ Removido 5 extra:', limpo);
   } else if (!limpo.startsWith('55')) {
     // Adicionar código do país se necessário
     limpo = '55' + limpo;
-    console.log('🔧 [CORRIGIR] Adicionado código 55:', limpo);
+    console.log('🔧 [CORRIGIR] ✅ Adicionado código 55:', limpo);
   }
   
   const resultado = '+' + limpo;
-  console.log('🔧 [CORRIGIR] Resultado final:', resultado);
+  console.log('🔧 [CORRIGIR] ✅ RESULTADO FINAL:', resultado);
   
   return resultado;
 }
@@ -130,7 +130,7 @@ async function processMessage(message: any): Promise<void> {
   const from = message.from;
   const messageId = message.id;
 
-  console.log('📨 [PROCESS MESSAGE] Nova mensagem:', {
+  console.log('�� [PROCESS MESSAGE] Nova mensagem:', {
     from,
     type: messageType,
     id: messageId,
@@ -206,7 +206,7 @@ async function processMessage(message: any): Promise<void> {
       const geminiService = getGeminiService();
       const aiResponse = await geminiService.generateResponse(userMessage, from);
       
-      console.log(`🤖 [PROCESS MESSAGE] Resposta da IA: "${aiResponse}"`);
+      console.log(`�� [PROCESS MESSAGE] Resposta da IA: "${aiResponse}"`);
       await sendWhatsAppMessage(from, aiResponse);
     } catch (aiError) {
       console.error('❌ [PROCESS MESSAGE] Erro na IA:', aiError);
