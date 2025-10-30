@@ -15,15 +15,17 @@ function corrigirNumero(numero: string): string {
   let limpo = numero.replace(/\D/g, '');
   console.log('🔧 [CORRIGIR] Após limpeza:', limpo);
   
-  // Se começar com 5555, corrigir mantendo o código do país (55)
+  // Casos específicos para números brasileiros
   if (limpo.startsWith('5555')) {
-    // Manter 55 (código do país) + remover os próximos 2 dígitos duplicados
+    // 555584557096 → 55984557096 (remove apenas os 2 do meio)
     limpo = '55' + limpo.substring(4);
-    console.log('🔧 [CORRIGIR] Removido DDD duplicado:', limpo);
-  }
-  
-  // Se não começar com 55, adicionar código do país
-  if (!limpo.startsWith('55')) {
+    console.log('🔧 [CORRIGIR] Corrigido DDD duplicado:', limpo);
+  } else if (limpo.startsWith('555') && limpo.length === 12) {
+    // 555984557096 → 55984557096 (remove apenas 1 dígito)
+    limpo = limpo.substring(1);
+    console.log('🔧 [CORRIGIR] Removido 5 extra:', limpo);
+  } else if (!limpo.startsWith('55')) {
+    // Adicionar código do país se necessário
     limpo = '55' + limpo;
     console.log('🔧 [CORRIGIR] Adicionado código 55:', limpo);
   }
