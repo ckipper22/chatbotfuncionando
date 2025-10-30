@@ -1,12 +1,10 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-
 export interface GeminiService {
   generateResponse(message: string, userId: string): Promise<string>;
   clearHistory(userId: string): void;
 }
 
 class GeminiServiceImpl implements GeminiService {
-  private genAI: GoogleGenerativeAI;
+  private apiKey: string;
   private conversationHistory: Map<string, any[]> = new Map();
   private workingModel: string | null = null;
 
@@ -17,37 +15,34 @@ class GeminiServiceImpl implements GeminiService {
       throw new Error('GEMINI_API_KEY não configurada');
     }
     
-    console.log('🤖 [GEMINI] Inicializando com teste automático de modelos');
-    this.genAI = new GoogleGenerativeAI(apiKey);
+    this.apiKey = apiKey;
+    console.log('🤖 [GEMINI] Inicializando com API REST direta (v1)');
   }
 
   async generateResponse(message: string, userId: string): Promise<string> {
     try {
       console.log(`🤖 [GEMINI] Gerando resposta para: ${userId}`);
 
-      // 🧪 LISTA DE MODELOS PARA TESTAR (DO MAIS NOVO PARA O MAIS ANTIGO)
+      // 🎯 MODELOS PARA TESTAR COM API v1 DIRETA
       const modelsToTest = [
-        'gemini-1.5-pro-latest',
-        'gemini-1.5-flash-latest', 
-        'gemini-1.5-pro',
         'gemini-1.5-flash',
+        'gemini-1.5-pro', 
         'gemini-pro',
-        'gemini-1.0-pro',
-        'gemini-1.0-pro-latest'
+        'gemini-1.0-pro'
       ];
 
       // Se já encontramos um modelo que funciona, usar ele
       if (this.workingModel) {
         console.log(`🎯 [GEMINI] Usando modelo conhecido: ${this.workingModel}`);
-        return await this.generateWithModel(this.workingModel, message);
+        return await this.generateWithDirectAPI(this.workingModel, message);
       }
 
       // Testar modelos até encontrar um que funcione
       for (const modelName of modelsToTest) {
         try {
-          console.log(`🧪 [GEMINI] Testando modelo: ${modelName}`);
+          console.log(`🧪 [GEMINI] Testando modelo via API v1: ${modelName}`);
           
-          const response = await this.generateWithModel(modelName, message);
+          const response = await this.generateWithDirectAPI(modelName, message);
           
           // Se chegou aqui, o modelo funciona!
           this.workingModel = modelName;
@@ -56,7 +51,6 @@ class GeminiServiceImpl implements GeminiService {
           return response;
           
         } catch (error) {
-          // 🔧 CORREÇÃO TYPESCRIPT: Cast do error para Error
           const errorMessage = error instanceof Error ? error.message : String(error);
           console.log(`❌ [GEMINI] Modelo ${modelName} falhou:`, errorMessage);
           continue;
@@ -67,53 +61,76 @@ class GeminiServiceImpl implements GeminiService {
       throw new Error('Nenhum modelo Gemini disponível');
 
     } catch (error) {
-      // 🔧 CORREÇÃO TYPESCRIPT: Cast do error para Error
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('❌ [GEMINI] Erro geral:', errorMessage);
       
-      return `🤖 **Assistente em Configuração**
+      return `🤖 **Assistente - Diagnóstico Completo**
 
-Estou testando diferentes modelos de IA para encontrar o melhor disponível.
+**Problema identificado:** SDK usando API v1beta (incorreta)
+**Solução aplicada:** API REST v1 direta
 
-📱 **WhatsApp**: ✅ Funcionando
-🔧 **IA**: 🧪 Testando modelos
-⏰ **Status**: Configuração automática
+📱 **WhatsApp**: ✅ Funcionando perfeitamente
+🔧 **IA**: 🧪 Testando API v1 direta
+⏰ **Status**: Corrigindo versão da API
 
-**Modelos testados:**
-• gemini-1.5-pro-latest
-• gemini-1.5-flash-latest  
-• gemini-1.5-pro
-• gemini-1.5-flash
-• gemini-pro
+**Teste realizado:**
+• Todos os modelos falharam em v1beta
+• Agora testando API v1 direta
 
-Use */test* para verificar progresso.`;
+Use */debug* para mais detalhes técnicos.`;
     }
   }
 
-  private async generateWithModel(modelName: string, message: string): Promise<string> {
-    const model = this.genAI.getGenerativeModel({ 
-      model: modelName,
+  private async generateWithDirectAPI(modelName: string, message: string): Promise<string> {
+    // 🎯 USAR API REST v1 DIRETAMENTE (NÃO v1beta)
+    const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${this.apiKey}`;
+    
+    const payload = {
+      contents: [
+        {
+          parts: [
+            {
+              text: `Responda em português brasileiro de forma amigável e concisa: ${message}`
+            }
+          ]
+        }
+      ],
       generationConfig: {
         maxOutputTokens: 1000,
-        temperature: 0.7,
+        temperature: 0.7
+      }
+    };
+
+    console.log(`🌐 [GEMINI] Chamando API v1 direta: ${url.split('?')[0]}`);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify(payload)
     });
 
-    const result = await model.generateContent([
-      { text: `Responda em português brasileiro de forma amigável e concisa: ${message}` }
-    ]);
-    
-    const response = await result.response;
-    const aiResponse = response.text();
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API Error ${response.status}: ${errorText}`);
+    }
 
-    console.log(`✅ [GEMINI] Resposta de ${modelName} (${aiResponse.length} chars)`);
+    const data = await response.json();
+    
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+      throw new Error('Resposta inválida da API');
+    }
+
+    const aiResponse = data.candidates[0].content.parts[0].text;
+    console.log(`✅ [GEMINI] Resposta da API v1 (${aiResponse.length} chars)`);
+    
     return aiResponse;
   }
 
   clearHistory(userId: string): void {
     console.log(`🗑️ [GEMINI] Histórico limpo: ${userId}`);
     this.conversationHistory.delete(userId);
-    // Não limpar o modelo funcionando
   }
 }
 
