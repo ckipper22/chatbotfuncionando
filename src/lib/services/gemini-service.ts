@@ -8,6 +8,7 @@ export interface GeminiService {
 class GeminiServiceImpl implements GeminiService {
   private genAI: GoogleGenerativeAI;
   private conversationHistory: Map<string, any[]> = new Map();
+  private workingModel: string | null = null;
 
   constructor() {
     const apiKey = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
@@ -16,7 +17,7 @@ class GeminiServiceImpl implements GeminiService {
       throw new Error('GEMINI_API_KEY não configurada');
     }
     
-    console.log('🤖 [GEMINI] Inicializando com modelo correto');
+    console.log('🤖 [GEMINI] Inicializando com teste automático de modelos');
     this.genAI = new GoogleGenerativeAI(apiKey);
   }
 
@@ -24,37 +25,90 @@ class GeminiServiceImpl implements GeminiService {
     try {
       console.log(`🤖 [GEMINI] Gerando resposta para: ${userId}`);
 
-      // ✅ MODELO CORRETO QUE FUNCIONA
-      const model = this.genAI.getGenerativeModel({ 
-        model: 'gemini-1.5-flash',
-        generationConfig: {
-          maxOutputTokens: 1000,
-          temperature: 0.7,
-        },
-      });
+      // 🧪 LISTA DE MODELOS PARA TESTAR (DO MAIS NOVO PARA O MAIS ANTIGO)
+      const modelsToTest = [
+        'gemini-1.5-pro-latest',
+        'gemini-1.5-flash-latest', 
+        'gemini-1.5-pro',
+        'gemini-1.5-flash',
+        'gemini-pro',
+        'gemini-1.0-pro',
+        'gemini-1.0-pro-latest'
+      ];
 
-      console.log('🤖 [GEMINI] Usando modelo: gemini-1.5-flash');
+      // Se já encontramos um modelo que funciona, usar ele
+      if (this.workingModel) {
+        console.log(`🎯 [GEMINI] Usando modelo conhecido: ${this.workingModel}`);
+        return await this.generateWithModel(this.workingModel, message);
+      }
 
-      // Gerar resposta simples (sem histórico complexo)
-      const result = await model.generateContent([
-        { text: `Responda em português brasileiro de forma amigável: ${message}` }
-      ]);
-      
-      const response = await result.response;
-      const aiResponse = response.text();
+      // Testar modelos até encontrar um que funcione
+      for (const modelName of modelsToTest) {
+        try {
+          console.log(`🧪 [GEMINI] Testando modelo: ${modelName}`);
+          
+          const response = await this.generateWithModel(modelName, message);
+          
+          // Se chegou aqui, o modelo funciona!
+          this.workingModel = modelName;
+          console.log(`✅ [GEMINI] Modelo funcionando encontrado: ${modelName}`);
+          
+          return response;
+          
+        } catch (error) {
+          console.log(`❌ [GEMINI] Modelo ${modelName} falhou:`, error.message);
+          continue;
+        }
+      }
 
-      console.log(`🤖 [GEMINI] ✅ Resposta gerada (${aiResponse.length} chars)`);
-      return aiResponse;
+      // Se nenhum modelo funcionou
+      throw new Error('Nenhum modelo Gemini disponível');
 
     } catch (error) {
-      console.error('❌ [GEMINI] Erro:', error);
-      return 'Olá! Estou com dificuldades momentâneas. Pode tentar novamente em alguns instantes?';
+      console.error('❌ [GEMINI] Erro geral:', error);
+      return `🤖 **Assistente em Configuração**
+
+Estou testando diferentes modelos de IA para encontrar o melhor disponível.
+
+📱 **WhatsApp**: ✅ Funcionando
+🔧 **IA**: 🧪 Testando modelos
+⏰ **Status**: Configuração automática
+
+**Modelos testados:**
+• gemini-1.5-pro-latest
+• gemini-1.5-flash-latest  
+• gemini-1.5-pro
+• gemini-1.5-flash
+• gemini-pro
+
+Use */test* para verificar progresso.`;
     }
+  }
+
+  private async generateWithModel(modelName: string, message: string): Promise<string> {
+    const model = this.genAI.getGenerativeModel({ 
+      model: modelName,
+      generationConfig: {
+        maxOutputTokens: 1000,
+        temperature: 0.7,
+      },
+    });
+
+    const result = await model.generateContent([
+      { text: `Responda em português brasileiro de forma amigável e concisa: ${message}` }
+    ]);
+    
+    const response = await result.response;
+    const aiResponse = response.text();
+
+    console.log(`✅ [GEMINI] Resposta de ${modelName} (${aiResponse.length} chars)`);
+    return aiResponse;
   }
 
   clearHistory(userId: string): void {
     console.log(`🗑️ [GEMINI] Histórico limpo: ${userId}`);
     this.conversationHistory.delete(userId);
+    // Não limpar o modelo funcionando
   }
 }
 
