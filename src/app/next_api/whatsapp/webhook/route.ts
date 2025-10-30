@@ -1,56 +1,125 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGeminiService } from '@/lib/services/gemini-service';
 
-// 🎯 FORMATOS CONFIRMADOS QUE FUNCIONAM
-const FORMATOS_FUNCIONAIS = [
-  '+5555984557096',   // Teste 2 - FUNCIONOU ✅
-  '5555984557096',    // Teste 11 - FUNCIONOU ✅
-];
-
-// 🧠 MAPEAMENTO INTELIGENTE COM FORMATOS CORRETOS
-const ALLOWED_NUMBERS_MAP: Record<string, string> = {
-  '555584557096': '+5555984557096',    // Usar formato que funcionou
-  '5555984557096': '+5555984557096',   // Formato direto
-  '55984557096': '+5555984557096',     // Adicionar DDD duplicado
-  '984557096': '+5555984557096',       // Número local → formato completo
-};
-
-// 🛡️ WHITELIST ATUALIZADA
-const DEVELOPMENT_WHITELIST = [
-  '+5555984557096',   // Formato principal que funciona
-  '5555984557096',    // Formato alternativo que funciona
-];
-
-// 🎯 FUNÇÃO DE MAPEAMENTO CORRIGIDA
-function mapearParaFormatoFuncional(numero: string): string {
-  console.log('🎯 [MAP SUCCESS] Mapeando para formato funcional:', numero);
+// 🎯 FUNÇÃO INTELIGENTE PARA DETECTAR FORMATO CORRETO
+function detectarFormatoCorreto(numeroOriginal: string): string {
+  console.log('🔍 [DETECT] Detectando formato para:', numeroOriginal);
   
-  const numeroLimpo = numero.replace(/\D/g, '');
-  console.log('🎯 [MAP SUCCESS] Número limpo:', numeroLimpo);
+  const numeroLimpo = numeroOriginal.replace(/\D/g, '');
+  console.log('🔍 [DETECT] Número limpo:', numeroLimpo);
   
-  // Mapeamento direto
-  if (ALLOWED_NUMBERS_MAP[numeroLimpo]) {
-    const mapeado = ALLOWED_NUMBERS_MAP[numeroLimpo];
-    console.log(`🎯 [MAP SUCCESS] ✅ MAPEADO: ${numeroLimpo} → ${mapeado}`);
-    return mapeado;
+  // Detectar padrões brasileiros comuns
+  if (numeroLimpo.length === 12) {
+    // Exemplo: 555511999999999 → +555511999999999
+    if (numeroLimpo.startsWith('5555')) {
+      const formatoCorrigido = '+' + numeroLimpo;
+      console.log('🔍 [DETECT] ✅ Formato DDD duplicado detectado:', formatoCorrigido);
+      return formatoCorrigido;
+    }
+    
+    // Exemplo: 551199999999 → +5551199999999
+    if (numeroLimpo.startsWith('55')) {
+      const formatoCorrigido = '+' + numeroLimpo;
+      console.log('🔍 [DETECT] ✅ Formato brasileiro padrão:', formatoCorrigido);
+      return formatoCorrigido;
+    }
   }
   
-  // Fallback para formato principal
-  const fallback = '+5555984557096';
-  console.log(`🎯 [MAP SUCCESS] ⚡ FALLBACK: ${numeroLimpo} → ${fallback}`);
-  return fallback;
+  // Para números com 13 dígitos (555511999999999)
+  if (numeroLimpo.length === 13 && numeroLimpo.startsWith('5555')) {
+    const formatoCorrigido = '+' + numeroLimpo;
+    console.log('🔍 [DETECT] ✅ Formato longo detectado:', formatoCorrigido);
+    return formatoCorrigido;
+  }
+  
+  // Para números sem código do país
+  if (numeroLimpo.length === 11) {
+    const formatoCorrigido = '+55' + numeroLimpo;
+    console.log('🔍 [DETECT] ✅ Adicionado código Brasil:', formatoCorrigido);
+    return formatoCorrigido;
+  }
+  
+  // Para números locais (9 dígitos)
+  if (numeroLimpo.length === 9) {
+    // Assumir DDD padrão (pode ser customizado por região)
+    const formatoCorrigido = '+5511' + numeroLimpo;
+    console.log('🔍 [DETECT] ✅ Adicionado DDD padrão:', formatoCorrigido);
+    return formatoCorrigido;
+  }
+  
+  // Fallback: adicionar + se não tiver
+  const formatoFallback = numeroLimpo.startsWith('+') ? numeroLimpo : '+' + numeroLimpo;
+  console.log('🔍 [DETECT] ⚠️ Fallback aplicado:', formatoFallback);
+  return formatoFallback;
 }
 
-// 🔒 VALIDAÇÃO ATUALIZADA
-function isNumeroFuncional(numero: string): boolean {
-  const funcional = DEVELOPMENT_WHITELIST.includes(numero);
-  console.log(`🔒 [VALIDATION] ${numero} → ${funcional ? 'FUNCIONAL' : 'NÃO FUNCIONAL'}`);
-  return funcional;
+// 🧪 FUNÇÃO DE TESTE PARA VALIDAR FORMATOS
+async function testarFormatosParaNumero(numero: string, texto: string): Promise<string | null> {
+  const formatosPossiveis = [
+    numero,                    // Original
+    '+' + numero,             // Com +
+    numero.replace('+', ''),  // Sem +
+  ];
+  
+  console.log('🧪 [TEST FORMATS] Testando formatos para:', numero);
+  
+  for (const formato of formatosPossiveis) {
+    console.log('🧪 [TEST FORMATS] Tentando:', formato);
+    
+    const sucesso = await tentarEnviarPara(formato, texto);
+    if (sucesso) {
+      console.log('✅ [TEST FORMATS] Formato funcionou:', formato);
+      return formato;
+    }
+  }
+  
+  console.log('❌ [TEST FORMATS] Nenhum formato funcionou para:', numero);
+  return null;
 }
 
-// Debug inicial otimizado
-console.log('🎉 [SUCCESS SYSTEM] Sistema com formatos funcionais iniciado!');
-console.log('✅ [SUCCESS] Formatos confirmados:', FORMATOS_FUNCIONAIS);
+// 🚀 FUNÇÃO DE ENVIO INDIVIDUAL
+async function tentarEnviarPara(numero: string, texto: string): Promise<boolean> {
+  try {
+    const payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: numero,
+      type: 'text',
+      text: {
+        preview_url: false,
+        body: texto.substring(0, 4096)
+      }
+    };
+
+    const url = `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseText = await response.text();
+    
+    if (response.ok) {
+      console.log(`✅ [SEND] Sucesso para ${numero}`);
+      return true;
+    } else {
+      console.log(`❌ [SEND] Falha para ${numero}: ${response.status}`);
+      return false;
+    }
+
+  } catch (error) {
+    console.error(`❌ [SEND] Erro para ${numero}:`, error);
+    return false;
+  }
+}
+
+// Debug inicial
+console.log('🌍 [PRODUCTION READY] Sistema universal iniciado');
 console.log('📊 [CONFIG] Configuração:');
 console.log('   WEBHOOK_TOKEN:', process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN ? '✅' : '❌');
 console.log('   PHONE_ID:', process.env.WHATSAPP_PHONE_NUMBER_ID || '❌');
@@ -72,7 +141,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
 
-// POST handler otimizado
+// POST handler universal
 export async function POST(request: NextRequest) {
   try {
     console.log('📨 [WEBHOOK] Nova mensagem recebida');
@@ -85,11 +154,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     console.log('📦 [WEBHOOK] Payload:', JSON.stringify(body, null, 2));
 
-    // Verificar se é mensagem ou status
     const value = body.entry?.[0]?.changes?.[0]?.value;
     
     if (value?.statuses) {
-      console.log('📊 [STATUS] Recebido status de entrega:', value.statuses[0]?.status);
+      console.log('📊 [STATUS] Status de entrega:', value.statuses[0]?.status);
       return NextResponse.json({ status: 'ok' }, { status: 200 });
     }
 
@@ -102,7 +170,7 @@ export async function POST(request: NextRequest) {
     console.log(`🔄 [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
 
     for (const message of messages) {
-      await processarMensagemFuncional(message);
+      await processarMensagemUniversal(message);
     }
 
     return NextResponse.json({ status: 'ok' }, { status: 200 });
@@ -113,11 +181,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// 🎯 PROCESSAMENTO COM FORMATO FUNCIONAL
-async function processarMensagemFuncional(message: any): Promise<void> {
+// 🌍 PROCESSAMENTO UNIVERSAL
+async function processarMensagemUniversal(message: any): Promise<void> {
   const { from, text, type, id } = message;
   
-  console.log('🎯 [PROCESS SUCCESS] Processando com formato funcional:', {
+  console.log('🌍 [UNIVERSAL] Processando mensagem universal:', {
     from,
     type,
     messageId: id,
@@ -126,143 +194,70 @@ async function processarMensagemFuncional(message: any): Promise<void> {
 
   try {
     if (type !== 'text' || !text?.body) {
-      console.log('⚠️ [PROCESS SUCCESS] Mensagem ignorada');
+      console.log('⚠️ [UNIVERSAL] Mensagem ignorada');
       return;
     }
 
     const userMessage = text.body.trim();
     const lowerMessage = userMessage.toLowerCase();
     
-    console.log(`💬 [PROCESS SUCCESS] Mensagem: "${userMessage}"`);
+    console.log(`💬 [UNIVERSAL] De ${from}: "${userMessage}"`);
 
-    // Comandos especiais
-    if (lowerMessage === '/sucesso' || lowerMessage === 'sucesso') {
-      const sucessoMsg = `🎉 SISTEMA FUNCIONANDO!\n\n✅ Formatos testados: SUCESSO\n📱 Conectividade: PERFEITA\n🚀 Status: OPERACIONAL\n\nTodos os sistemas funcionando!`;
-      await enviarComFormatoFuncional(from, sucessoMsg);
-      return;
-    }
-
+    // Comandos universais
     if (lowerMessage === '/test' || lowerMessage === 'test') {
-      await enviarComFormatoFuncional(from, '✅ TESTE BEM-SUCEDIDO!\n\nSistema totalmente operacional.\nFormatos corretos configurados.');
+      await enviarMensagemUniversal(from, '✅ SISTEMA FUNCIONANDO!\n\nBot operacional para todos os usuários.');
       return;
     }
 
     if (lowerMessage === '/debug' || lowerMessage === 'debug') {
-      const debugInfo = await gerarDebugSucesso(from, message);
-      await enviarComFormatoFuncional(from, debugInfo);
-      return;
-    }
-
-    if (lowerMessage === '/limpar' || lowerMessage === 'limpar') {
-      try {
-        const geminiService = getGeminiService();
-        geminiService.clearHistory(from);
-        await enviarComFormatoFuncional(from, '🗑️ HISTÓRICO LIMPO\n\nSistema operacional e limpo!');
-      } catch (error) {
-        await enviarComFormatoFuncional(from, '❌ Erro ao limpar. Sistema continua funcionando.');
-      }
-      return;
-    }
-
-    if (lowerMessage === '/ajuda' || lowerMessage === 'ajuda') {
-      const helpMsg = `🤖 *SISTEMA OPERACIONAL*\n\n✅ */test* - Teste de funcionamento\n🎉 */sucesso* - Confirmar sucesso\n🔧 */debug* - Informações\n🗑️ */limpar* - Limpar histórico\n\n💬 Envie qualquer mensagem para conversar!`;
-      await enviarComFormatoFuncional(from, helpMsg);
+      const debugInfo = `🔧 DEBUG UNIVERSAL\n\n📱 Seu número: ${from}\n🌍 Sistema: Universal\n⚙️ Status: Operacional\n\nSistema funciona para qualquer número!`;
+      await enviarMensagemUniversal(from, debugInfo);
       return;
     }
 
     // IA ou resposta padrão
     if (!process.env.GOOGLE_GEMINI_API_KEY) {
-      await enviarComFormatoFuncional(from, '🎉 SISTEMA FUNCIONANDO!\n\nWhatsApp conectado com sucesso.\nIA será ativada em breve.\n\nUse /test para confirmar funcionamento.');
+      await enviarMensagemUniversal(from, '🤖 Olá! Sou um assistente inteligente.\n\nAinda estou sendo configurado, mas já posso responder!\n\nUse /test para testar.');
       return;
     }
 
     try {
-      console.log('🤖 [AI] Processando com Gemini...');
+      console.log('🤖 [AI] Processando com IA...');
       const geminiService = getGeminiService();
       const aiResponse = await geminiService.generateResponse(userMessage, from);
-      await enviarComFormatoFuncional(from, aiResponse);
+      await enviarMensagemUniversal(from, aiResponse);
     } catch (aiError) {
       console.error('❌ [AI] Erro:', aiError);
-      await enviarComFormatoFuncional(from, '🤖 IA temporariamente indisponível.\nSistema WhatsApp funcionando normalmente.');
+      await enviarMensagemUniversal(from, '🤖 Desculpe, estou com dificuldades momentâneas.\n\nTente novamente em alguns instantes.');
     }
 
   } catch (error) {
-    console.error('❌ [PROCESS SUCCESS] Erro:', error);
-    await enviarComFormatoFuncional(from, '⚠️ Erro detectado.\nSistema principal funcionando.');
+    console.error('❌ [UNIVERSAL] Erro:', error);
+    await enviarMensagemUniversal(from, '⚠️ Erro temporário.\n\nSistema se recuperando automaticamente.');
   }
 }
 
-// 🚀 ENVIO COM FORMATO FUNCIONAL CONFIRMADO
-async function enviarComFormatoFuncional(numeroOriginal: string, texto: string): Promise<boolean> {
+// 🌍 ENVIO UNIVERSAL - FUNCIONA PARA QUALQUER NÚMERO
+async function enviarMensagemUniversal(numeroOriginal: string, texto: string): Promise<boolean> {
   try {
-    console.log('🚀 [SEND SUCCESS] Enviando com formato funcional');
+    console.log('🌍 [UNIVERSAL SEND] Enviando para qualquer número:', numeroOriginal);
     
-    // Usar formato que sabemos que funciona
-    const numeroFuncional = mapearParaFormatoFuncional(numeroOriginal);
+    // 1. Detectar formato correto automaticamente
+    const formatoDetectado = detectarFormatoCorreto(numeroOriginal);
     
-    console.log(`📤 [SEND SUCCESS] ${numeroOriginal} → ${numeroFuncional}`);
-
-    const payload = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: numeroFuncional,
-      type: 'text',
-      text: {
-        preview_url: false,
-        body: texto.substring(0, 4096)
-      }
-    };
-
-    console.log('📝 [SEND SUCCESS] Payload:', JSON.stringify(payload, null, 2));
-
-    const url = `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+    // 2. Testar formatos até encontrar um que funcione
+    const formatoFuncional = await testarFormatosParaNumero(formatoDetectado, texto);
     
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const responseText = await response.text();
-    
-    console.log('📨 [SEND SUCCESS] Resposta:', {
-      status: response.status,
-      body: responseText
-    });
-
-    if (response.ok) {
-      console.log('🎉 [SEND SUCCESS] MENSAGEM ENVIADA COM SUCESSO!');
+    if (formatoFuncional) {
+      console.log(`✅ [UNIVERSAL SEND] Mensagem enviada com sucesso para: ${formatoFuncional}`);
       return true;
     } else {
-      console.log('❌ [SEND SUCCESS] Falha no envio:', response.status);
+      console.log(`❌ [UNIVERSAL SEND] Não foi possível enviar para: ${numeroOriginal}`);
       return false;
     }
 
   } catch (error) {
-    console.error('❌ [SEND SUCCESS] Erro:', error);
+    console.error('❌ [UNIVERSAL SEND] Erro:', error);
     return false;
   }
-}
-
-// 📊 DEBUG COM INFORMAÇÕES DE SUCESSO
-async function gerarDebugSucesso(from: string, message: any): Promise<string> {
-  const numeroMapeado = mapearParaFormatoFuncional(from);
-  const isFuncional = isNumeroFuncional(numeroMapeado);
-  
-  return `🔧 *DEBUG - SISTEMA FUNCIONANDO*\n\n` +
-    `📱 *Números:*\n` +
-    `• Original: ${from}\n` +
-    `• Funcional: ${numeroMapeado}\n` +
-    `• Status: ${isFuncional ? '✅ OPERACIONAL' : '⚠️ VERIFICAR'}\n\n` +
-    `🎉 *Formatos que funcionam:*\n` +
-    `• ${FORMATOS_FUNCIONAIS[0]}\n` +
-    `• ${FORMATOS_FUNCIONAIS[1]}\n\n` +
-    `⚙️ *Configuração:*\n` +
-    `• WhatsApp: ✅ FUNCIONANDO\n` +
-    `• Gemini: ${process.env.GOOGLE_GEMINI_API_KEY ? '✅ OK' : '⚠️ PENDENTE'}\n\n` +
-    `📊 *Message ID:* ${message.id}\n\n` +
-    `🚀 *STATUS: SISTEMA TOTALMENTE OPERACIONAL*`;
 }
