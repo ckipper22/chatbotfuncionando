@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGeminiService } from '@/lib/services/gemini-service';
 
-// 🎯 FORMATOS QUE SABEMOS QUE FUNCIONAM (dos testes anteriores)
+// 🎯 FORMATOS QUE SABEMOS QUE FUNCIONAM
 const FORMATOS_COMPROVADOS = [
   '+5555984557096',   // Teste 2 - FUNCIONOU ✅
   '5555984557096',    // Teste 11 - FUNCIONOU ✅
@@ -16,7 +16,6 @@ function converterParaFormatoFuncional(numeroOriginal: string): string[] {
   
   // Baseado nos TESTES REAIS que funcionaram
   if (numeroLimpo === '555584557096') {
-    // Este é o número que chega, converter para os formatos que funcionam
     const formatosFuncionais = [
       '+5555984557096',   // Formato 1 que funcionou
       '5555984557096',    // Formato 2 que funcionou
@@ -26,13 +25,10 @@ function converterParaFormatoFuncional(numeroOriginal: string): string[] {
   }
   
   // Para outros números, aplicar a mesma lógica de conversão
-  // Padrão: 555584557096 → 5555984557096
   let numeroConvertido = numeroLimpo;
   
-  // Se tem 12 dígitos e começa com 5555
   if (numeroLimpo.length === 12 && numeroLimpo.startsWith('5555')) {
     // Lógica: 555584557096 → 5555984557096
-    // Manter 555 + inserir 9 + resto após posição 5
     numeroConvertido = '555' + '5' + '9' + numeroLimpo.substring(5);
     console.log('🎯 [CONVERT] ✅ Padrão aplicado:', numeroConvertido);
   }
@@ -62,7 +58,6 @@ async function testarFormatosSequencial(numero: string, texto: string): Promise<
       return formato;
     }
     
-    // Pausa entre tentativas
     await new Promise(resolve => setTimeout(resolve, 300));
   }
   
@@ -82,7 +77,7 @@ async function tentarEnvioUnico(numero: string, texto: string, tentativa: number
       type: 'text',
       text: {
         preview_url: false,
-        body: `[UNIVERSAL] ${texto}`.substring(0, 4096)
+        body: texto.substring(0, 4096)
       }
     };
 
@@ -118,14 +113,14 @@ async function tentarEnvioUnico(numero: string, texto: string, tentativa: number
   }
 }
 
-// Debug inicial
-console.log('🎯 [FIXED SYSTEM] Sistema corrigido com formatos comprovados');
+// Debug inicial com GEMINI_API_KEY corrigido
+console.log('🎯 [COMPLETE SYSTEM] Sistema completo com IA ativada!');
 console.log('✅ [FORMATS] Formatos que funcionam:', FORMATOS_COMPROVADOS);
-console.log('📊 [CONFIG] Configuração:');
+console.log('📊 [CONFIG] Status completo:');
 console.log('   WEBHOOK_TOKEN:', process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN ? '✅' : '❌');
 console.log('   PHONE_ID:', process.env.WHATSAPP_PHONE_NUMBER_ID || '❌');
 console.log('   ACCESS_TOKEN:', process.env.WHATSAPP_ACCESS_TOKEN ? '✅' : '❌');
-console.log('   GEMINI_KEY:', process.env.GOOGLE_GEMINI_API_KEY ? '✅' : '❌');
+console.log('   GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ IA ATIVADA!' : '❌ IA DESATIVADA');
 
 // GET handler
 export async function GET(request: NextRequest) {
@@ -171,7 +166,7 @@ export async function POST(request: NextRequest) {
     console.log(`🔄 [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
 
     for (const message of messages) {
-      await processarComFormatosCorretos(message);
+      await processarComIACompleta(message);
     }
 
     return NextResponse.json({ status: 'ok' }, { status: 200 });
@@ -182,11 +177,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// 🎯 PROCESSAMENTO COM FORMATOS CORRETOS
-async function processarComFormatosCorretos(message: any): Promise<void> {
+// 🤖 PROCESSAMENTO COM IA COMPLETA
+async function processarComIACompleta(message: any): Promise<void> {
   const { from, text, type, id } = message;
   
-  console.log('🎯 [PROCESS FIXED] Processando com formatos corretos:', {
+  console.log('🤖 [AI PROCESS] Processando com IA completa:', {
     from,
     type,
     messageId: id,
@@ -195,51 +190,80 @@ async function processarComFormatosCorretos(message: any): Promise<void> {
 
   try {
     if (type !== 'text' || !text?.body) {
-      console.log('⚠️ [PROCESS FIXED] Mensagem ignorada');
+      console.log('⚠️ [AI PROCESS] Mensagem ignorada');
       return;
     }
 
     const userMessage = text.body.trim();
     const lowerMessage = userMessage.toLowerCase();
     
-    console.log(`💬 [PROCESS FIXED] De ${from}: "${userMessage}"`);
+    console.log(`💬 [AI PROCESS] De ${from}: "${userMessage}"`);
 
-    // Comandos
+    // Comandos administrativos
     if (lowerMessage === '/test' || lowerMessage === 'test') {
-      await enviarComFormatosCorretos(from, '✅ SISTEMA CORRIGIDO!\n\nUsando formatos que comprovadamente funcionam.');
+      const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA ATIVA' : '⚠️ IA INATIVA';
+      await enviarComFormatosCorretos(from, `✅ SISTEMA COMPLETO FUNCIONANDO!\n\n🔗 WhatsApp: Conectado\n${statusIA}\n📊 Formatos: Corretos\n\nTudo operacional!`);
       return;
     }
 
     if (lowerMessage === '/debug' || lowerMessage === 'debug') {
       const formatos = converterParaFormatoFuncional(from);
-      const debugInfo = `🔧 DEBUG SISTEMA CORRIGIDO\n\n📱 Seu número: ${from}\n🎯 Será convertido para:\n• ${formatos[0]}\n• ${formatos[1]}\n\n✅ Usando formatos comprovados!`;
+      const statusIA = process.env.GEMINI_API_KEY ? '✅ ATIVA' : '❌ INATIVA';
+      const debugInfo = `🔧 DEBUG SISTEMA COMPLETO\n\n📱 Seu número: ${from}\n🎯 Convertido para:\n• ${formatos[0]}\n• ${formatos[1]}\n\n🤖 IA Status: ${statusIA}\n✅ Sistema: 100% Operacional`;
       await enviarComFormatosCorretos(from, debugInfo);
       return;
     }
 
-    // IA ou resposta padrão
-    if (!process.env.GOOGLE_GEMINI_API_KEY) {
-      await enviarComFormatosCorretos(from, '🤖 Olá! Sistema corrigido e funcionando!\n\nIA será ativada em breve.\nUse /test para testar.');
+    if (lowerMessage === '/limpar' || lowerMessage === 'limpar') {
+      try {
+        if (process.env.GEMINI_API_KEY) {
+          const geminiService = getGeminiService();
+          geminiService.clearHistory(from);
+          await enviarComFormatosCorretos(from, '🗑️ HISTÓRICO LIMPO!\n\nMemória da IA resetada.\nVamos começar uma nova conversa!');
+        } else {
+          await enviarComFormatosCorretos(from, '🗑️ COMANDO RECEBIDO!\n\nIA será ativada em breve.\nSistema funcionando normalmente.');
+        }
+      } catch (error) {
+        await enviarComFormatosCorretos(from, '❌ Erro ao limpar histórico.\nSistema continua funcionando.');
+      }
+      return;
+    }
+
+    if (lowerMessage === '/ajuda' || lowerMessage === 'ajuda') {
+      const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA ativa - Posso conversar sobre qualquer assunto!' : '⚙️ IA sendo configurada';
+      const helpMsg = `🤖 *ASSISTENTE INTELIGENTE*\n\n✅ */test* - Status do sistema\n🔧 */debug* - Informações técnicas\n🗑️ */limpar* - Resetar conversa\n❓ */ajuda* - Esta mensagem\n\n${statusIA}\n\n💬 Envie qualquer mensagem para conversar!`;
+      await enviarComFormatosCorretos(from, helpMsg);
+      return;
+    }
+
+    // 🤖 PROCESSAMENTO COM IA
+    if (!process.env.GEMINI_API_KEY) {
+      console.log('⚠️ [AI PROCESS] GEMINI_API_KEY não encontrada');
+      await enviarComFormatosCorretos(from, '🤖 ASSISTENTE QUASE PRONTO!\n\nSistema WhatsApp: ✅ Funcionando\nIA: ⚙️ Sendo ativada\n\nEm breve estarei conversando com você!\nUse /test para verificar status.');
       return;
     }
 
     try {
-      console.log('🤖 [AI] Processando com IA...');
+      console.log('🤖 [AI] Processando com Gemini IA...');
       const geminiService = getGeminiService();
       const aiResponse = await geminiService.generateResponse(userMessage, from);
+      
+      console.log(`🤖 [AI] Resposta da IA gerada (${aiResponse.length} chars)`);
       await enviarComFormatosCorretos(from, aiResponse);
+      console.log('✅ [AI] Resposta enviada com sucesso!');
+      
     } catch (aiError) {
-      console.error('❌ [AI] Erro:', aiError);
-      await enviarComFormatosCorretos(from, '🤖 IA temporariamente indisponível.\n\nSistema WhatsApp funcionando normalmente.');
+      console.error('❌ [AI] Erro na IA:', aiError);
+      await enviarComFormatosCorretos(from, '🤖 Estou com dificuldades momentâneas para processar sua mensagem.\n\nTente reformular ou envie uma mensagem mais simples.\n\nUse /test para verificar o status do sistema.');
     }
 
   } catch (error) {
-    console.error('❌ [PROCESS FIXED] Erro:', error);
-    await enviarComFormatosCorretos(from, '⚠️ Erro detectado.\nSistema se recuperando automaticamente.');
+    console.error('❌ [AI PROCESS] Erro crítico:', error);
+    await enviarComFormatosCorretos(from, '⚠️ Erro temporário detectado.\n\nSistema se recuperando automaticamente.\nTente novamente em alguns instantes.');
   }
 }
 
-// 🎯 ENVIO COM FORMATOS CORRETOS
+// �� ENVIO COM FORMATOS CORRETOS
 async function enviarComFormatosCorretos(numeroOriginal: string, texto: string): Promise<boolean> {
   try {
     console.log('🎯 [SEND FIXED] Usando formatos corretos para:', numeroOriginal);
