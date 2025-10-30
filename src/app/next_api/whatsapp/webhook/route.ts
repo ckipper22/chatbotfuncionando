@@ -1,133 +1,99 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGeminiService } from '@/lib/services/gemini-service';
 
-// 🎯 SISTEMA PROFISSIONAL DE MAPEAMENTO DE NÚMEROS
-const ALLOWED_NUMBERS_MAP: Record<string, string> = {
-  // Mapeamento inteligente: números de teste → números reais
-  '555584557096': '+55984557096',   // Número atual que chega → Seu número real
-  '5555984557096': '+55984557096',  // Variação com DDD duplicado
-  '55584557096': '+55984557096',    // Sem primeiro 5
-  '55984557096': '+55984557096',    // Formato correto
-  '984557096': '+55984557096',      // Apenas número local
-  '5584557096': '+55984557096',     // Sem código país
-  
-  // Adicione outros mapeamentos conforme necessário
-  // 'numeroTeste': '+numeroReal'
-};
-
-// 🛡️ WHITELIST DE NÚMEROS PERMITIDOS (Meta Development)
-const DEVELOPMENT_WHITELIST = [
-  '+55984557096',   // Carlos - número principal
-  '+5511999999999', // Número de teste adicional
+// 🎯 FORMATOS PARA TESTAR - BASEADO NO +55 (55) 98455-7096
+const FORMATOS_TESTE = [
+  '+555598455709',    // Sem último 6
+  '+5555984557096',   // Como está chegando
+  '+55984557096',     // Formato correto esperado
+  '+559845570',       // Apenas começo
+  '+5598455',         // Mais curto
+  '+555984557',       // Médio
+  '+55559845570',     // Sem últimos 2
+  '+555984557096',    // Sem um 5
+  '+5555598455709',   // Extra longo
+  '55984557096',      // Sem +
+  '5555984557096',    // Sem + com DDD duplicado
+  '+5555984557',      // Truncado
+  '+55984557',        // Mais truncado
+  '+555984',          // Muito truncado
+  '+55598455709',     // Sem último dígito
+  '+555598455',       // Truncado médio
 ];
 
-// 🧠 FUNÇÃO INTELIGENTE DE MAPEAMENTO DE NÚMEROS
-function mapearNumeroInteligente(numero: string): string {
-  console.log('🧠 [SMART MAP] Entrada:', numero);
+// 🧠 SISTEMA PROFISSIONAL DE MAPEAMENTO
+const ALLOWED_NUMBERS_MAP: Record<string, string[]> = {
+  // Para cada número que chega, definir TODOS os formatos para testar
+  '555584557096': FORMATOS_TESTE,
+  '5555984557096': FORMATOS_TESTE,
+  '55984557096': FORMATOS_TESTE,
+  '984557096': FORMATOS_TESTE,
+};
+
+// 🔧 FUNÇÃO QUE FORÇA TESTE DE TODOS OS FORMATOS
+function obterFormatosPossiveis(numero: string): string[] {
+  console.log('🎯 [FORMATOS] Gerando todos os formatos para:', numero);
   
-  // 1. Limpar número
   const numeroLimpo = numero.replace(/\D/g, '');
-  console.log('🧠 [SMART MAP] Limpo:', numeroLimpo);
+  console.log('🎯 [FORMATOS] Número limpo:', numeroLimpo);
   
-  // 2. Mapeamento direto (mais rápido)
+  // Se temos mapeamento específico, usar
   if (ALLOWED_NUMBERS_MAP[numeroLimpo]) {
-    const mapeado = ALLOWED_NUMBERS_MAP[numeroLimpo];
-    console.log(`🧠 [SMART MAP] ✅ MAPEADO DIRETO: ${numeroLimpo} → ${mapeado}`);
-    return mapeado;
+    console.log(`🎯 [FORMATOS] Usando mapeamento específico: ${FORMATOS_TESTE.length} formatos`);
+    return FORMATOS_TESTE;
   }
   
-  // 3. Mapeamento por padrão (últimos 9 dígitos)
-  for (const [pattern, realNumber] of Object.entries(ALLOWED_NUMBERS_MAP)) {
-    const patternSuffix = pattern.slice(-9); // Últimos 9 dígitos
-    const numeroSuffix = numeroLimpo.slice(-9);
-    
-    if (patternSuffix === numeroSuffix) {
-      console.log(`🧠 [SMART MAP] ✅ PADRÃO ENCONTRADO: ${numeroLimpo} → ${realNumber}`);
-      return realNumber;
-    }
-  }
+  // Fallback: gerar formatos dinamicamente
+  const formatos = [
+    `+${numeroLimpo}`,                    // Com + original
+    `+55${numeroLimpo.substring(2)}`,     // Com +55
+    `+555${numeroLimpo.substring(3)}`,    // Com +555
+    numeroLimpo,                          // Sem +
+    `55${numeroLimpo.substring(2)}`,      // Sem + com 55
+  ];
   
-  // 4. Fallback inteligente para número principal
-  const fallback = '+55984557096';
-  console.log(`🧠 [SMART MAP] ⚠️ FALLBACK: ${numeroLimpo} → ${fallback}`);
-  return fallback;
+  console.log(`🎯 [FORMATOS] Formatos gerados: ${formatos.length}`);
+  return formatos;
 }
 
-// 🔒 VALIDAÇÃO DE NÚMERO PERMITIDO
-function isNumeroPermitido(numero: string): boolean {
-  const permitido = DEVELOPMENT_WHITELIST.includes(numero);
-  console.log(`�� [VALIDATION] ${numero} → ${permitido ? 'PERMITIDO' : 'BLOQUEADO'}`);
-  return permitido;
-}
-
-// Debug inicial otimizado
-console.log('🚀 [SYSTEM] Iniciando sistema profissional...');
+// Debug inicial
+console.log('🚀 [SYSTEM] Sistema de teste de formatos iniciado');
 console.log('📊 [CONFIG] Status das variáveis:');
-console.log('   WEBHOOK_TOKEN:', process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN ? `✅ (${process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN.length} chars)` : '❌ FALTANDO');
-console.log('   PHONE_ID:', process.env.WHATSAPP_PHONE_NUMBER_ID || '❌ FALTANDO');
-console.log('   ACCESS_TOKEN:', process.env.WHATSAPP_ACCESS_TOKEN ? `✅ (${process.env.WHATSAPP_ACCESS_TOKEN.length} chars)` : '❌ FALTANDO');
-console.log('   GEMINI_KEY:', process.env.GOOGLE_GEMINI_API_KEY ? `✅ (${process.env.GOOGLE_GEMINI_API_KEY.length} chars)` : '❌ FALTANDO');
-console.log('🗺️ [CONFIG] Mapeamentos configurados:', Object.keys(ALLOWED_NUMBERS_MAP).length);
-console.log('🔐 [CONFIG] Números na whitelist:', DEVELOPMENT_WHITELIST.length);
+console.log('   WEBHOOK_TOKEN:', process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN ? '✅' : '❌');
+console.log('   PHONE_ID:', process.env.WHATSAPP_PHONE_NUMBER_ID || '❌');
+console.log('   ACCESS_TOKEN:', process.env.WHATSAPP_ACCESS_TOKEN ? '✅' : '❌');
+console.log('   GEMINI_KEY:', process.env.GOOGLE_GEMINI_API_KEY ? '✅' : '❌');
+console.log('🧪 [TEST] Formatos configurados para teste:', FORMATOS_TESTE.length);
 
-// GET handler - Verificação do Webhook pelo Facebook
+// GET handler
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const mode = searchParams.get('hub.mode');
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
-  console.log('🔐 [WEBHOOK VERIFICATION] Dados recebidos:', {
-    mode,
-    tokenReceived: token,
-    tokenExpected: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
-    tokensMatch: token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
-    challenge: challenge?.substring(0, 20) + '...'
-  });
-
   if (mode === 'subscribe' && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
-    console.log('✅ [WEBHOOK] Verificação bem-sucedida!');
-    return new NextResponse(challenge, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/plain',
-        'Cache-Control': 'no-cache'
-      },
-    });
+    console.log('✅ [WEBHOOK] Verificação bem-sucedida');
+    return new NextResponse(challenge, { status: 200 });
   }
 
-  console.log('❌ [WEBHOOK] Verificação falhou');
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
 
-// POST handler - Processamento principal
+// POST handler
 export async function POST(request: NextRequest) {
   try {
     console.log('📨 [WEBHOOK] Nova mensagem recebida');
     
-    // Validação crítica de configuração
     if (!process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN) {
-      console.error('❌ [WEBHOOK] Configuração crítica faltando');
+      console.error('❌ [WEBHOOK] Configuração inválida');
       return NextResponse.json({ error: 'Configuration error' }, { status: 500 });
     }
 
     const body = await request.json();
-    console.log('📦 [WEBHOOK] Payload recebido:', JSON.stringify(body, null, 2));
+    console.log('📦 [WEBHOOK] Payload:', JSON.stringify(body, null, 2));
 
-    // Extrair estrutura do webhook
-    const entry = body.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value;
-    const messages = value?.messages;
-
-    console.log('🔍 [WEBHOOK] Análise estrutural:', {
-      hasEntry: !!entry,
-      hasChanges: !!changes,
-      hasValue: !!value,
-      hasMessages: !!messages,
-      messageCount: messages?.length || 0
-    });
-
+    const messages = body.entry?.[0]?.changes?.[0]?.value?.messages;
     if (!messages?.length) {
       console.log('ℹ️ [WEBHOOK] Nenhuma mensagem para processar');
       return NextResponse.json({ status: 'ok' }, { status: 200 });
@@ -135,231 +101,181 @@ export async function POST(request: NextRequest) {
 
     console.log(`🔄 [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
 
-    // Processar cada mensagem com sistema robusto
     for (const message of messages) {
-      await processMessageProfessional(message);
+      await processarMensagemComTeste(message);
     }
 
     return NextResponse.json({ status: 'ok' }, { status: 200 });
 
   } catch (error) {
-    console.error('❌ [WEBHOOK] Erro crítico no sistema:', error);
+    console.error('❌ [WEBHOOK] Erro:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// �� PROCESSAMENTO PROFISSIONAL DE MENSAGENS
-async function processMessageProfessional(message: any): Promise<void> {
-  const { from, text, type, id, timestamp } = message;
+// 🧪 PROCESSAMENTO COM TESTE DE FORMATOS
+async function processarMensagemComTeste(message: any): Promise<void> {
+  const { from, text, type, id } = message;
   
-  console.log('🔄 [PROCESS] Iniciando processamento profissional:', {
+  console.log('🧪 [TEST PROCESS] Iniciando teste de formatos:', {
     from,
     type,
     messageId: id,
-    timestamp,
     hasText: !!text?.body
   });
 
   try {
-    // Validação de tipo
-    if (type !== 'text') {
-      console.log(`⚠️ [PROCESS] Tipo não suportado: ${type} - IGNORADO`);
+    if (type !== 'text' || !text?.body) {
+      console.log('⚠️ [TEST PROCESS] Mensagem ignorada');
       return;
     }
 
-    const userMessage = text?.body?.trim();
-    if (!userMessage) {
-      console.log('❌ [PROCESS] Mensagem vazia - IGNORADA');
-      return;
-    }
-
+    const userMessage = text.body.trim();
     const lowerMessage = userMessage.toLowerCase();
-    console.log(`💬 [PROCESS] Mensagem: "${userMessage}"`);
-
-    // 🎯 COMANDOS ADMINISTRATIVOS PROFISSIONAIS
     
-    if (lowerMessage === '/test' || lowerMessage === 'test') {
-      console.log('🧪 [COMMAND] Test - Verificando conectividade');
-      await enviarMensagemProfissional(from, '✅ SISTEMA OPERACIONAL\n\n🔗 Conectividade: OK\n📡 WhatsApp API: Ativa\n🤖 Bot: Funcionando\n\nTudo funcionando perfeitamente!');
+    console.log(`💬 [TEST PROCESS] Mensagem: "${userMessage}"`);
+
+    // Comando especial para forçar teste
+    if (lowerMessage === '/testarformatos' || lowerMessage === 'testar') {
+      console.log('🧪 [COMMAND] Comando de teste de formatos detectado');
+      await testarTodosFormatos(from);
       return;
     }
 
-    if (lowerMessage === '/debug' || lowerMessage === 'debug') {
-      console.log('🔧 [COMMAND] Debug - Gerando relatório');
-      const debugInfo = await gerarRelatorioDebug(from, message);
-      await enviarMensagemProfissional(from, debugInfo);
+    // Comandos normais
+    if (lowerMessage === '/test') {
+      await tentarEnviarComTodosFormatos(from, '✅ TESTE DE CONECTIVIDADE\n\nSistema funcionando!');
       return;
     }
 
-    if (lowerMessage === '/limpar' || lowerMessage === 'limpar') {
-      console.log('🗑️ [COMMAND] Limpar histórico');
-      try {
-        const geminiService = getGeminiService();
-        geminiService.clearHistory(from);
-        await enviarMensagemProfissional(from, '🗑️ HISTÓRICO LIMPO\n\nTodo o histórico da conversa foi removido.\nVamos começar uma nova conversa! 🚀');
-      } catch (error) {
-        console.error('❌ [COMMAND] Erro ao limpar:', error);
-        await enviarMensagemProfissional(from, '❌ Erro ao limpar histórico.\nTente novamente em alguns instantes.');
-      }
+    if (lowerMessage === '/debug') {
+      const debugInfo = await gerarDebugCompleto(from, message);
+      await tentarEnviarComTodosFormatos(from, debugInfo);
       return;
     }
 
-    if (lowerMessage === '/ajuda' || lowerMessage === 'ajuda' || lowerMessage === '/help') {
-      console.log('❓ [COMMAND] Ajuda');
-      const helpMessage = `🤖 *COMANDOS DISPONÍVEIS*\n\n` +
-        `🧪 */test* - Testar conectividade\n` +
-        `🔧 */debug* - Informações do sistema\n` +
-        `🗑️ */limpar* - Limpar histórico\n` +
-        `❓ */ajuda* - Esta mensagem\n\n` +
-        `💬 *COMO USAR:*\n` +
-        `Envie qualquer mensagem para conversar comigo!\n` +
-        `Sou um assistente inteligente pronto para ajudar.\n\n` +
-        `🚀 *STATUS: OPERACIONAL*`;
-      await enviarMensagemProfissional(from, helpMessage);
-      return;
-    }
-
-    // 🤖 PROCESSAMENTO COM IA
+    // IA ou mensagem padrão
     if (!process.env.GOOGLE_GEMINI_API_KEY) {
-      console.warn('⚠️ [PROCESS] Gemini não configurado');
-      await enviarMensagemProfissional(from, '⚙️ SISTEMA EM CONFIGURAÇÃO\n\nA IA está sendo configurada.\nUse */test* para verificar outros recursos.\n\nTente novamente em alguns minutos.');
+      await tentarEnviarComTodosFormatos(from, '⚙️ SISTEMA EM TESTE\n\nTestando formatos de número.\nUse "/testarformatos" para ver todos os testes.');
       return;
     }
 
     try {
-      console.log('🤖 [AI] Processando com Gemini...');
       const geminiService = getGeminiService();
       const aiResponse = await geminiService.generateResponse(userMessage, from);
-      
-      console.log(`🤖 [AI] Resposta gerada (${aiResponse.length} chars)`);
-      await enviarMensagemProfissional(from, aiResponse);
-      console.log('✅ [AI] Resposta enviada com sucesso');
-      
+      await tentarEnviarComTodosFormatos(from, aiResponse);
     } catch (aiError) {
-      console.error('❌ [AI] Erro no processamento:', aiError);
-      await enviarMensagemProfissional(from, '🤖 ASSISTENTE TEMPORARIAMENTE INDISPONÍVEL\n\nEstou com dificuldades momentâneas.\nUse */test* para verificar outros recursos.\n\nTente novamente em alguns instantes.');
+      console.error('❌ [AI] Erro:', aiError);
+      await tentarEnviarComTodosFormatos(from, '🤖 IA temporariamente indisponível.\nUse "/testarformatos" para testar conectividade.');
     }
 
   } catch (error) {
-    console.error('❌ [PROCESS] Erro crítico no processamento:', error);
-    
-    // Sistema de recuperação automática
-    try {
-      await enviarMensagemProfissional(from, '⚠️ ERRO TEMPORÁRIO DETECTADO\n\nO sistema detectou um problema momentâneo.\nJá estou me recuperando automaticamente.\n\nUse */test* para verificar o status.');
-    } catch (recoveryError) {
-      console.error('❌ [RECOVERY] Falha crítica na recuperação:', recoveryError);
-    }
+    console.error('❌ [TEST PROCESS] Erro:', error);
+    await tentarEnviarComTodosFormatos(from, '⚠️ Erro detectado.\nSistema em modo de teste.');
   }
 }
 
-// 🚀 FUNÇÃO PROFISSIONAL DE ENVIO DE MENSAGENS
-async function enviarMensagemProfissional(to: string, text: string): Promise<boolean> {
-  try {
-    console.log('📤 [SEND] Iniciando envio profissional...');
+// 🎯 FUNÇÃO PRINCIPAL - TENTA TODOS OS FORMATOS
+async function tentarEnviarComTodosFormatos(numeroOriginal: string, texto: string): Promise<boolean> {
+  console.log('🎯 [FORCE TEST] Iniciando teste forçado de todos os formatos');
+  
+  const formatos = obterFormatosPossiveis(numeroOriginal);
+  
+  console.log(`🧪 [FORCE TEST] Testando ${formatos.length} formatos para: ${numeroOriginal}`);
+  
+  let sucessos = 0;
+  let tentativas = 0;
+  
+  for (const formato of formatos) {
+    tentativas++;
+    console.log(`\n🔄 [TENTATIVA ${tentativas}/${formatos.length}] Testando formato: ${formato}`);
     
-    // 1. Mapeamento inteligente do número
-    const numeroMapeado = mapearNumeroInteligente(to);
+    const sucesso = await enviarParaFormato(formato, texto, tentativas);
     
-    // 2. Validação de permissão
-    const isPermitido = isNumeroPermitido(numeroMapeado);
-    
-    if (!isPermitido) {
-      console.warn(`⚠️ [SEND] ATENÇÃO: Número ${numeroMapeado} não está na whitelist de desenvolvimento`);
-      console.warn('🔧 [SEND] Tentativa de envio prosseguirá para debug');
+    if (sucesso) {
+      sucessos++;
+      console.log(`✅ [SUCESSO] Formato funcionou: ${formato}`);
+      // Continue testando todos, não pare no primeiro sucesso
+    } else {
+      console.log(`❌ [FALHA] Formato falhou: ${formato}`);
     }
+    
+    // Pequena pausa entre tentativas
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  
+  console.log(`\n📊 [RESULTADO FINAL] ${sucessos}/${tentativas} formatos funcionaram`);
+  
+  return sucessos > 0;
+}
 
-    // 3. Preparação do payload otimizado
+// 🚀 ENVIO PARA FORMATO ESPECÍFICO
+async function enviarParaFormato(numero: string, texto: string, tentativa: number): Promise<boolean> {
+  try {
+    const url = `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+    
     const payload = {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
-      to: numeroMapeado,
+      to: numero,
       type: 'text',
       text: {
         preview_url: false,
-        body: text.substring(0, 4096) // Limite da API
+        body: `[TESTE ${tentativa}] ${texto.substring(0, 4000)}`
       }
     };
 
-    console.log('📋 [SEND] Detalhes do envio:', {
-      numeroOriginal: to,
-      numeroMapeado: numeroMapeado,
-      permitido: isPermitido,
-      tamanhoTexto: text.length,
-      phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID
-    });
+    console.log(`📤 [SEND ${tentativa}] Para: ${numero}`);
+    console.log(`📝 [PAYLOAD ${tentativa}]:`, JSON.stringify(payload, null, 2));
 
-    console.log('📝 [SEND] Payload final:', JSON.stringify(payload, null, 2));
-
-    // 4. Envio via WhatsApp Business API
-    const url = `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
-    
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
-        'User-Agent': 'WhatsApp-Bot-Professional/1.0'
       },
       body: JSON.stringify(payload),
     });
 
     const responseText = await response.text();
     
-    console.log('📨 [SEND] Resposta da API:', {
-      status: response.status,
-      statusText: response.statusText,
-      headers: Object.fromEntries(response.headers.entries()),
-      bodyLength: responseText.length,
-      body: responseText
-    });
+    console.log(`📨 [RESPONSE ${tentativa}] Status: ${response.status}`);
+    console.log(`📨 [RESPONSE ${tentativa}] Body: ${responseText}`);
 
-    if (!response.ok) {
-      throw new Error(`WhatsApp API Error ${response.status}: ${responseText}`);
+    if (response.ok) {
+      console.log(`🎉 [SUCESSO ${tentativa}] FORMATO ACEITO: ${numero}`);
+      return true;
+    } else {
+      console.log(`💥 [ERRO ${tentativa}] FORMATO REJEITADO: ${numero} - ${response.status}`);
+      return false;
     }
 
-    console.log('✅ [SEND] MENSAGEM ENVIADA COM SUCESSO!');
-    return true;
-
   } catch (error) {
-    console.error('❌ [SEND] ERRO NO ENVIO:', error);
-    console.log('🔄 [SEND] Sistema mantém operação normal para próximas mensagens');
+    console.error(`❌ [ERRO ${tentativa}] Exceção ao enviar para ${numero}:`, error);
     return false;
   }
 }
 
-// 📊 GERADOR DE RELATÓRIO DE DEBUG PROFISSIONAL
-async function gerarRelatorioDebug(from: string, message: any): Promise<string> {
-  const numeroMapeado = mapearNumeroInteligente(from);
-  const isPermitido = isNumeroPermitido(numeroMapeado);
-  const timestamp = new Date(parseInt(message.timestamp) * 1000);
+// 🧪 TESTE EXPLÍCITO DE TODOS OS FORMATOS
+async function testarTodosFormatos(numeroOriginal: string): Promise<void> {
+  const textoTeste = `🧪 TESTE DE FORMATO DE NÚMERO\n\nTestando conectividade com diferentes formatos.\nEste é um teste automatizado.`;
   
-  const relatorio = `🔧 *RELATÓRIO DE DEBUG PROFISSIONAL*\n\n` +
-    
-    `📱 *ANÁLISE DE NÚMEROS:*\n` +
-    `• Original: \`${from}\`\n` +
-    `• Mapeado: \`${numeroMapeado}\`\n` +
-    `• Status: ${isPermitido ? '✅ PERMITIDO' : '❌ NÃO PERMITIDO'}\n` +
-    `• Mapeamentos: ${Object.keys(ALLOWED_NUMBERS_MAP).length}\n\n` +
-    
-    `⚙️ *CONFIGURAÇÃO DO SISTEMA:*\n` +
-    `• Gemini API: ${process.env.GOOGLE_GEMINI_API_KEY ? '✅ CONFIGURADA' : '❌ FALTANDO'}\n` +
-    `• WhatsApp API: ${process.env.WHATSAPP_ACCESS_TOKEN ? '✅ CONFIGURADA' : '❌ FALTANDO'}\n` +
-    `• Phone Number ID: ${process.env.WHATSAPP_PHONE_NUMBER_ID || '❌ FALTANDO'}\n` +
-    `• Webhook Token: ${process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN ? '✅ CONFIGURADO' : '❌ FALTANDO'}\n\n` +
-    
-    `📊 *DADOS DA MENSAGEM:*\n` +
-    `• Message ID: \`${message.id}\`\n` +
-    `• Timestamp: ${timestamp.toISOString()}\n` +
-    `• Tipo: ${message.type}\n` +
-    `• Tamanho: ${message.text?.body?.length || 0} chars\n\n` +
-    
-    `🎯 *STATUS GERAL:*\n` +
-    `• Sistema: 🟢 OPERACIONAL\n` +
-    `• Conectividade: 🟢 ATIVA\n` +
-    `• Whitelist: ${DEVELOPMENT_WHITELIST.length} números\n` +
-    `• Modo: DESENVOLVIMENTO\n\n` +
-    
-    `🚀 *SISTEMA PROFISSIONAL ATIVO*`;
-    
-  return relatorio;
+  console.log('🧪 [EXPLICIT TEST] Iniciando teste explícito de formatos');
+  await tentarEnviarComTodosFormatos(numeroOriginal, textoTeste);
+}
+
+// 📊 DEBUG COMPLETO
+async function gerarDebugCompleto(from: string, message: any): Promise<string> {
+  const formatos = obterFormatosPossiveis(from);
+  
+  return `🔧 *DEBUG COMPLETO*\n\n` +
+    `📱 *Número Original:* ${from}\n` +
+    `🧪 *Formatos para Teste:* ${formatos.length}\n` +
+    `📋 *Lista:*\n${formatos.map((f, i) => `${i+1}. ${f}`).join('\n')}\n\n` +
+    `⚙️ *Sistema:*\n` +
+    `• WhatsApp API: ${process.env.WHATSAPP_ACCESS_TOKEN ? '✅' : '❌'}\n` +
+    `• Gemini: ${process.env.GOOGLE_GEMINI_API_KEY ? '✅' : '❌'}\n\n` +
+    `📊 *Message ID:* ${message.id}\n` +
+    `🕐 *Timestamp:* ${message.timestamp}\n\n` +
+    `🚀 *SISTEMA DE TESTE ATIVO*`;
 }
