@@ -56,7 +56,9 @@ class GeminiServiceImpl implements GeminiService {
           return response;
           
         } catch (error) {
-          console.log(`❌ [GEMINI] Modelo ${modelName} falhou:`, error.message);
+          // 🔧 CORREÇÃO TYPESCRIPT: Cast do error para Error
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.log(`❌ [GEMINI] Modelo ${modelName} falhou:`, errorMessage);
           continue;
         }
       }
@@ -65,7 +67,10 @@ class GeminiServiceImpl implements GeminiService {
       throw new Error('Nenhum modelo Gemini disponível');
 
     } catch (error) {
-      console.error('❌ [GEMINI] Erro geral:', error);
+      // 🔧 CORREÇÃO TYPESCRIPT: Cast do error para Error
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('❌ [GEMINI] Erro geral:', errorMessage);
+      
       return `🤖 **Assistente em Configuração**
 
 Estou testando diferentes modelos de IA para encontrar o melhor disponível.
