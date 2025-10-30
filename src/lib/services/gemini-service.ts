@@ -1,26 +1,38 @@
 export interface GeminiService {
+  /**
+   * Gera uma resposta do Gemini, mantendo o histórico de conversa.
+   * @param message A mensagem do usuário.
+   * @param userId O ID do usuário para manter o histórico.
+   * @returns Uma Promise com a resposta da IA.
+   */
   generateResponse(message: string, userId: string): Promise<string>;
+  
+  /**
+   * Limpa o histórico de conversa de um usuário específico.
+   * @param userId O ID do usuário.
+   */
   clearHistory(userId: string): void;
 }
 
 class GeminiServiceImpl implements GeminiService {
   private apiKey: string;
-  // 💡 VISÃO GERAL: Este Map armazena apenas o histórico simples (userId -> Array de mensagens). 
-  // O Gemini REST API é stateless (sem estado), então o histórico deve ser incluído em CADA chamada.
+  // Armazena o histórico da conversa para cada usuário.
   private conversationHistory: Map<string, any[]> = new Map();
+  // Armazena o modelo que funcionou primeiro para uso contínuo.
   private workingModel: string | null = null;
-  private readonly MAX_HISTORY_MESSAGES = 10; // Limita o histórico para controle de tokens
+  // Limita o histórico enviado à API para controle de tokens e custo.
+  private readonly MAX_HISTORY_MESSAGES = 10; 
 
   constructor() {
     const apiKey = process.env.GOOGLE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       // ❌ Problema: Variável de ambiente não definida
-      throw new Error('❌ GEMINI_API_KEY não configurada. Verifique as variáveis no Vercel/Ambiente.');
+      throw new Error('❌ GEMINI_API_KEY não configurada. Verifique as variáveis de ambiente.');
     }
 
     this.apiKey = apiKey;
-    console.log('🤖 [GEMINI] Inicializando com serviço Gemini (v2.5).');
+    console.log('🤖 [GEMINI] Inicializando com serviço Gemini (v2.5) e políticas de segurança aplicadas.');
   }
 
   // 1. Geração de Resposta Principal com Fallback de Modelo
@@ -28,7 +40,7 @@ class GeminiServiceImpl implements GeminiService {
     try {
       console.log(`🤖 [GEMINI] Gerando resposta para: ${userId}`);
 
-      // 🎯 MODELOS MAIS ESTÁVEIS: Focando em modelos canônicos para evitar instabilidade de 'previews'.
+      // 🎯 MODELOS MAIS ESTÁVEIS: Focando em modelos canônicos.
       const modelsToTest = [
         'gemini-2.5-flash',
         'gemini-2.5-pro',
@@ -57,7 +69,7 @@ class GeminiServiceImpl implements GeminiService {
           const errorMessage = error instanceof Error ? error.message : String(error);
           console.log(`❌ [GEMINI] Modelo ${modelName} falhou:`, errorMessage);
 
-          // 💡 Se a falha for a mensagem de bloqueio amigável, propaga imediatamente (não tenta outros modelos)
+          // 💡 Se a falha for a mensagem de bloqueio amigável, propaga imediatamente.
           if (errorMessage.includes('Atenção (Política de Conteúdo da IA)')) {
              throw error; 
           }
@@ -66,7 +78,8 @@ class GeminiServiceImpl implements GeminiService {
       }
 
       // Se nenhum modelo funcionou
-      throw new new Error('Nenhum modelo Gemini 2.5 disponível após testes.');
+      // 🚨 CORRIGIDO: Sintaxe "throw new new Error" removida.
+      throw new Error('Nenhum modelo Gemini 2.5 disponível após testes.');
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -84,30 +97,28 @@ class GeminiServiceImpl implements GeminiService {
 
   // 2. Chamada Direta à API REST com Histórico e Tratamento de Erro
   private async generateWithDirectAPI(modelName: string, message: string, userId: string): Promise<string> {
-    // 💡 Prevenção: Carregar e atualizar o histórico
+    
     const history = this.conversationHistory.get(userId) || [];
     
     // Adicionar a mensagem atual do usuário ao histórico (antes de enviar)
     history.push({ role: 'user', parts: [{ text: message }] });
 
-    // 💡 Prevenção: O Gemini REST API usa 'user' e 'model' para conversação.
-    const contents = history.slice(-this.MAX_HISTORY_MESSAGES); // Limitar o histórico
+    const contents = history.slice(-this.MAX_HISTORY_MESSAGES); 
 
-    // 🎯 Configuração do Sistema (Instrução Principal)
+    // 🎯 Configuração do Sistema (Instrução Principal Profissional para Farmácia)
     const systemInstruction = `Você é um assistente inteligente de uma farmácia integrado ao WhatsApp. Sua principal função é fornecer informações gerais sobre produtos, horário de funcionamento e localização da loja. Você DEVE ser amigável, útil e conciso. Sob NENHUMA circunstância, você deve fornecer aconselhamento médico, diagnóstico, recomendações de dosagem ou listar medicamentos para tratamentos específicos, pois isso viola as políticas de conteúdo e segurança. Se for perguntado sobre um medicamento específico ou tratamento de saúde, use a mensagem de bloqueio padronizada.`;
 
     // 🎯 API REST v1 ESTÁVEL
     const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${this.apiKey}`;
     
     const payload = {
-        // 💡 Adicionado a instrução do sistema (System Instruction)
         config: {
             systemInstruction: systemInstruction,
         },
-        contents: contents, // Usa o histórico para o contexto
+        contents: contents, // Envia o histórico
         generationConfig: {
             maxOutputTokens: 1000,
-            temperature: 0.5, // ⬇️ Reduzido para maior factualidade (Farmácia)
+            temperature: 0.5, // ⬇️ Baixa para maior factualidade (Contexto de Farmácia)
             topP: 0.8,
             topK: 40
         }
@@ -122,7 +133,7 @@ class GeminiServiceImpl implements GeminiService {
     });
 
     if (!response.ok) {
-      // ❌ Problema: Erro de Status HTTP (400, 403, 500)
+      // ❌ Tratamento de Erro de Status HTTP (4xx, 5xx)
       const errorText = await response.text();
       throw new Error(`API Error ${response.status}: ${errorText}`);
     }
@@ -130,7 +141,7 @@ class GeminiServiceImpl implements GeminiService {
     const data = await response.json();
     console.log('🔍 [DEBUG] Resposta Completa da API Gemini:', JSON.stringify(data, null, 2));
 
-    // 🚀 [CORREÇÃO ROBUSTA FINAL] Tratamento de Bloqueios e Estrutura Vazia
+    // 🚀 [CORREÇÃO ROBUSTA] Tratamento de Bloqueios de Conteúdo e Estrutura Vazia
     const firstCandidate = data.candidates ? data.candidates[0] : null;
 
     if (!firstCandidate || !firstCandidate.content || !firstCandidate.content.parts || firstCandidate.content.parts.length === 0) {
@@ -147,7 +158,7 @@ class GeminiServiceImpl implements GeminiService {
             throw new Error(friendlyMessage); 
         }
 
-        // 2. Tratar Soft Block (Interrupção por MAX_TOKENS ou Estrutura Vazia em Tópico Sensível)
+        // 2. Tratar Soft Block (Interrupção por MAX_TOKENS, SAFETY, ou Estrutura Vazia em Tópico Sensível)
         const finishReason = firstCandidate ? firstCandidate.finishReason : 'NO_CANDIDATE';
         
         if (finishReason === 'MAX_TOKENS' || finishReason === 'RECITATION' || finishReason === 'SAFETY') {
