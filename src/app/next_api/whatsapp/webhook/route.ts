@@ -438,4 +438,4 @@ async function enviarComFormatosCorretos(numeroOriginal: string, texto: string):
     console.error('❌ [SEND FIXED] Erro crítico no envio:', error);
     return false;
   }
-}
+}   
