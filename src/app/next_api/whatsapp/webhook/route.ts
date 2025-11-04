@@ -258,6 +258,6 @@ export async function POST(req: Request) {
     const messages = payload.entry?.[0]?.changes?.[0]?.value?.messages;
 
     if (messages && messages.length > 0) {
-      console.log(`🔄 [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
+           console.log(`[WEBHOOK] Processando ${messages.length} mensagem(ns)`);
       // O webhook pode enviar múltiplas mensagens em um único payload,
       // embora seja mais comum uma por vez.
