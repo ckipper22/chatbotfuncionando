@@ -1,441 +1,264 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getGeminiService } from '@/lib/services/gemini-service';
+// src/app/next_api/whatsapp/webhook/route.ts
 
-// URL base da Bulario API (NOVO)
-const BULA_API_URL = 'https://bulariocarlos-api.vercel.app';
+import { GoogleGenerativeAI, GenerativeModel, HarmBlockThreshold, HarmCategory } from '@google/generative-ai';
+// Importação da sua biblioteca de medicamentos.
+// O caminho foi ajustado conforme a estrutura de pastas confirmada:
+// `route.ts` em `src/app/next_api/whatsapp/webhook/`
+// `medicamentos_data.ts` em `src/Lib/`
+import { getMedicamentoInfo, medicamentosData } from '../../../../Lib/medicamentos_data';
 
-// 🎯 FORMATOS QUE SABEMOS QUE FUNCIONAM
-const FORMATOS_COMPROVADOS  =  [
-  '+5555984557096',   // Teste 2 - FUNCIONOU ✅
-  '5555984557096',    // Teste 11 - FUNCIONOU ✅
+// =========================================================================
+// CONFIGURAÇÃO DA API GEMINI
+// =========================================================================
+
+/**
+ * Configurações de segurança para o modelo Gemini.
+ *
+ * A escolha de `BLOCK_NONE` para categorias como `MEDICAL` e `TOXICITY` é uma decisão estratégica.
+ * Ela permite que o modelo Gemini *tente* gerar uma resposta para prompts que, de outra forma,
+ * seriam bloqueados por suas políticas internas. Isso é crucial para o nosso mecanismo de fallback,
+ * pois nos dá a oportunidade de interceptar essas respostas (que geralmente contêm disclaimers)
+ * e, em vez de simplesmente bloquear o usuário, acionar nossa base de dados interna.
+ * No entanto, essa abordagem exige que a lógica do aplicativo seja robusta na identificação
+ * e tratamento dessas respostas, sempre adicionando disclaimers adequados e direcionando o usuário
+ * a fontes confiáveis, especialmente em tópicos de saúde, para garantir a segurança e a responsabilidade.
+ */
+const safetySettings = [
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_MEDICAL, threshold: HarmBlockThreshold.BLOCK_NONE }, // Permite respostas médicas para posterior tratamento.
+  { category: HarmCategory.HARM_CATEGORY_TOXICITY, threshold: HarmBlockThreshold.BLOCK_NONE }, // Permite respostas potencialmente tóxicas para tratamento.
 ];
 
-// 🧠 FUNÇÃO CORRIGIDA BASEADA NOS TESTES REAIS
-function converterParaFormatoFuncional(numeroOriginal: string): string[] {
-  console.log('🎯 [CONVERT] Convertendo para formato funcional:', numeroOriginal);
-  
-  const numeroLimpo = numeroOriginal.replace(/\D/g, '');
-  console.log('🎯 [CONVERT] Número limpo:', numeroLimpo);
-  
-  // Baseado nos TESTES REAIS que funcionaram
-  if (numeroLimpo === '555584557096') {
-    const formatosFuncionais = [
-      '+5555984557096',   // Formato 1 que funcionou
-      '5555984557096',    // Formato 2 que funcionou
-    ];
-    console.log('🎯 [CONVERT] ✅ Convertido para formatos funcionais:', formatosFuncionais);
-    return formatosFuncionais;
-  }
-  
-  // Para outros números, aplicar a mesma lógica de conversão
-  let numeroConvertido = numeroLimpo;
-  
-  if (numeroLimpo.length === 12 && numeroLimpo.startsWith('5555')) {
-    // Lógica: 555584557096 → 5555984557096
-    numeroConvertido = '555' + '5' + '9' + numeroLimpo.substring(5);
-    console.log('🎯 [CONVERT] ✅ Padrão aplicado:', numeroConvertido);
-  }
-  
-  const formatosFinais = [
-    '+' + numeroConvertido,
-    numeroConvertido
-  ];
-  
-  console.log('🎯 [CONVERT] Formatos finais:', formatosFinais);
-  return formatosFinais;
-}
+// Inicializa a API do Google Generative AI com a chave de API.
+// A chave da API do Gemini deve ser armazenada de forma segura em variáveis de ambiente
+// (e.g., `.env.local` para desenvolvimento local, ou configurações de ambiente da plataforma de deploy como Vercel).
+// A verificação `process.env.GEMINI_API_KEY || ''` é uma boa prática para evitar falhas em tempo de execução
+// se a variável não estiver definida, embora as chamadas à API falhem neste caso.
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-// 🧪 TESTE SEQUENCIAL DOS FORMATOS
-async function testarFormatosSequencial(numero: string, texto: string): Promise<string | null> {
-  console.log('🧪 [SEQUENTIAL TEST] Iniciando teste sequencial para:', numero);
-  
-  const formatos = converterParaFormatoFuncional(numero);
-  
-  for (let i = 0; i < formatos.length; i++) {
-    const formato = formatos[i];
-    console.log(`🧪 [SEQUENTIAL TEST] Tentativa ${i + 1}/${formatos.length}: ${formato}`);
-    
-    const sucesso = await tentarEnvioUnico(formato, texto, i + 1);
-    if (sucesso) {
-      console.log(`✅ [SEQUENTIAL TEST] SUCESSO no formato ${i + 1}: ${formato}`);
-      return formato;
-    }
-    
-    await new Promise(resolve => setTimeout(resolve, 300));
-  }
-  
-  console.log('❌ [SEQUENTIAL TEST] Todos os formatos falharam');
-  return null;
-}
+// Obtém o modelo generativo. O modelo `gemini-2.5-flash` é escolhido por ser otimizado
+// para velocidade e custo, tornando-o ideal para interações de chatbot em tempo real
+// onde a latência é crítica. Para cenários que exigem raciocínio mais complexo ou
+// janelas de contexto maiores, modelos como `gemini-1.5-pro` poderiam ser considerados,
+// mas com impacto na latência e custo.
+const model: GenerativeModel = genAI.getGenerativeModel({
+  model: "gemini-2.5-flash",
+  safetySettings, // Aplica as configurações de segurança definidas acima.
+});
 
-// 🚀 ENVIO ÚNICO COM LOG DETALHADO
-async function tentarEnvioUnico(numero: string, texto: string, tentativa: number): Promise<boolean> {
-  try {
-    console.log(`📤 [SEND ${tentativa}] Tentando enviar para: ${numero}`);
-    
-    const payload = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: numero,
-      type: 'text',
-      text: {
-        preview_url: false,
-        body: texto.substring(0, 4096)
-      }
-    };
+// =========================================================================
+// FUNÇÃO AUXILIAR PARA PARSEAR MENSAGENS DO USUÁRIO
+// =========================================================================
 
-    console.log(`📝 [SEND ${tentativa}] Payload:`, JSON.stringify(payload, null, 2));
-
-    const url = `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const responseText = await response.text();
-    
-    console.log(`📨 [SEND ${tentativa}] Status: ${response.status}`);
-    console.log(`📨 [SEND ${tentativa}] Response: ${responseText}`);
-
-    if (response.ok) {
-      console.log(`🎉 [SEND ${tentativa}] ✅ SUCESSO para: ${numero}`);
-      return true;
-    } else {
-      console.log(`💥 [SEND ${tentativa}] ❌ FALHA para: ${numero} - Status: ${response.status}`);
-      return false;
-    }
-
-  } catch (error) {
-    console.error(`❌ [SEND ${tentativa}] Erro para ${numero}:`, error);
-    return false;
-  }
-}
-
-// === NOVO CÓDIGO PARA BUSCAR BULA ===
 /**
- * Busca o medicamento na API da Bulario/Anvisa.
- * @param {string} nomeMedicamento - O nome do medicamento a ser pesquisado.
- * @returns {Promise<string>} Uma mensagem formatada com os resultados ou um erro.
+ * Tenta extrair o nome do medicamento e o tipo de informação desejada da mensagem do usuário.
+ * Esta função é crucial para o mecanismo de fallback, pois ela tenta identificar
+ * a intenção do usuário para consultar a base de dados interna `medicamentosData`.
+ *
+ * Para uma robustez maior em cenários de produção, esta função pode ser expandida
+ * com técnicas de Processamento de Linguagem Natural (NLP) mais avançadas.
+ * Isso incluiria o uso de reconhecimento de entidades nomeadas (NER) para identificar
+ * medicamentos e tipos de informação de forma mais precisa, ou modelos de intenção
+ * para classificar a pergunta do usuário. Uma abordagem baseada em embeddings e
+ * busca semântica também poderia melhorar a correspondência.
+ *
+ * @param message A mensagem de texto enviada pelo usuário.
+ * @returns Um objeto contendo `drugName` (nome do medicamento) e `infoType` (tipo de informação),
+ *          ambos opcionais, indicando se a extração foi bem-sucedida.
  */
-async function buscarBula(nomeMedicamento: string): Promise<string> {
-    console.log(`🔎 [BULA API] Iniciando busca por: ${nomeMedicamento}`);
+function parseUserMessageForDrugInfo(message: string): { drugName?: string; infoType?: string } {
+  const lowerMessage = message.toLowerCase();
+  let drugName: string | undefined;
+  let infoType: string | undefined;
 
-    try {
-        // 1. Pesquisar o medicamento para obter a lista e o numProcesso
-        const searchUrl = `${BULA_API_URL}/pesquisar?nome=${encodeURIComponent(nomeMedicamento)}`;
-        const searchResponse = await fetch(searchUrl);
+  // Mapeamento de tipos de informação conhecidos e seus sinônimos.
+  // Esta lista deve ser o mais abrangente possível para cobrir as diversas formas
+  // como um usuário pode formular uma pergunta. A ordem dos sinônimos pode influenciar
+  // a correspondência; é uma boa prática listar sinônimos mais específicos antes dos
+  // mais genéricos para evitar falsos positivos. A manutenção e expansão desta lista
+  // são contínuas, baseadas na análise das interações dos usuários.
+  const infoTypeKeywords: { [key: string]: string[] } = {
+    "classe terapeutica": ["classe terapeutica", "classe farmacologica", "categoria", "grupo de medicamentos", "tipo de remedio"],
+    "posologia": ["posologia", "dose", "como usar", "modo de usar", "dosagem", "quantas vezes", "como tomar"],
+    "indicacoes": ["indicacoes", "para que serve", "usos", "quando usar", "utilizacao", "beneficios"],
+    "efeitos colaterais": ["efeitos colaterais", "reacoes adversas", "colaterais", "o que pode causar", "problemas", "efeitos indesejados"],
+    "contraindicacoes": ["contraindicacoes", "contra indicado", "nao usar quando", "quem nao pode usar", "restricoes", "quando nao usar", "proibido"],
+    "mecanismo de acao": ["mecanismo de acao", "como funciona", "acao do remedio", "age no organismo", "mecanismo"],
+    "interacoes medicamentosas": ["interacoes medicamentosas", "pode misturar com", "outros remedios", "combinar com", "interage com", "interagir"],
+    "tudo": ["tudo", "informacoes completas", "tudo sobre", "informacoes gerais", "ficha completa", "informacao completa"],
+  };
 
-        if (!searchResponse.ok) {
-            return `❌ *Erro na Busca*:\nNão consegui acessar a base de dados da ANVISA (Status: ${searchResponse.status}). Tente novamente mais tarde.`;
-        }
-        
-        const results = await searchResponse.json();
-
-        if (results.length === 0) {
-            return `🤔 *Bula Não Encontrada*:\nNão encontrei resultados para "${nomeMedicamento}" na base da ANVISA. Verifique a grafia e tente novamente.`;
-        }
-        
-        // Vamos usar o primeiro resultado para buscar os detalhes
-        const primeiroResultado = results[0];
-        const numProcesso = primeiroResultado.numProcesso;
-
-        // 2. Buscar detalhes completos
-        const detailUrl = `${BULA_API_URL}/medicamento/${numProcesso}`;
-        const detailResponse = await fetch(detailUrl);
-
-        if (!detailResponse.ok) {
-            return `❌ *Erro nos Detalhes*:\nEncontrei o medicamento, mas não consegui buscar os detalhes completos (Status: ${detailResponse.status}).`;
-        }
-
-        const details = await detailResponse.json();
-        
-        // 3. Formatar a resposta
-        const idBula = details.bula.idBula;
-        const linkPdf = `${BULA_API_URL}/bula?id=${idBula}`;
-        
-        // Monta a mensagem final
-        const mensagemFinal = `💊 *Bula Encontrada - ${details.nomeProduto}*\n\n` +
-                              `**Laboratório:** ${details.razaoSocial || 'Não informado'}\n` +
-                              `**Categoria:** ${primeiroResultado.categoria || 'Não informada'}\n\n` +
-                              `**Status ANVISA:** ${details.situacao || 'Não informado'}\n\n` +
-                              `🔗 *Link Direto para o PDF da Bula:*\n${linkPdf}\n\n` +
-                              `_Atenção: Consulte sempre um profissional de saúde._`;
-
-        return mensagemFinal;
-
-    } catch (error) {
-        console.error('❌ [BULA API] Erro ao processar:', error);
-        return `⚠️ *Erro Inesperado*:\nOcorreu um erro ao buscar a bula. Por favor, tente o comando novamente com o nome exato.`;
+  // 1. Tentar identificar o tipo de informação desejada.
+  // Itera sobre os tipos de informação e seus sinônimos para encontrar uma correspondência na mensagem.
+  for (const typeKey in infoTypeKeywords) {
+    if (infoTypeKeywords[typeKey].some(keyword => lowerMessage.includes(keyword))) {
+      infoType = typeKey;
+      break; // Encontrou um tipo, pode parar de procurar.
     }
-}
-// === FIM DO NOVO CÓDIGO PARA BUSCAR BULA ===
+  }
 
+  // 2. Tentar identificar o nome do medicamento.
+  // Esta é uma abordagem robusta: percorre todos os medicamentos cadastrados na sua Lib
+  // para encontrar o nome mais longo e específico que está contido na mensagem do usuário.
+  // Isso ajuda a evitar correspondências parciais indesejadas (ex: "dor" em "dorflex")
+  // e prioriza termos mais completos. Para medicamentos com nomes compostos ou abreviações
+  // comuns, é importante que `medicamentosData` contenha essas variações ou que a lógica
+  // de extração seja aprimorada para reconhecê-las.
+  // Mapeamos os nomes para minúsculas para uma busca case-insensitive.
+  const allDrugNames = medicamentosData.map(m => m.nome.toLowerCase());
+  let bestMatchDrug: string | undefined;
+  let bestMatchLength = 0;
 
-// Debug inicial com GEMINI_API_KEY (variável original do Vercel)
-console.log('🎯 [COMPLETE SYSTEM] Sistema completo com IA ativada!');
-console.log('✅ [FORMATS] Formatos que funcionam:', FORMATOS_COMPROVADOS);
-console.log('📊 [CONFIG] Status completo:');
-console.log('   WEBHOOK_TOKEN:', process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN ? '✅' : '❌');
-console.log('   PHONE_ID:', process.env.WHATSAPP_PHONE_NUMBER_ID || '❌');
-console.log('   ACCESS_TOKEN:', process.env.WHATSAPP_ACCESS_TOKEN ? '✅' : '❌');
-console.log('   GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ IA ATIVADA!' : '❌ IA DESATIVADA');
-
-// GET handler - Verificação do Webhook
-export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-  const mode = searchParams.get('hub.mode');
-  const token = searchParams.get('hub.verify_token');
-  const challenge = searchParams.get('hub.challenge');
-
-  console.log('🔐 [WEBHOOK VERIFICATION] Verificação do webhook:', {
-    mode,
-    tokenMatch: token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
-    challenge: challenge?.substring(0, 20) + '...'
-  });
-
-  if (mode === 'subscribe' && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
-    console.log('✅ [WEBHOOK] Verificação bem-sucedida!');
-    return new NextResponse(challenge, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/plain',
-        'Cache-Control': 'no-cache'
-      }
-    });
-  }
-
-  console.log('❌ [WEBHOOK] Verificação falhou');
-  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-}
-
-// POST handler - Processamento de mensagens
-export async function POST(request: NextRequest) {
-  try {
-    console.log('📨 [WEBHOOK] Nova mensagem recebida');
-    
-    // Validação de configuração crítica
-    if (!process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN) {
-      console.error('❌ [WEBHOOK] Configuração crítica faltando');
-      return NextResponse.json({ error: 'Configuration error' }, { status: 500 });
-    }
-
-    const body = await request.json();
-    console.log('📦 [WEBHOOK] Payload recebido:', JSON.stringify(body, null, 2));
-
-    // Extrair dados do webhook
-    const value = body.entry?.[0]?.changes?.[0]?.value;
-    
-    // Processar status de entrega
-    if (value?.statuses) {
-      const status = value.statuses[0]?.status;
-      console.log('📊 [STATUS] Status de entrega recebido:', status);
-      return NextResponse.json({ status: 'ok' }, { status: 200 });
-    }
-
-    // Processar mensagens
-    const messages = value?.messages;
-    if (!messages?.length) {
-      console.log('ℹ️ [WEBHOOK] Nenhuma mensagem para processar');
-      return NextResponse.json({ status: 'ok' }, { status: 200 });
-    }
-
-    console.log(`🔄 [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
-
-    // Processar cada mensagem
-    for (const message of messages) {
-      await processarComIACompleta(message);
-    }
-
-    return NextResponse.json({ status: 'ok' }, { status: 200 });
-
-  } catch (error) {
-    console.error('❌ [WEBHOOK] Erro crítico no sistema:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
-}
-
-// 🤖 PROCESSAMENTO COMPLETO COM IA
-async function processarComIACompleta(message: any): Promise<void> {
-  const { from, text, type, id } = message;
-  
-  console.log(' [AI PROCESS] Processando com IA completa:', {
-    from,
-    type,
-    messageId: id,
-    hasText: !!text?.body
-  });
-
-  try {
-    // Validação de tipo de mensagem
-    if (type !== 'text' || !text?.body) {
-      console.log('⚠️ [AI PROCESS] Mensagem ignorada (não é texto)');
-      return;
-    }
-
-    const userMessage = text.body.trim();
-    const lowerMessage = userMessage.toLowerCase();
-    
-    console.log(` [AI PROCESS] De ${from}: "${userMessage}"`);
-
-    // 🔧 MAPEAMENTO DA VARIÁVEL PARA COMPATIBILIDADE
-    if (process.env.GEMINI_API_KEY && !process.env.GOOGLE_GEMINI_API_KEY) {
-      process.env.GOOGLE_GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-      console.log('🔧 [FIX] Variável GEMINI_API_KEY mapeada para compatibilidade');
-    }
-
-    // 🎯 NOVO COMANDO: BUSCA DE BULAS (INTEGRAÇÃO COM BULÁRIO)
-    if (lowerMessage.startsWith('/bula')) {
-        console.log('💊 [AI PROCESS] Comando /bula detectado');
-        const partesMensagem = userMessage.split(' ');
-        
-        if (partesMensagem.length < 2) {
-            const erroMsg = '❓ *Comando Incompleto*:\nPor favor, use o formato */bula [Nome do Medicamento]*.\nExemplo: */bula Dipirona*.';
-            await enviarComFormatosCorretos(from, erroMsg);
-            return;
-        }
-
-        // Pega o restante da mensagem como o nome do medicamento
-        const nomeMedicamento = partesMensagem.slice(1).join(' ');
-        
-        // Chama a nova função de busca
-        const respostaBula = await buscarBula(nomeMedicamento);
-
-        // Envia a resposta formatada de volta para o usuário
-        await enviarComFormatosCorretos(from, respostaBula);
-        return; // Retorna para que a IA não seja chamada
+  for (const drug of allDrugNames) {
+    // Verifica se a mensagem contém o nome do medicamento e se é a correspondência mais longa encontrada até agora.
+    // Correspondências mais longas são geralmente mais específicas e menos propensas a falsos positivos.
+    if (lowerMessage.includes(drug) && drug.length > bestMatchLength) {
+      bestMatchDrug = drug;
+      bestMatchLength = drug.length;
     }
+  }
+  drugName = bestMatchDrug;
 
-    // 🎯 COMANDOS ADMINISTRATIVOS
-    if (lowerMessage === '/test' || lowerMessage === 'test') {
-      const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA ATIVA' : '⚠️ IA INATIVA';
-      const statusMsg = `✅ *SISTEMA COMPLETO FUNCIONANDO!*\n\n🔗 WhatsApp: ✅ Conectado\n${statusIA}\n📊 Formatos: ✅ Corretos\n🚀 Status: 100% Operacional\n\nTudo funcionando perfeitamente!`;
-      await enviarComFormatosCorretos(from, statusMsg);
-      return;
-    }
-
-    if (lowerMessage === '/debug' || lowerMessage === 'debug') {
-      const formatos = converterParaFormatoFuncional(from);
-      const statusIA = process.env.GEMINI_API_KEY ? '✅ ATIVA' : '❌ INATIVA';
-      const debugInfo = `🔧 *DEBUG SISTEMA COMPLETO*\n\n📱 Seu número: ${from}\n🎯 Convertido para:\n• ${formatos[0]}\n• ${formatos[1]}\n\n🤖 IA Status: ${statusIA}\n📊 Formatos: ${FORMATOS_COMPROVADOS.length} testados\n✅ Sistema: 100% Operacional\n\n🚀 *TUDO FUNCIONANDO!*`;
-      await enviarComFormatosCorretos(from, debugInfo);
-      return;
-    }
-
-    if (lowerMessage === '/limpar' || lowerMessage === 'limpar') {
-      try {
-        if (process.env.GEMINI_API_KEY) {
-          const geminiService = getGeminiService();
-          geminiService.clearHistory(from);
-          await enviarComFormatosCorretos(from, '🗑️ *HISTÓRICO LIMPO!*\n\nMemória da IA resetada com sucesso.\nVamos começar uma nova conversa! 🚀');
-        } else {
-          await enviarComFormatosCorretos(from, '🗑️ *COMANDO RECEBIDO!*\n\nIA será ativada em breve.\nSistema WhatsApp funcionando normalmente.');
-        }
-      } catch (error) {
-        console.error('❌ [LIMPAR] Erro:', error);
-        await enviarComFormatosCorretos(from, '❌ Erro ao limpar histórico.\nSistema continua funcionando normalmente.');
-      }
-      return;
-    }
-
-    if (lowerMessage === '/ajuda' || lowerMessage === 'ajuda' || lowerMessage === '/help') {
-      const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA totalmente ativa - Posso conversar sobre qualquer assunto!' : '⚙️ IA sendo configurada';
-      // OBSERVAÇÃO: Adicionei o comando /bula na mensagem de ajuda
-      const helpMsg = `🤖 *ASSISTENTE INTELIGENTE ATIVO*\n\n` +
-        `✅ */test* - Status do sistema\n` +
-        `💊 */bula [medicamento]* - Busca a bula na ANVISA\n` +
-        `🔧 */debug* - Informações técnicas\n` +
-        `🗑️ */limpar* - Resetar conversa\n` +
-        `❓ */ajuda* - Esta mensagem\n\n` +
-        `${statusIA}\n\n` +
-        `💬 *Como usar:*\n` +
-        `Envie qualquer mensagem para conversar comigo!\n` +
-        `Sou um assistente inteligente pronto para ajudar.\n\n` +
-        `🚀 *STATUS: TOTALMENTE OPERACIONAL*`;
-      await enviarComFormatosCorretos(from, helpMsg);
-      return;
-    }
-
-    // 🤖 PROCESSAMENTO COM INTELIGÊNCIA ARTIFICIAL
-    if (!process.env.GEMINI_API_KEY) {
-      console.log('⚠️ [AI PROCESS] GEMINI_API_KEY não encontrada');
-      await enviarComFormatosCorretos(from, '🤖 *ASSISTENTE QUASE PRONTO!*\n\nSistema WhatsApp: ✅ Funcionando perfeitamente\nIA: ⚙️ Sendo configurada\n\nEm breve estarei conversando inteligentemente!\nUse */test* para verificar status.');
-      return;
-    }
-
-    try {
-      console.log('🤖 [AI] Iniciando processamento com Gemini IA...');
-      
-      // Obter serviço da IA
-      const geminiService = getGeminiService();
-      
-      // Gerar resposta inteligente
-      const aiResponse = await geminiService.generateResponse(userMessage, from);
-      
-      console.log(`🤖 [AI] Resposta da IA gerada com sucesso (${aiResponse.length} caracteres)`);
-      
-      // Enviar resposta
-      await enviarComFormatosCorretos(from, aiResponse);
-      
-      console.log('✅ [AI] Resposta inteligente enviada com sucesso!');
-      
-    } catch (aiError) {
-      console.error('❌ [AI] Erro na inteligência artificial:', aiError);
-      
-      // Mensagem de erro amigável
-      const errorMsg = `🤖 *ASSISTENTE TEMPORARIAMENTE INDISPONÍVEL*\n\n` +
-        `Estou com dificuldades momentâneas para processar sua mensagem.\n\n` +
-        `💡 *Sugestões:*\n` +
-        `• Tente reformular sua pergunta\n` +
-        `• Envie uma mensagem mais simples\n` +
-        `• Use */test* para verificar o status\n\n` +
-        `🔄 Tentarei novamente em alguns instantes...`;
-      
-      await enviarComFormatosCorretos(from, errorMsg);
-    }
-
-  } catch (error) {
-    console.error('❌ [AI PROCESS] Erro crítico no processamento:', error);
-    
-    // Sistema de recuperação automática
-    const recoveryMsg = `⚠️ *ERRO TEMPORÁRIO DETECTADO*\n\n` +
-      `O sistema detectou um problema momentâneo e está se recuperando automaticamente.\n\n` +
-      `🔄 *Ações tomadas:*\n` +
-      `• Reinicialização automática em andamento\n` +
-      `• Sistema WhatsApp mantido ativo\n` +
-      `• Logs de erro registrados\n\n` +
-      `Use */test* para verificar o status de recuperação.`;
-    
-    try {
-      await enviarComFormatosCorretos(from, recoveryMsg);
-    } catch (recoveryError) {
-      console.error('❌ [RECOVERY] Falha crítica na recuperação:', recoveryError);
-    }
-  }
+  // Retorna o nome do medicamento e o tipo de informação extraídos.
+  return { drugName, infoType };
 }
 
-//  FUNÇÃO DE ENVIO COM FORMATOS CORRETOS
-async function enviarComFormatosCorretos(numeroOriginal: string, texto: string): Promise<boolean> {
-  try {
-    console.log('🎯 [SEND FIXED] Usando formatos comprovadamente funcionais para:', numeroOriginal);
-    
-    // Testar formatos sequencialmente até encontrar um que funcione
-    const formatoFuncional = await testarFormatosSequencial(numeroOriginal, texto);
-    
-    if (formatoFuncional) {
-      console.log(`✅ [SEND FIXED] Mensagem enviada com sucesso usando formato: ${formatoFuncional}`);
-      return true;
-    } else {
-      console.log(`❌ [SEND FIXED] Não foi possível enviar para nenhum formato de: ${numeroOriginal}`);
-      return false;
-    }
+// =========================================================================
+// FUNÇÃO PRINCIPAL DE PROCESSAMENTO DA MENSAGEM
+// =========================================================================
 
-  } catch (error) {
-    console.error('❌ [SEND FIXED] Erro crítico no envio:', error);
-    return false;
-  }
-}   
+/**
+ * Processa uma mensagem do usuário, utilizando a IA Gemini para tentar responder.
+ * Caso a IA retorne um disclaimer de política de conteúdo ou seja bloqueada,
+ * a função tenta usar a base de dados interna de medicamentos (`Lib/medicamentos_data.ts`)
+ * como um mecanismo de fallback.
+ *
+ * @param userMessage A mensagem de texto enviada pelo usuário.
+ * @param from O identificador do remetente (geralmente o número de telefone do WhatsApp).
+ * @returns Uma string contendo a resposta gerada para o usuário.
+ */
+async function processChatMessage(userMessage: string, from: string): Promise<string> {
+  // Em um sistema de chat real, o histórico de conversas para o 'from'
+  // seria persistido em um banco de dados (ex: Redis para cache de curto prazo,
+  // MongoDB ou PostgreSQL para histórico de longo prazo) e carregado aqui para
+  // que a IA possa manter o contexto da conversa. Isso é feito passando um array
+  // de `GenerativeContent` para o parâmetro `history` do `startChat`.
+  // Para este exemplo simplificado, o chat é stateless (cada mensagem é processada isoladamente).
+  const chat = model.startChat({
+    history: [], // Para um chat com memória, o histórico de mensagens anteriores seria preenchido aqui.
+  });
+
+  let rawLLMResponseText: string;
+
+  try {
+    const result = await chat.sendMessage(userMessage);
+    rawLLMResponseText = result.response.text();
+    console.log("[AI PROCESS] Resposta inicial do Gemini:", rawLLMResponseText);
+  } catch (error: any) { // Captura qualquer tipo de erro que possa ocorrer na chamada da API do Gemini.
+    // O bloco `try...catch` é fundamental para lidar com falhas na comunicação com a API do Gemini.
+    // Isso pode incluir erros de rede, problemas de autenticação (chave de API inválida),
+    // limites de taxa excedidos ou timeouts. É crucial logar esses erros de forma estruturada
+    // (e.g., com ferramentas como Sentry, DataDog, ou um logger como Winston) para monitoramento
+    // e depuração em produção.
+    console.error("[AI PROCESS] Erro ao chamar a API do Gemini:", error);
+
+    // A verificação `error.response && error.response.promptFeedback && error.response.promptFeedback.blockReason`
+    // é específica para identificar bloqueios de segurança explícitos do Gemini. Se o prompt do usuário
+    // for categorizado como `HARASSMENT`, `HATE_SPEECH`, `SEXUALLY_EXPLICIT`, `DANGEROUS_CONTENT`, `MEDICAL`,
+    // ou `TOXICITY` e o `safetySettings` não permitir, a API pode retornar um erro antes mesmo de gerar texto.
+    // Nesses casos, forçamos o fallback.
+    if (error.response && error.response.promptFeedback && error.response.promptFeedback.blockReason) {
+      console.warn(`[AI PROCESS] Gemini API bloqueou o prompt: ${error.response.promptFeedback.blockReason}. Forçando fallback.`);
+      // Se a API bloqueou, tratamos isso como um "disclaimer" e forçamos o fallback.
+      rawLLMResponseText = "Atenção (Política de Conteúdo da IA)";
+    } else if (error instanceof Error) {
+      // Captura e informa sobre erros genéricos da API (rede, autenticação, timeouts, etc.).
+      return `Desculpe, houve um erro interno ao processar sua solicitação (${error.message}). Por favor, tente novamente mais tarde.`;
+    } else {
+      // Captura erros de tipo desconhecido.
+      return "Desculpe, houve um erro interno desconhecido ao processar sua solicitação. Por favor, tente novamente mais tarde.";
+    }
+  }
+
+  // Padrão Regex para identificar o disclaimer de política de conteúdo.
+  // É CRÍTICO que este regex capture EXATAMENTE as frases que sua IA (ou o Gemini)
+  // usa para indicar que não pode fornecer aconselhamento médico. Durante os testes,
+  // monitore as respostas da IA para identificar novas variações de disclaimers e
+  // atualize este regex para garantir uma cobertura completa. Um regex bem construído
+  // é a chave para o acionamento confiável do fallback.
+  const medicalDisclaimerPattern = /atenção $política de conteúdo da ia$|não posso fornecer informações médicas|não sou um profissional de saúde|não estou qualificado para dar conselhos médicos|consulte um médico ou farmacêutico/i;
+  const isMedicalDisclaimer = medicalDisclaimerPattern.test(rawLLMResponseText.toLowerCase());
+
+  // Lógica principal: se a IA retornou um disclaimer ou foi bloqueada, tenta o fallback.
+  if (isMedicalDisclaimer) {
+    console.log("[AI PROCESS] LLM acionou o disclaimer médico ou foi bloqueado. Tentando consultar a Lib/medicamentos_data.ts como fallback.");
+
+    // Tenta extrair o nome do medicamento e o tipo de informação da mensagem original do usuário.
+    const parsedInfo = parseUserMessageForDrugInfo(userMessage);
+
+    if (parsedInfo.drugName && parsedInfo.infoType) {
+      console.log(`[AI PROCESS] Informação extraída para fallback: Medicamento: '${parsedInfo.drugName}', Tipo: '${parsedInfo.infoType}'`);
+      // Consulta a base de dados interna usando a função `getMedicamentoInfo`.
+      const libResult = getMedicamentoInfo(parsedInfo.drugName, parsedInfo.infoType);
+
+      // Verifica se a Lib encontrou a informação específica ou retornou uma mensagem de "não encontrado".
+      if (libResult.includes("Não encontrei informações") || libResult.includes("Não tenho a informação")) {
+        // Quando o `libResult` indica que a informação específica não foi encontrada,
+        // a mensagem de retorno é ajustada para ser mais concisa, mas ainda informativa.
+        // Ela reforça o disclaimer médico da IA e explica que a busca interna também não
+        // foi frutífera, guiando o usuário sobre como proceder.
+        return `Atenção (Política de Conteúdo da IA) - Para sua segurança, por favor, consulte diretamente um farmacêutico em nossa loja ou um médico. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas não encontrei a informação específica sobre '${parsedInfo.infoType}' para o medicamento '${parsedInfo.drugName}'. Por favor, procure um profissional de saúde para obter orientação.`;
+      } else {
+        // Sucesso na consulta da Lib. A informação é apresentada *sempre* acompanhada de um disclaimer robusto.
+        // Este disclaimer é legal e eticamente necessário para qualquer sistema que forneça informações
+        // relacionadas à saúde, pois a IA não é um profissional médico e as informações são apenas para fins informativos.
+        return `De acordo com nossa base de dados interna:\n\n${libResult}\n\n**Importante:** Esta informação é para fins educacionais e informativos e não substitui o conselho, diagnóstico ou tratamento de um profissional de saúde qualificado. Sempre consulte um médico ou farmacêutico para orientações específicas sobre sua saúde e para a interpretação correta das informações.`;
+      }
+    } else {
+      // Se não for possível extrair informações suficientes para o fallback, a mensagem
+      // orienta o usuário a refinar sua pergunta, fornecendo exemplos de formatos mais diretos.
+      // Isso melhora a experiência do usuário e a probabilidade de sucesso em futuras interações.
+      console.warn("[AI PROCESS] Não foi possível extrair nome do medicamento ou tipo de informação da mensagem do usuário para o fallback.");
+      return "Atenção (Política de Conteúdo da IA) - Para sua segurança, por favor, consulte diretamente um farmacêutico em nossa loja ou um médico. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas não consegui entender qual medicamento ou informação específica você procura. Por favor, tente perguntar de forma mais direta (ex: 'Qual a posologia da losartana?' ou 'Indicações do paracetamol?').";
+    }
+  } else {
+    // Se o LLM deu uma resposta considerada "normal" (sem disclaimer médico),
+    // a resposta é retornada diretamente ao usuário.
+    return rawLLMResponseText;
+  }
+}
+
+// =========================================================================
+// ROTA NEXT.JS API - WEBHOOK PARA WHATSAPP BUSINESS API
+// =========================================================================
+
+/**
+ * Handler para requisições POST do webhook do WhatsApp Business API.
+ * Esta função é o ponto de entrada para todas as mensagens recebidas pelo seu número do WhatsApp.
+ * Ela processa o payload, extrai a mensagem do usuário, chama a lógica de processamento
+ * do chatbot (`processChatMessage`) e envia a resposta de volta ao usuário.
+ *
+ * @param req Objeto Request do Next.js, contendo o payload do webhook.
+ * @returns Um objeto Response do Next.js, indicando o status do processamento.
+ */
+export async function POST(req: Request) {
+  try {
+    const payload = await req.json(); // Analisa o corpo da requisição como JSON.
+    // `console.log` é útil para depuração em desenvolvimento. Em ambientes de produção,
+    // considere usar uma solução de logging estruturado (e.g., Winston, Pino) que permita
+    // filtrar, pesquisar e analisar logs de forma eficiente. É uma boa prática também
+    // redigir informações sensíveis (como números de telefone completos ou dados pessoais) dos logs.
+    console.log('📦 [WEBHOOK] Payload recebido:', JSON.stringify(payload, null, 2));
+
+    // A estrutura do payload do webhook do WhatsApp é aninhada.
+    // Navegamos pelo objeto para encontrar as mensagens.
+    const messages = payload.entry?.[0]?.changes?.[0]?.value?.messages;
+
+    if (messages && messages.length > 0) {
+      console.log(`🔄 [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
+
+      // O webhook pode enviar múltiplas mensagens em um único payload,
+      // embora seja mais comum uma por vez.
