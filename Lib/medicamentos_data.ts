@@ -11,9 +11,11 @@ export interface MedicamentoBula {
     "Contraindicações": string;
     "Efeitos Colaterais": string;
     "Advertências e Precauções": string;
+    "Interações Medicamentosas": string; // Adicionado este campo para consistência
 }
 
-export const bulasEstaticas: MedicamentoBula[] = [
+// Renomeado bulasEstaticas para medicamentosData
+export const medicamentosData: MedicamentoBula[] = [
     {
         "Nome do Medicamento": "Losartana",
         "Princípio(s) Ativo(s)": ["Losartana Potássica"],
@@ -23,7 +25,8 @@ export const bulasEstaticas: MedicamentoBula[] = [
         "Posologia": "Adultos: A dose inicial usual para hipertensão é de 50 mg, uma vez ao dia. Para insuficiência cardíaca, a dose inicial é de 12,5 mg, uma vez ao dia. A dose pode ser ajustada pelo médico, geralmente até 100 mg/dia, dependendo da resposta do paciente e da condição clínica. A administração pode ser feita com ou sem alimentos.",
         "Contraindicações": "Hipersensibilidade conhecida à losartana ou a qualquer componente da fórmula; gravidez (especialmente no segundo e terceiro trimestres, devido ao risco de toxicidade fetal e neonatal); lactação; uso concomitante com alisquireno em pacientes com diabetes mellitus ou insuficiência renal moderada a grave (GFR < 60 mL/min/1.73m²), devido ao aumento do risco de hipotensão, hipercalemia e piora da função renal.",
         "Efeitos Colaterais": "Os efeitos mais comuns incluem tontura, cefaleia e fadiga. Outros efeitos podem ser hipercalemia (aumento de potássio no sangue, devido à inibição da aldosterona), hipotensão ortostática, dor abdominal, diarreia e tosse (menos comum que com inibidores da ECA). Reações mais raras, mas graves, incluem angioedema (inchaço da face, lábios, língua e/ou garganta) e alterações da função renal.",
-        "Advertências e Precauções": "É fundamental monitorar a função renal e os níveis de potássio sérico, especialmente em pacientes com insuficiência renal, insuficiência cardíaca, ou naqueles que utilizam diuréticos poupadores de potássio ou suplementos de potássio. Evitar o uso durante a gravidez e, se a gravidez for detectada, descontinuar o medicamento imediatamente. Usar com cautela em pacientes com estenose da artéria renal (risco de piora da função renal) e em pacientes com depleção de volume (desidratação), pois podem apresentar hipotensão sintomática. Interações medicamentosas importantes incluem diuréticos poupadores de potássio, suplementos de potássio, AINEs (podem reduzir o efeito anti-hipertensivo e aumentar o risco de disfunção renal) e lítio (aumenta os níveis séricos de lítio)."
+        "Advertências e Precauções": "É fundamental monitorar a função renal e os níveis de potássio sérico, especialmente em pacientes com insuficiência renal, insuficiência cardíaca, ou naqueles que utilizam diuréticos poupadores de potássio ou suplementos de potássio. Evitar o uso durante a gravidez e, se a gravidez for detectada, descontinuar o medicamento imediatamente. Usar com cautela em pacientes com estenose da artéria renal (risco de piora da função renal) e em pacientes com depleção de volume (desidratação), pois podem apresentar hipotensão sintomática. Interações medicamentosas importantes incluem diuréticos poupadores de potássio, suplementos de potássio, AINEs (podem reduzir o efeito anti-hipertensivo e aumentar o risco de disfunção renal) e lítio (aumento dos níveis séricos de lítio).",
+        "Interações Medicamentosas": "Diuréticos poupadores de potássio, suplementos de potássio, AINEs (podem reduzir o efeito anti-hipertensivo e aumentar o risco de disfunção renal) e lítio (aumento dos níveis séricos de lítio)."
     },
     {
         "Nome do Medicamento": "Sinvastatina",
@@ -34,7 +37,8 @@ export const bulasEstaticas: MedicamentoBula[] = [
         "Posologia": "Adultos: A dose inicial usualmente varia de 10 mg a 40 mg, uma vez ao dia, preferencialmente à noite. A administração noturna é recomendada porque a biossíntese do colesterol é mais ativa durante a noite. A dose pode ser ajustada pelo médico a intervalos de 4 semanas ou mais, conforme a resposta do paciente e os níveis-alvo de lipídios. A dose máxima recomendada é de 40 mg/dia para a maioria dos pacientes, embora doses mais altas (até 80 mg) possam ser usadas em situações específicas e sob estrita supervisão médica.",
         "Contraindicações": "Hipersensibilidade à sinvastatina ou a qualquer componente da fórmula; doença hepática ativa ou elevações persistentes e inexplicáveis das transaminases séricas (enzimas hepáticas); gravidez e lactação (devido ao potencial teratogênico e à interrupção da biossíntese de esteroides essenciais para o feto/lactente); uso concomitante de inibidores potentes da CYP3A4, como itraconazol, cetoconazol, posaconazol, voriconazol (antifúngicos azólicos), eritromicina, claritromicina, telitromicina (antibióticos macrolídeos), inibidores da protease do HIV (ex: nelfinavir, atazanavir), boceprevir, telaprevir, nefazodona e gemfibrozila.",
         "Efeitos Colaterais": "Os efeitos mais comuns são geralmente leves e transitórios, incluindo mialgia (dor muscular), dor abdominal, constipação, flatulência e cefaleia. Efeitos mais graves, embora raros, incluem miopatia (fraqueza muscular com ou sem elevação de creatina quinase - CK), rabdomiólise (lesão muscular grave que pode levar à insuficiência renal aguda) e disfunção hepática (elevação das transaminases séricas). É crucial que o paciente relate qualquer dor muscular inexplicável, sensibilidade ou fraqueza.",
-        "Advertências e Precauções": "É essencial monitorar a função hepática (enzimas transaminases) antes do início do tratamento e periodicamente durante o uso, especialmente se houver sintomas sugestivos de lesão hepática. Avaliar o risco de miopatia/rabdomiólise, que é aumentado em pacientes com fatores de risco (ex: idade avançada, hipotireoidismo não controlado, insuficiência renal, uso concomitante de certos medicamentos). Recomenda-se evitar o consumo excessivo de álcool e sumo de toranja (grapefruit juice), pois este último pode aumentar significativamente os níveis plasmáticos de sinvastatina, elevando o risco de efeitos adversos. Interações medicamentosas com amiodarona, verapamil, diltiazem e anlodipino também requerem cautela e ajuste de dose da sinvastatina."
+        "Advertências e Precauções": "É essencial monitorar a função hepática (enzimas transaminases) antes do início do tratamento e periodicamente durante o uso, especialmente se houver sintomas sugestivos de lesão hepática. Avaliar o risco de miopatia/rabdomiólise, que é aumentado em pacientes com fatores de risco (ex: idade avançada, hipotireoidismo não controlado, insuficiência renal, uso concomitante de certos medicamentos). Recomenda-se evitar o consumo excessivo de álcool e sumo de toranja (grapefruit juice), pois este último pode aumentar significativamente os níveis plasmáticos de sinvastatina, elevando o risco de efeitos adversos. Interações medicamentosas com amiodarona, verapamil, diltiazem e anlodipino também requerem cautela e ajuste de dose da sinvastatina.",
+        "Interações Medicamentosas": "Amiodarona, verapamil, diltiazem e anlodipino (requerem cautela e ajuste de dose da sinvastatina)."
     },
     {
         "Nome do Medicamento": "Diclofenaco",
@@ -45,7 +49,8 @@ export const bulasEstaticas: MedicamentoBula[] = [
         "Posologia": "Adultos: A dose varia amplamente de 50 mg a 150 mg por dia, divididos em 2 ou 3 doses, dependendo da formulação (comprimidos, cápsulas, gotas, injetáveis, supositórios, géis tópicos) e da condição a ser tratada. É crucial utilizar a menor dose eficaz pelo menor tempo possível para minimizar os riscos de efeitos adversos. Para dor aguda, o diclofenaco potássico pode ser administrado em doses de 25-50 mg a cada 6-8 horas.",
         "Contraindicações": "Hipersensibilidade conhecida ao diclofenaco, a outros AINEs (incluindo aspirina) ou a qualquer componente da fórmula; úlcera péptica ativa ou histórico de sangramento/perfuração gastrointestinal; insuficiência cardíaca grave; insuficiência hepática ou renal grave; gravidez (especialmente no terceiro trimestre, devido ao risco de fechamento prematuro do ducto arterioso fetal e disfunção renal fetal); asma, urticária ou rinite aguda precipitadas por AINEs; histórico de eventos tromboembólicos ou doença cardiovascular grave.",
         "Efeitos Colaterais": "Os efeitos mais comuns incluem distúrbios gastrointestinais, como dor epigástrica, náuseas, vômitos, diarreia, dispepsia, dor abdominal e flatulência. Efeitos mais graves incluem úlcera gastrointestinal, sangramento ou perfuração (que podem ser fatais, especialmente em idosos), eventos trombóticos cardiovasculares (infarto do miocárdio, acidente vascular cerebral), insuficiência renal aguda, elevação das enzimas hepáticas e reações cutâneas graves (ex: síndrome de Stevens-Johnson).",
-        "Advertências e Precauções": "Devido ao risco de eventos gastrointestinais graves (sangramento, ulceração, perfuração), cardiovasculares (trombose, infarto do miocárdio, AVC) e renais (insuficiência renal aguda), o diclofenaco deve ser usado com extrema cautela. Pacientes com histórico de doenças gastrointestinais, cardíacas, renais ou hepáticas, bem como idosos, apresentam maior risco. Recomenda-se monitorar a função renal e hepática em tratamentos prolongados. Evitar em pacientes com desidratação grave. O uso concomitante com outros AINEs, anticoagulantes (ex: varfarina), antiagregantes plaquetários (ex: aspirina, clopidogrel) ou corticosteroides aumenta o risco de sangramento. Pode reduzir o efeito de diuréticos e anti-hipertensivos. Aconselha-se a menor dose e menor duração possíveis."
+        "Advertências e Precauções": "Devido ao risco de eventos gastrointestinais graves (sangramento, ulceração, perfuração), cardiovasculares (trombose, infarto do miocárdio, AVC) e renais (insuficiência renal aguda), o diclofenaco deve ser usado com extrema cautela. Pacientes com histórico de doenças gastrointestinais, cardíacas, renais ou hepáticas, bem como idosos, apresentam maior risco. Recomenda-se monitorar a função renal e hepática em tratamentos prolongados. Evitar em pacientes com desidratação grave. O uso concomitante com outros AINEs, anticoagulantes (ex: varfarina), antiagregantes plaquetários (ex: aspirina, clopidogrel) ou corticosteroides aumenta o risco de sangramento. Pode reduzir o efeito de diuréticos e anti-hipertensivos. Aconselha-se a menor dose e menor duração possíveis.",
+        "Interações Medicamentosas": "Outros AINEs, anticoagulantes (ex: varfarina), antiagregantes plaquetários (ex: aspirina, clopidogrel) ou corticosteroides (aumenta o risco de sangramento). Diuréticos e anti-hipertensivos (pode reduzir o efeito)."
     },
     {
         "Nome do Medicamento": "Nimesulida",
@@ -56,7 +61,8 @@ export const bulasEstaticas: MedicamentoBula[] = [
         "Posologia": "Adultos: A dose usual é de 100 mg, duas vezes ao dia. A duração do tratamento deve ser a mais curta possível e não deve exceder 15 dias, devido ao risco de hepatotoxicidade. A nimesulida deve ser administrada após as refeições para minimizar a irritação gástrica.",
         "Contraindicações": "Hipersensibilidade à nimesulida, a outros AINEs ou a qualquer componente da fórmula; úlcera péptica ativa ou histórico de sangramento/perfuração gastrointestinal; histórico de reações hepatotóxicas à nimesulida; insuficiência hepática (incluindo elevação de transaminases); insuficiência renal grave; insuficiência cardíaca grave; gravidez (terceiro trimestre) e lactação; crianças menores de 12 anos; uso concomitante de outras substâncias hepatotóxicas ou álcool em excesso.",
         "Efeitos Colaterais": "Os efeitos mais comuns incluem dor epigástrica, náuseas, vômitos, diarreia, rash cutâneo e prurido. O principal e mais grave efeito colateral associado à nimesulida é a hepatotoxicidade (lesão hepática), que pode variar de elevações assintomáticas de enzimas hepáticas a casos raros, mas graves, de insuficiência hepática aguda, por vezes fatal. Outros efeitos incluem sangramento gastrointestinal, reações alérgicas (incluindo anafilaxia) e, menos frequentemente, efeitos renais e cardiovasculares semelhantes a outros AINEs.",
-        "Advertências e Precauções": "Devido ao risco significativo de hepatotoxicidade, a nimesulida deve ser utilizada com extrema cautela e sob estrita vigilância médica. É crucial que a duração do tratamento seja a mais curta possível e não exceda 15 dias. Pacientes devem ser instruídos a descontinuar o medicamento e procurar atendimento médico imediatamente se desenvolverem sintomas de disfunção hepática (ex: náuseas persistentes, vômitos, dor abdominal, fadiga, icterícia, urina escura). Evitar o uso concomitante com outros AINEs ou medicamentos hepatotóxicos. Usar com cautela em pacientes com histórico de doenças gastrointestinais, cardiovasculares, ou com alterações da coagulação. Monitorar a função hepática (transaminases) antes e durante o tratamento, se clinicamente indicado."
+        "Advertências e Precauções": "Devido ao risco significativo de hepatotoxicidade, a nimesulida deve ser utilizada com extrema cautela e sob estrita vigilância médica. É crucial que a duração do tratamento seja a mais curta possível e não exceda 15 dias. Pacientes devem ser instruídos a descontinuar o medicamento e procurar atendimento médico imediatamente se desenvolverem sintomas de disfunção hepática (ex: náuseas persistentes, vômitos, dor abdominal, fadiga, icterícia, urina escura). Evitar o uso concomitante com outros AINEs ou medicamentos hepatotóxicos. Usar com cautela em pacientes com histórico de doenças gastrointestinais, cardiovasculares, ou com alterações da coagulação. Monitorar a função hepática (transaminases) antes e durante o tratamento, se clinicamente indicado.",
+        "Interações Medicamentosas": "Outros AINEs ou medicamentos hepatotóxicos."
     },
     {
         "Nome do Medicamento": "Omeprazol",
@@ -67,7 +73,8 @@ export const bulasEstaticas: MedicamentoBula[] = [
         "Posologia": "Adultos: A dose usual varia de 20 mg a 40 mg, uma vez ao dia, geralmente pela manhã, antes da primeira refeição. Para erradicação de *H. pylori*, a dose é tipicamente de 20 mg duas vezes ao dia, em combinação com antibióticos, por 7 a 14 dias. A duração do tratamento varia conforme a indicação, sendo de 4 a 8 semanas para úlceras e DRGE, e uso contínuo para síndrome de Zollinger-Ellison.",
         "Contraindicações": "Hipersensibilidade conhecida ao omeprazol, a outros benzimidazóis substituídos (ex: pantoprazol, esomeprazol) ou a qualquer componente da fórmula; uso concomitante com nelfinavir (um antiviral) é contraindicado, pois o omeprazol pode reduzir significativamente a concentração plasmática do nelfinavir.",
         "Efeitos Colaterais": "Os efeitos mais comuns são geralmente leves e transitórios, incluindo cefaleia, dor abdominal, diarreia, náuseas, vômitos e flatulência. Efeitos menos comuns podem incluir tontura, erupções cutâneas, prurido, parestesias (sensação de formigamento) e boca seca. O uso prolongado (especialmente por mais de um ano) tem sido associado a um risco aumentado de fraturas ósseas (principalmente de quadril, punho e coluna), deficiência de vitamina B12 (devido à redução da absorção), hipomagnesemia (níveis baixos de magnésio no sangue), nefrite intersticial aguda e aumento do risco de infecções gastrointestinais (ex: *Clostridium difficile*).",
-        "Advertências e Precauções": "Antes de iniciar o tratamento com omeprazol, é fundamental excluir a possibilidade de malignidade gástrica (câncer de estômago), pois o medicamento pode mascarar os sintomas. O uso prolongado (mais de um ano) requer monitoramento médico regular para avaliar os riscos potenciais, como deficiência de B12, hipomagnesemia e fraturas. Pacientes com DRGE crônica devem ter cautela ao interromper o tratamento, pois pode ocorrer 'rebote' ácido, com piora dos sintomas. Interações medicamentosas importantes incluem clopidogrel (o omeprazol pode reduzir a eficácia antiplaquetária), varfarina (potencial aumento do INR), metotrexato (aumento dos níveis de metotrexato) e medicamentos cuja absorção depende do pH gástrico (ex: cetoconazol, digoxina)."
+        "Advertências e Precauções": "Antes de iniciar o tratamento com omeprazol, é fundamental excluir a possibilidade de malignidade gástrica (câncer de estômago), pois o medicamento pode mascarar os sintomas. O uso prolongado (mais de um ano) requer monitoramento médico regular para avaliar os riscos potenciais, como deficiência de B12, hipomagnesemia e fraturas. Pacientes com DRGE crônica devem ter cautela ao interromper o tratamento, pois pode ocorrer 'rebote' ácido, com piora dos sintomas. Interações medicamentosas importantes incluem clopidogrel (o omeprazol pode reduzir a eficácia antiplaquetária), varfarina (potencial aumento do INR), metotrexato (aumento dos níveis de metotrexato) e medicamentos cuja absorção depende do pH gástrico (ex: cetoconazol, digoxina).",
+        "Interações Medicamentosas": "Clopidogrel (o omeprazol pode reduzir a eficácia antiplaquetária), varfarina (potencial aumento do INR), metotrexato (aumento dos níveis de metotrexato) e medicamentos cuja absorção depende do pH gástrico (ex: cetoconazol, digoxina)."
     },
     {
         "Nome do Medicamento": "Pantoprazol",
@@ -78,7 +85,8 @@ export const bulasEstaticas: MedicamentoBula[] = [
         "Posologia": "Adultos: A dose usual varia de 20 mg a 40 mg, uma vez ao dia, preferencialmente pela manhã, antes da primeira refeição. Para erradicação de *H. pylori*, a dose é tipicamente de 40 mg duas vezes ao dia, em combinação com antibióticos, por 7 a 14 dias. A duração do tratamento depende da indicação e da resposta clínica, variando de algumas semanas a uso contínuo em casos específicos.",
         "Contraindicações": "Hipersensibilidade conhecida ao pantoprazol, a outros benzimidazóis substituídos ou a qualquer componente da fórmula. O uso concomitante com nelfinavir (um antiviral) é contraindicado, devido ao risco de redução significativa da concentração plasmática do nelfinavir.",
         "Efeitos Colaterais": "Os efeitos mais comuns são geralmente leves e transitórios, incluindo cefaleia, dor abdominal superior, diarreia, constipação, náuseas, vômitos e flatulência. Efeitos menos comuns podem incluir tontura, urticária, boca seca e reações alérgicas. O uso prolongado (especialmente por mais de um ano) tem sido associado a um risco aumentado de fraturas ósseas, deficiência de vitamina B12 e hipomagnesemia. Há também um risco potencial, embora raro, de nefrite intersticial aguda e infecções por *Clostridium difficile*.",
-        "Advertências e Precauções": "É crucial excluir a possibilidade de malignidade gástrica antes de iniciar o tratamento com pantoprazol, pois os sintomas podem ser mascarados. O uso prolongado (mais de um ano) requer monitoramento médico regular para avaliar os riscos potenciais associados, como deficiência de B12, hipomagnesemia e fraturas. O pantoprazol tem menos interações medicamentosas clinicamente significativas mediadas pelo CYP2C19 em comparação com omeprazol e esomeprazol, o que pode ser uma vantagem em pacientes que usam clopidogrel. No entanto, ainda deve-se ter cautela com medicamentos cuja absorção depende do pH gástrico e com metotrexato (risco de aumento dos níveis)."
+        "Advertências e Precauções": "É crucial excluir a possibilidade de malignidade gástrica antes de iniciar o tratamento com pantoprazol, pois os sintomas podem ser mascarados. O uso prolongado (mais de um ano) requer monitoramento médico regular para avaliar os riscos potenciais associados, como deficiência de B12, hipomagnesemia e fraturas. O pantoprazol tem menos interações medicamentosas clinicamente significativas mediadas pelo CYP2C19 em comparação com omeprazol e esomeprazol, o que pode ser uma vantagem em pacientes que usam clopidogrel. No entanto, ainda deve-se ter cautela com medicamentos cuja absorção depende do pH gástrico e com metotrexato (risco de aumento dos níveis).",
+        "Interações Medicamentosas": "Nelfinavir (redução significativa da concentração plasmática), medicamentos cuja absorção depende do pH gástrico e metotrexato (risco de aumento dos níveis)."
     },
     {
         "Nome do Medicamento": "Esomeprazol",
@@ -89,22 +97,61 @@ export const bulasEstaticas: MedicamentoBula[] = [
         "Posologia": "Adultos: A dose usual varia de 20 mg a 40 mg, uma vez ao dia, preferencialmente pela manhã, pelo menos uma hora antes da refeição. Para erradicação de *H. pylori*, a dose é tipicamente de 20 mg ou 40 mg duas vezes ao dia, em combinação com antibióticos, por 7 a 14 dias. A duração do tratamento é determinada pela indicação e resposta clínica, variando de algumas semanas a uso contínuo em condições crônicas.",
         "Contraindicações": "Hipersensibilidade conhecida ao esomeprazol, a outros benzimidazóis substituídos ou a qualquer componente da fórmula. O uso concomitante com nelfinavir (um antiviral) é contraindicado, pois o esomeprazol pode reduzir significativamente a concentração plasmática do nelfinavir.",
         "Efeitos Colaterais": "Os efeitos mais comuns são geralmente leves e transitórios, incluindo cefaleia, dor abdominal, diarreia, náuseas, vômitos e flatulência. Efeitos menos comuns podem incluir tontura, boca seca, erupção cutânea e urticária. O uso prolongado (especialmente por mais de um ano) tem sido associado a um risco aumentado de fraturas ósseas (principalmente de quadril, punho e coluna), deficiência de vitamina B12 e hipomagnesemia. Há também um risco potencial, embora raro, de nefrite intersticial aguda e aumento do risco de infecções por *Clostridium difficile*.",
-        "Advertências e Precauções": "É fundamental excluir a possibilidade de malignidade gástrica antes de iniciar o tratamento com esomeprazol, pois os sintomas podem ser mascarados. O uso prolongado (mais de um ano) requer monitoramento médico regular para avaliar os riscos potenciais associados, como deficiência de B12, hipomagnesemia e fraturas. Pacientes com DRGE crônica devem ter cautela ao interromper o tratamento, pois pode ocorrer 'rebote' ácido. O esomeprazol, assim como o omeprazol, pode interagir com o clopidogrel, reduzindo sua eficácia antiplaquetária, embora a relevância clínica dessa interação seja debatida e dependa da dose e duração. Outras interações importantes incluem varfarina (potencial aumento do INR), metotrexato (aumento dos níveis de metotrexato) e medicamentos cuja absorção depende do pH gástrico."
+        "Advertências e Precauções": "É fundamental excluir a possibilidade de malignidade gástrica antes de iniciar o tratamento com esomeprazol, pois os sintomas podem ser mascarados. O uso prolongado (mais de um ano) requer monitoramento médico regular para avaliar os riscos potenciais associados, como deficiência de B12, hipomagnesemia e fraturas. Pacientes com DRGE crônica devem ter cautela ao interromper o tratamento, pois pode ocorrer 'rebote' ácido. O esomeprazol, assim como o omeprazol, pode interagir com o clopidogrel, reduzindo sua eficácia antiplaquetária, embora a relevância clínica dessa interação seja debatida e dependa da dose e duração. Outras interações importantes incluem varfarina (potencial aumento do INR), metotrexato (aumento dos níveis de metotrexato) e medicamentos cuja absorção depende do pH gástrico.",
+        "Interações Medicamentosas": "Nelfinavir (redução significativa da concentração plasmática), clopidogrel (redução da eficácia antiplaquetária), varfarina (potencial aumento do INR), metotrexato (aumento dos níveis de metotrexato) e medicamentos cuja absorção depende do pH gástrico."
     }
 ];
 
-// Função de busca que você usará no seu chatbot:
-export function buscarBulaEstatica(query: string): MedicamentoBula | undefined {
-    // Converte a query para minúsculas e remove acentos para busca flexível
-    const termoBusca = query.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+// Função getMedicamentoInfo, adaptada para a estrutura MedicamentoBula
+export function getMedicamentoInfo(drugName: string, infoType: string): string {
+    const termoBusca = drugName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-    return bulasEstaticas.find(bula => {
-        // Busca pelo nome comercial ou por qualquer princípio ativo
-        const nomeBula = bula["Nome do Medicamento"].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        const temPrincipioAtivo = bula["Princípio(s) Ativo(s)"].some(pa =>
-            pa.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(termoBusca)
-        );
+    // Procuramos o medicamento usando o nome comercial
+    const medicamento = medicamentosData.find(bula =>
+        bula["Nome do Medicamento"].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(termoBusca)
+    );
 
-        return nomeBula.includes(termoBusca) || temPrincipioAtivo;
-    });
+    if (!medicamento) {
+        return `Não encontrei informações sobre o medicamento '${drugName}'.`;
+    }
+
+    const lowerInfoType = infoType.toLowerCase();
+
+    // Mapeamento dos infoType esperados para as chaves do objeto MedicamentoBula
+    const fieldMap: { [key: string]: keyof MedicamentoBula } = {
+        "classe terapeutica": "Classe Farmacológica",
+        "posologia": "Posologia",
+        "indicacoes": "Indicações",
+        "efeitos colaterais": "Efeitos Colaterais",
+        "contraindicacoes": "Contraindicações",
+        "mecanismo de acao": "Mecanismo de Ação",
+        "interacoes medicamentosas": "Interações Medicamentosas",
+        "advertencias e precaucoes": "Advertências e Precauções",
+        "principios ativos": "Princípio(s) Ativo(s)", // Adicionei este para ser completo
+    };
+
+    const requestedField = fieldMap[lowerInfoType];
+
+    if (requestedField && typeof medicamento[requestedField] === 'string') {
+        // Se for uma string (a maioria dos campos)
+        return `A ${infoType} do ${medicamento["Nome do Medicamento"]} é: ${medicamento[requestedField]}.`;
+    } else if (requestedField && Array.isArray(medicamento[requestedField])) {
+        // Caso específico para "Princípio(s) Ativo(s)" que é um array
+        return `O(s) princípio(s) ativo(s) do ${medicamento["Nome do Medicamento"]} é(são): ${(medicamento[requestedField] as string[]).join(', ')}.`;
+    }
+    else if (lowerInfoType === "tudo") {
+        return `Informações completas sobre ${medicamento["Nome do Medicamento"]}:\n\n` +
+               `- **Nome do Medicamento:** ${medicamento["Nome do Medicamento"]}\n` +
+               `- **Princípio(s) Ativo(s):** ${medicamento["Princípio(s) Ativo(s)"].join(', ')}\n` +
+               `- **Classe Farmacológica:** ${medicamento["Classe Farmacológica"]}\n` +
+               `- **Mecanismo de Ação:** ${medicamento["Mecanismo de Ação"]}\n` +
+               `- **Indicações:** ${medicamento["Indicações"]}\n` +
+               `- **Posologia:** ${medicamento["Posologia"]}\n` +
+               `- **Contraindicações:** ${medicamento["Contraindicações"]}\n` +
+               `- **Efeitos Colaterais:** ${medicamento["Efeitos Colaterais"]}\n` +
+               `- **Advertências e Precauções:** ${medicamento["Advertências e Precauções"]}\n` +
+               `- **Interações Medicamentosas:** ${medicamento["Interações Medicamentosas"]}`;
+    } else {
+        return `Não tenho a informação específica sobre '${infoType}' para o medicamento '${medicamento["Nome do Medicamento"]}'.`;
+    }
 }

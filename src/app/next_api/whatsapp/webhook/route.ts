@@ -125,7 +125,7 @@ function parseUserMessageForDrugInfo(message: string): { drugName?: string; info
   // comuns, é importante que `medicamentosData` contenha essas variações ou que a lógica
   // de extração seja aprimorada para reconhecê-las.
   // Mapeamos os nomes para minúsculas para uma busca case-insensitive.
-  const allDrugNames = medicamentosData.map(m => m.nome.toLowerCase());
+    const allDrugNames = medicamentosData.map(m => m["Nome do Medicamento"].toLowerCase());
   let bestMatchDrug: string | undefined;
   let bestMatchLength = 0;
 
