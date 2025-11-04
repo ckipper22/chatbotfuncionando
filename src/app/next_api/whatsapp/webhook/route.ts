@@ -402,7 +402,7 @@ async function processarComIACompleta(message: any): Promise<void> {
     }
 
     // Padrão Regex para identificar o disclaimer de política de conteúdo (com escapes para WhatsApp)
-    const medicalDisclaimerPattern = /atenção \\(política de conteúdo da ia\\)|não posso fornecer informações médicas|não sou um profissional de saúde|não estou qualificado para dar conselhos médicos|consulte um médico ou farmacêutico/i;
+    const medicalDisclaimerPattern = /atenção \\\(política de conteúdo da ia\\\)|não posso fornecer informações médicas|não sou um profissional de saúde|não estou qualificado para dar conselhos médicos|consulte um médico ou farmacêutico/i;
     const isMedicalDisclaimer = medicalDisclaimerPattern.test(aiResponseText.toLowerCase());
 
     // Lógica principal: se a IA retornou um disclaimer médico ou foi bloqueada, tenta o fallback de medicamentos.
@@ -411,19 +411,23 @@ async function processarComIACompleta(message: any): Promise<void> {
 
       const parsedInfo = parseUserMessageForDrugInfo(userMessage);
 
+      // Verificamos se conseguimos extrair o medicamento e o tipo de info
       if (parsedInfo.drugName && parsedInfo.infoType) {
         console.log(`🔎 Informação extraída para fallback: Medicamento: '${parsedInfo.drugName}', Tipo: '${parsedInfo.infoType}'`);
         const libResult = getMedicamentoInfo(parsedInfo.drugName, parsedInfo.infoType);
 
-        if (libResult.includes("Não encontrei informações") || libResult.includes("Não tenho a informação")) {
-          const finalResponse = `_Atenção (Política de Conteúdo da IA)_ - Para sua segurança, por favor, consulte diretamente um *farmacêutico* em nossa loja ou um *médico*. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas não encontrei a informação específica sobre *'${parsedInfo.infoType}'* para o medicamento *'${parsedInfo.drugName}'*. Por favor, procure um profissional de saúde para obter orientação.`;
+        // Ajuste CRÍTICO aqui: Agora verificamos se o `libResult` *NÃO* é uma mensagem de erro
+        if (libResult.includes("Não encontrei informações sobre o medicamento") || libResult.includes("Não tenho a informação específica sobre")) {
+          // Se a Lib também não encontrou ou não tem a informação
+          const finalResponse = `_Atenção (Política de Conteúdo da IA)_ - Para sua segurança, por favor, consulte diretamente um *farmacêutico* em nossa loja ou um *médico*. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas ${libResult.toLowerCase()}. Por favor, procure um profissional de saúde para obter orientação.`;
           await enviarComFormatosCorretos(from, finalResponse);
         } else {
-          // Formatação para WhatsApp com quebras de linha e negrito/itálico
+          // Se a Lib ENCONTROU a informação, retornamos a informação da Lib + disclaimer
           const finalResponse = `_De acordo com nossa base de dados interna:_\n\n${libResult}\n\n*_Importante:_ Esta informação é para fins educacionais e informativos e não substitui o conselho, diagnóstico ou tratamento de um profissional de saúde qualificado. Sempre consulte um *médico* ou *farmacêutico* para orientações específicas sobre sua saúde e para a interpretação correta das informações.`;
           await enviarComFormatosCorretos(from, finalResponse);
         }
       } else {
+        // Caso não tenha conseguido extrair nome do medicamento ou tipo de informação para o fallback
         console.warn("⚠️ Não foi possível extrair nome do medicamento ou tipo de informação da mensagem do usuário para o fallback.");
         const finalResponse = `_Atenção (Política de Conteúdo da IA)_ - Para sua segurança, por favor, consulte diretamente um *farmacêutico* em nossa loja ou um *médico*. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas não consegui entender qual medicamento ou informação específica você procura. Por favor, tente perguntar de forma mais direta (ex: _'Qual a posologia da losartana?'_ ou _'Indicações do paracetamol?'_).`;
         await enviarComFormatosCorretos(from, finalResponse);
