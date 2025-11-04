@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getGeminiService } from '@/lib/services/gemini-service';
 
 // URL base da Bulario API (NOVO)
-const BULA_API_URL = 'https://bula.vercel.app';
+const BULA_API_URL = 'https://bulariocarlos-api.vercel.app';
 
 // 🎯 FORMATOS QUE SABEMOS QUE FUNCIONAM
 const FORMATOS_COMPROVADOS = [
