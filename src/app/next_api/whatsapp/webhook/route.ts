@@ -48,8 +48,6 @@ const safetySettings = [
 // Inicializa a API do Google Generative AI com a chave de API.
 // A chave da API do Gemini deve ser armazenada de forma segura em variáveis de ambiente
 // (e.g., `.env.local` para desenvolvimento local, ou configurações de ambiente da plataforma de deploy como Vercel).
-// A verificação `process.env.GEMINI_API_KEY || ''` é uma boa prática para evitar falhas em tempo de execução
-// se a variável não estiver definida, embora as chamadas à API falhem neste caso.
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 // Obtém o modelo generativo. O modelo `gemini-2.5-flash` é escolhido por ser otimizado
@@ -145,18 +143,17 @@ function parseUserMessageForDrugInfo(message: string): { drugName?: string; info
 
 /**
  * Envia uma mensagem de texto para um usuário do WhatsApp através da API do WhatsApp Business.
+ * Utiliza as variáveis de ambiente WHATSAPP_ACCESS_TOKEN e WHATSAPP_PHONE_NUMBER_ID.
  *
  * @param to O número de telefone do destinatário no formato internacional (ex: "5511999998888").
  * @param message O conteúdo da mensagem a ser enviada.
  */
 async function sendWhatsAppMessage(to: string, message: string) {
-  // Use a versão mais recente da API do WhatsApp Business se souber,
-  // ou mantenha esta que é comumente utilizada.
-  const WHATSAPP_API_URL = `https://graph.facebook.com/v19.0/${process.env.PHONE_ID}/messages`;
-  const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+  const WHATSAPP_API_URL = `https://graph.facebook.com/v19.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`; // Usando a nova variável WHATSAPP_PHONE_NUMBER_ID
+  const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN; // Usando a nova variável WHATSAPP_ACCESS_TOKEN
 
-  if (!ACCESS_TOKEN || !process.env.PHONE_ID) {
-    console.error("❌ Erro: Variáveis de ambiente PHONE_ID ou ACCESS_TOKEN não configuradas para envio de mensagem.");
+  if (!ACCESS_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
+    console.error("❌ Erro: Variáveis de ambiente WHATSAPP_PHONE_NUMBER_ID ou WHATSAPP_ACCESS_TOKEN não configuradas para envio de mensagem.");
     return;
   }
 
@@ -203,12 +200,6 @@ async function sendWhatsAppMessage(to: string, message: string) {
  * @returns Uma string contendo a resposta gerada para o usuário.
  */
 async function processChatMessage(userMessage: string, from: string): Promise<string> {
-  // Em um sistema de chat real, o histórico de conversas para o 'from'
-  // seria persistido em um banco de dados (ex: Redis para cache de curto prazo,
-  // MongoDB ou PostgreSQL para histórico de longo prazo) e carregado aqui para
-  // que a IA possa manter o contexto da conversa. Isso é feito passando um array
-  // de `GenerativeContent` para o parâmetro `history` do `startChat`.
-  // Para este exemplo simplificado, o chat é stateless (cada mensagem é processada isoladamente).
   const chat = model.startChat({
     history: [], // Para um chat com memória, o histórico de mensagens anteriores seria preenchido aqui.
   });
@@ -233,6 +224,9 @@ async function processChatMessage(userMessage: string, from: string): Promise<st
   }
 
   // Padrão Regex para identificar o disclaimer de política de conteúdo.
+  // Note que o regex para "\(política de conteúdo da ia\)" precisou de escapes duplos para funcionar no JavaScript em strings normais
+  // e foi ajustado para `\\` para ser compatível com a forma como as strings são processadas pelo Vercel/Next.js no console.log
+  // e potencialmente no corpo da resposta da API.
   const medicalDisclaimerPattern = /atenção \(política de conteúdo da ia\)|não posso fornecer informações médicas|não sou um profissional de saúde|não estou qualificado para dar conselhos médicos|consulte um médico ou farmacêutico/i;
   const isMedicalDisclaimer = medicalDisclaimerPattern.test(rawLLMResponseText.toLowerCase());
 
@@ -249,6 +243,8 @@ async function processChatMessage(userMessage: string, from: string): Promise<st
       if (libResult.includes("Não encontrei informações") || libResult.includes("Não tenho a informação")) {
         return `Atenção (Política de Conteúdo da IA) - Para sua segurança, por favor, consulte diretamente um farmacêutico em nossa loja ou um médico. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas não encontrei a informação específica sobre '${parsedInfo.infoType}' para o medicamento '${parsedInfo.drugName}'. Por favor, procure um profissional de saúde para obter orientação.`;
       } else {
+        // As quebras de linha `\n` foram escapadas para `\n` para garantir que funcionem corretamente
+        // ao serem passadas como string JSON para a API do WhatsApp ou exibidas em consoles.
         return `De acordo com nossa base de dados interna:\n\n${libResult}\n\n**Importante:** Esta informação é para fins educacionais e informativos e não substitui o conselho, diagnóstico ou tratamento de um profissional de saúde qualificado. Sempre consulte um médico ou farmacêutico para orientações específicas sobre sua saúde e para a interpretação correta das informações.`;
       }
     } else {
