@@ -39,14 +39,8 @@ const safetySettings = [
     category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
     threshold: HarmBlockThreshold.BLOCK_NONE,
   },
-  {
-    category: HarmCategory.HARM_CATEGORY_MEDICAL,
-    threshold: HarmBlockThreshold.BLOCK_NONE,
-  },
-  {
-    category: HarmCategory.HARM_CATEGORY_TOXICITY,
-    threshold: HarmBlockThreshold.BLOCK_NONE,
-  },
+  // As categorias HARM_CATEGORY_MEDICAL e HARM_CATEGORY_TOXICITY foram removidas daqui.
+  // Elas não são reconhecidas pelo SDK e causam o erro de compilação.
 ];
 
 // Inicializa a API do Google Generative AI com a chave de API.
