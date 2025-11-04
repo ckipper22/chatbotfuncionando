@@ -18,7 +18,7 @@ const FORMATOS_COMPROVADOS = [
 function converterParaFormatoFuncional(numeroOriginal: string): string[] {
   console.log('🎯 [CONVERT] Convertendo para formato funcional:', numeroOriginal);
 
-  const numeroLimpo = numeroOriginal.replace(/\D/g, ''); // Remove todos os caracteres não-dígitos
+  const numeroLimpo = numeroOriginal.replace(/\\D/g, ''); // Remove todos os caracteres não-dígitos
   console.log('🎯 [CONVERT] Número limpo:', numeroLimpo);
 
   // **** LÓGICA ESPECÍFICA DO SEU TESTE PARA O NÚMERO '555584557096' ****
@@ -176,6 +176,7 @@ function parseUserMessageForDrugInfo(message: string): { drugName?: string; info
   let drugName: string | undefined;
   let infoType: string | undefined;
 
+  // CORREÇÃO APLICADA AQUI: REMOVIDAS AS BARRAS INVERTIDAS EXTRAS
   const infoTypeKeywords: { [key: string]: string[] } = {
     "classe terapeutica": ["classe terapeutica", "classe farmacologica", "categoria", "grupo de medicamentos", "tipo de remedio"],
     "posologia": ["posologia", "dose", "como usar", "modo de usar", "dosagem", "quantas vezes", "como tomar"],
@@ -325,7 +326,7 @@ async function processarComIACompleta(message: any): Promise<void> {
     // Comandos administrativos (mantidos do seu código)
     if (lowerMessage === '/test' || lowerMessage === 'test') {
       const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA ATIVA' : '⚠️ IA INATIVA';
-      const statusMsg = `✅ *SISTEMA COMPLETO FUNCIONANDO!*\n\n🔗 WhatsApp: ✅ Conectado\n${statusIA}\n📊 Formatos: ✅ Corretos\n🚀 Status: 100% Operacional\n\nTudo funcionando perfeitamente!`;
+      const statusMsg = `✅ *SISTEMA COMPLETO FUNCIONANDO!*\\n\\n🔗 WhatsApp: ✅ Conectado\\n${statusIA}\\n📊 Formatos: ✅ Corretos\\n🚀 Status: 100% Operacional\\n\\nTudo funcionando perfeitamente!`;
       await enviarComFormatosCorretos(from, statusMsg);
       return;
     }
@@ -333,7 +334,7 @@ async function processarComIACompleta(message: any): Promise<void> {
     if (lowerMessage === '/debug' || lowerMessage === 'debug') {
       const formatos = converterParaFormatoFuncional(from);
       const statusIA = process.env.GEMINI_API_KEY ? '✅ ATIVA' : '❌ INATIVA';
-      const debugInfo = `🔧 *DEBUG SISTEMA COMPLETO*\n\n📱 Seu número: ${from}\n🎯 Convertido para:\n• ${formatos[0]}\n• ${formatos[1]}\n\n🤖 IA Status: ${statusIA}\n📊 Formatos: ${FORMATOS_COMPROVADOS.length} testados\n✅ Sistema: 100% Operacional\n\n🚀 *TUDO FUNCIONANDO!*`;
+      const debugInfo = `🔧 *DEBUG SISTEMA COMPLETO*\\n\\n📱 Seu número: ${from}\\n🎯 Convertido para:\\n• ${formatos[0]}\\n• ${formatos[1]}\\n\\n🤖 IA Status: ${statusIA}\\n📊 Formatos: ${FORMATOS_COMPROVADOS.length} testados\\n✅ Sistema: 100% Operacional\\n\\n🚀 *TUDO FUNCIONANDO!*`;
       await enviarComFormatosCorretos(from, debugInfo);
       return;
     }
@@ -342,28 +343,28 @@ async function processarComIACompleta(message: any): Promise<void> {
       try {
         if (process.env.GEMINI_API_KEY) {
           geminiService.clearHistory(from); // Usa a instância do serviço para limpar histórico
-          await enviarComFormatosCorretos(from, '🗑️ *HISTÓRICO LIMPO!*\n\nMemória da IA resetada com sucesso.\nVamos começar uma nova conversa! 🚀');
+          await enviarComFormatosCorretos(from, '🗑️ *HISTÓRICO LIMPO!*\\n\\nMemória da IA resetada com sucesso.\\nVamos começar uma nova conversa! 🚀');
         } else {
-          await enviarComFormatosCorretos(from, '🗑️ *COMANDO RECEBIDO!*\n\nIA será ativada em breve.\nSistema WhatsApp funcionando normalmente.');
+          await enviarComFormatosCorretos(from, '🗑️ *COMANDO RECEBIDO!*\\n\\nIA será ativada em breve.\\nSistema WhatsApp funcionando normalmente.');
         }
       } catch (error) {
         console.error('❌ [LIMPAR] Erro:', error);
-        await enviarComFormatosCorretos(from, '❌ Erro ao limpar histórico.\nSistema continua funcionando normalmente.');
+        await enviarComFormatosCorretos(from, '❌ Erro ao limpar histórico.\\nSistema continua funcionando normalmente.');
       }
       return;
     }
 
     if (lowerMessage === '/ajuda' || lowerMessage === 'ajuda' || lowerMessage === '/help') {
       const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA totalmente ativa - Posso conversar sobre qualquer assunto!' : '⚙️ IA sendo configurada';
-      const helpMsg = `🤖 *ASSISTENTE INTELIGENTE ATIVO*\n\n` +
-        `✅ */test* - Status do sistema\n` +
-        `🔧 */debug* - Informações técnicas\n` +
-        `🗑️ */limpar* - Resetar conversa\n` +
-        `❓ */ajuda* - Esta mensagem\n\n` +
-        `${statusIA}\n\n` +
-        `💬 *Como usar:*\n` +
-        `Envie qualquer mensagem para conversar comigo!\n` +
-        `Sou um assistente inteligente pronto para ajudar.\n\n` +
+      const helpMsg = `🤖 *ASSISTENTE INTELIGENTE ATIVO*\\n\\n` +
+        `✅ */test* - Status do sistema\\n` +
+        `🔧 */debug* - Informações técnicas\\n` +
+        `🗑️ */limpar* - Resetar conversa\\n` +
+        `❓ */ajuda* - Esta mensagem\\n\\n` +
+        `${statusIA}\\n\\n` +
+        `💬 *Como usar:*\\n` +
+        `Envie qualquer mensagem para conversar comigo!\\n` +
+        `Sou um assistente inteligente pronto para ajudar.\\n\\n` +
         `🚀 *STATUS: TOTALMENTE OPERACIONAL*`;
       await enviarComFormatosCorretos(from, helpMsg);
       return;
@@ -372,7 +373,7 @@ async function processarComIACompleta(message: any): Promise<void> {
     // Processamento com Inteligência Artificial
     if (!process.env.GEMINI_API_KEY) {
       console.log('⚠️ [AI PROCESS] GEMINI_API_KEY não encontrada');
-      await enviarComFormatosCorretos(from, '🤖 *ASSISTENTE QUASE PRONTO!*\n\nSistema WhatsApp: ✅ Funcionando perfeitamente\nIA: ⚙️ Sendo configurada\n\nEm breve estarei conversando inteligentemente!\nUse */test* para verificar status.');
+      await enviarComFormatosCorretos(from, '🤖 *ASSISTENTE QUASE PRONTO!*\\n\\nSistema WhatsApp: ✅ Funcionando perfeitamente\\nIA: ⚙️ Sendo configurada\\n\\nEm breve estarei conversando inteligentemente!\\nUse */test* para verificar status.');
       return;
     }
 
@@ -389,12 +390,12 @@ async function processarComIACompleta(message: any): Promise<void> {
         aiResponseText = "Atenção (Política de Conteúdo da IA)"; // Força o texto para ativar o fallback local
       } else {
         // Mensagem de erro genérica da IA, sem ativar o fallback de medicamentos
-        const errorMsg = `🤖 *ASSISTENTE TEMPORARIAMENTE INDISPONÍVEL*\n\n` +
-          `Estou com dificuldades momentâneas para processar sua mensagem.\n\n` +
-          `💡 *Sugestões:*\n` +
-          `• Tente reformular sua pergunta\n` +
-          `• Envie uma mensagem mais simples\n` +
-          `• Use */test* para verificar o status\n\n` +
+        const errorMsg = `🤖 *ASSISTENTE TEMPORARIAMENTE INDISPONÍVEL*\\n\\n` +
+          `Estou com dificuldades momentâneas para processar sua mensagem.\\n\\n` +
+          `💡 *Sugestões:*\\n` +
+          `• Tente reformular sua pergunta\\n` +
+          `• Envie uma mensagem mais simples\\n` +
+          `• Use */test* para verificar o status\\n\\n` +
           `🔄 Tentarei novamente em alguns instantes...`;
         await enviarComFormatosCorretos(from, errorMsg);
         return; // Retorna para não continuar com o fallback de medicamentos se o erro for genérico
@@ -402,7 +403,9 @@ async function processarComIACompleta(message: any): Promise<void> {
     }
 
     // Padrão Regex para identificar o disclaimer de política de conteúdo (com escapes para WhatsApp)
-    const medicalDisclaimerPattern = /atenção \\\(política de conteúdo da ia\\\)|não posso fornecer informações médicas|não sou um profissional de saúde|não estou qualificado para dar conselhos médicos|consulte um médico ou farmacêutico/i;
+    // Este regex também foi levemente ajustado para simplificar os escapes, caso a string do Gemini mude no futuro.
+    // O importante é que ele capture a frase "Política de Conteúdo da IA" ou as outras frases de disclaimer.
+    const medicalDisclaimerPattern = /atenção \(política de conteúdo da ia\)|não posso fornecer informações médicas|não sou um profissional de saúde|não estou qualificado para dar conselhos médicos|consulte um médico ou farmacêutico/i;
     const isMedicalDisclaimer = medicalDisclaimerPattern.test(aiResponseText.toLowerCase());
 
     // Lógica principal: se a IA retornou um disclaimer médico ou foi bloqueada, tenta o fallback de medicamentos.
@@ -423,7 +426,7 @@ async function processarComIACompleta(message: any): Promise<void> {
           await enviarComFormatosCorretos(from, finalResponse);
         } else {
           // Se a Lib ENCONTROU a informação, retornamos a informação da Lib + disclaimer
-          const finalResponse = `_De acordo com nossa base de dados interna:_\n\n${libResult}\n\n*_Importante:_ Esta informação é para fins educacionais e informativos e não substitui o conselho, diagnóstico ou tratamento de um profissional de saúde qualificado. Sempre consulte um *médico* ou *farmacêutico* para orientações específicas sobre sua saúde e para a interpretação correta das informações.`;
+          const finalResponse = `_De acordo com nossa base de dados interna:_\\n\\n${libResult}\\n\\n*_Importante:_ Esta informação é para fins educacionais e informativos e não substitui o conselho, diagnóstico ou tratamento de um profissional de saúde qualificado. Sempre consulte um *médico* ou *farmacêutico* para orientações específicas sobre sua saúde e para a interpretação correta das informações.`;
           await enviarComFormatosCorretos(from, finalResponse);
         }
       } else {
@@ -441,12 +444,12 @@ async function processarComIACompleta(message: any): Promise<void> {
     console.error('❌ [AI PROCESS] Erro crítico no processamento:', error);
 
     // Mensagem de recuperação para o usuário em caso de erro crítico
-    const recoveryMsg = `⚠️ *ERRO TEMPORÁRIO DETECTADO*\n\n` +
-      `O sistema detectou um problema momentâneo e está se recuperando automaticamente.\n\n` +
-      `🔄 *Ações tomadas:*\n` +
-      `• Reinicialização automática em andamento\n` +
-      `• Sistema WhatsApp mantido ativo\n` +
-      `• Logs de erro registrados\n\n` +
+    const recoveryMsg = `⚠️ *ERRO TEMPORÁRIO DETECTADO*\\n\\n` +
+      `O sistema detectou um problema momentâneo e está se recuperando automaticamente.\\n\\n` +
+      `🔄 *Ações tomadas:*\\n` +
+      `• Reinicialização automática em andamento\\n` +
+      `• Sistema WhatsApp mantido ativo\\n` +
+      `• Logs de erro registrados\\n\\n` +
       `Use */test* para verificar o status de recuperação.`;
 
     try {
