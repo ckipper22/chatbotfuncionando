@@ -5,7 +5,7 @@ import { getGeminiService } from '@/lib/services/gemini-service';
 const BULA_API_URL = 'https://bulariocarlos-api.vercel.app';
 
 // 🎯 FORMATOS QUE SABEMOS QUE FUNCIONAM
-const FORMATOS_COMPROVADOS = [
+const FORMATOS_COMPROVADOS  =  [
   '+5555984557096',   // Teste 2 - FUNCIONOU ✅
   '5555984557096',    // Teste 11 - FUNCIONOU ✅
 ];
@@ -438,4 +438,4 @@ async function enviarComFormatosCorretos(numeroOriginal: string, texto: string):
     console.error('❌ [SEND FIXED] Erro crítico no envio:', error);
     return false;
   }
-}
+}   
