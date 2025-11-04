@@ -5,8 +5,7 @@ import { GoogleGenerativeAI, GenerativeModel, HarmBlockThreshold, HarmCategory }
 // O caminho foi ajustado conforme a estrutura de pastas confirmada:
 // `route.ts` em `src/app/next_api/whatsapp/webhook/`
 // `medicamentos_data.ts` em `src/Lib/`
-import { getMedicamentoInfo, medicamentosData } from '../../../../Lib/medicamentos_data';
-
+import { getMedicamentoInfo, medicamentosData } from '../../../../../Lib/medicamentos_data'; // Observe os 5 pontos-barras agora
 // =========================================================================
 // CONFIGURAÇÃO DA API GEMINI
 // =========================================================================
