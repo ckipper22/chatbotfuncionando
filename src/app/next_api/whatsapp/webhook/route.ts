@@ -254,6 +254,7 @@ export async function POST(req: Request) {
 
     // A estrutura do payload do webhook do WhatsApp é aninhada.
     // Navegamos pelo objeto para encontrar as mensagens.
+    // Uso de índice numérico  e optional chaining (?) para navegação segura.
     const messages = payload.entry?.?.changes?.?.value?.messages;
 
     if (messages && messages.length > 0) {
@@ -283,9 +284,7 @@ export async function POST(req: Request) {
     return new Response("OK", { status: 200 });
   } catch (error) {
     console.error(' Erro no processamento do webhook:', error);
-    // Em caso de erro interno, retorne um status de erro, mas muitas plataformas de webhook
-    // preferem 200 OK para evitar loops de repetição, mesmo com erro interno.
-    // Para Next.js API Routes, um 500 é o padrão.
+    // Em caso de erro interno, retorne um status de erro.
     return new Response(JSON.stringify({ error: 'Falha no processamento do webhook' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
