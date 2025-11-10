@@ -8,105 +8,38 @@ import { getMedicamentoInfo, medicamentosData } from '../../../../../Lib/medicam
 // VARIÁVEIS E FUNÇÕES AUXILIARES PARA ENVIO WHATSAPP (do seu código anterior)
 // =========================================================================
 
-// 🎯 FORMATOS QUE SABEMOS QUE FUNCIONAM (Apenas para referência/debug, a função abaixo é dinâmica)
-const FORMATOS_COMPROVADOS = [
-  '+5555984557096',   // Exemplo de formato funcional
-  '5555984557096',    // Exemplo de formato funcional
-];
+// ... (Suas funções existentes: converterParaFormatoFuncional, etc.) ...
+// Mantive o corpo das funções converterParaFormatoFuncional e tentarEnvioUnico simplificado aqui,
+// mas no seu código, elas devem estar completas conforme o documento original.
 
-// 🧠 FUNÇÃO PARA CONVERTER NÚMERO PARA FORMATOS TENTÁVEIS
 function converterParaFormatoFuncional(numeroOriginal: string): string[] {
-  console.log('🎯 [CONVERT] Convertendo para formato funcional:', numeroOriginal);
-
-  const numeroLimpo = numeroOriginal.replace(/\\D/g, ''); // Remove todos os caracteres não-dígitos
-  console.log('🎯 [CONVERT] Número limpo:', numeroLimpo);
-
-  // **** LÓGICA ESPECÍFICA DO SEU TESTE PARA O NÚMERO '555584557096' ****
-  // Esta lógica foi mantida exatamente como no seu snippet, pois você confirmou que funcionava.
+  // Sua implementação original completa aqui
+  const numeroLimpo = numeroOriginal.replace(/\D/g, '');
   if (numeroLimpo === '555584557096') {
-    const formatosFuncionais = [
-      '+5555984557096',   // Formato que funcionou no seu teste
-      '5555984557096',    // Formato que funcionou no seu teste
-    ];
-    console.log('🎯 [CONVERT] ✅ Convertido para formatos funcionais (caso específico):', formatosFuncionais);
-    return formatosFuncionais;
+    return ['+5555984557096', '5555984557096'];
   }
-  // *******************************************************************
-
-  // Lógica genérica para outros números (com heurística para adicionar '9' em celulares brasileiros)
   let numeroConvertido = numeroLimpo;
-
-  // Heurística para adicionar o '9' a números de celular brasileiros que possam vir sem ele.
-  // Assume que um número de celular brasileiro tem 11 dígitos após o DDI (55).
-  // Ex: 55 DDD XXXXXXXX (10 dígitos) -> 55 DDD 9 XXXXXXXX (11 dígitos)
-  if (numeroLimpo.length === 12 && numeroLimpo.startsWith('55')) { // Ex: '551181234567' (55 DDD 8 digitos)
+  if (numeroLimpo.length === 12 && numeroLimpo.startsWith('55')) {
     const ddd = numeroLimpo.substring(2, 4);
     const numeroSemDDIeDDD = numeroLimpo.substring(4);
-    // Verifica se é um número de celular de 8 dígitos (sem o 9) e adiciona o 9.
-    // Exclui prefixos que geralmente não teriam o 9 (ex: 3003-xxxx, 4004-xxxx)
     if (numeroSemDDIeDDD.length === 8 && !['1','2','3','4','5'].includes(numeroSemDDIeDDD.charAt(0))) {
         numeroConvertido = '55' + ddd + '9' + numeroSemDDIeDDD;
-        console.log('🎯 [CONVERT] ✅ Adicionado 9 para celular brasileiro (heurística):', numeroConvertido);
     }
   }
-
-  const formatosFinais = [
-    '+' + numeroConvertido,
-    numeroConvertido
-  ];
-
-  console.log('🎯 [CONVERT] Formatos finais a serem tentados (genérico):', formatosFinais);
-  return formatosFinais;
+  return ['+' + numeroConvertido, numeroConvertido];
 }
 
-// 🧪 TESTE SEQUENCIAL DOS FORMATOS
-async function testarFormatosSequencial(numero: string, texto: string): Promise<string | null> {
-  console.log('🧪 [SEQUENTIAL TEST] Iniciando teste sequencial para:', numero);
-
-  const formatos = converterParaFormatoFuncional(numero);
-
-  for (let i = 0; i < formatos.length; i++) {
-    const formato = formatos[i];
-    console.log(`🧪 [SEQUENTIAL TEST] Tentativa ${i + 1}/${formatos.length}: ${formato}`);
-
-    const sucesso = await tentarEnvioUnico(formato, texto, i + 1);
-    if (sucesso) {
-      console.log(`✅ [SEQUENTIAL TEST] SUCESSO no formato ${i + 1}: ${formato}`);
-      return formato;
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 300)); // Pequena pausa entre tentativas
-  }
-
-  console.log('❌ [SEQUENTIAL TEST] Todos os formatos falharam');
-  return null;
-}
-
-// 🚀 ENVIO ÚNICO COM LOG DETALHADO
-async function tentarEnvioUnico(numero: string, texto: string, tentativa: number): Promise<boolean> {
+// ATENÇÃO: Esta função foi modificada para aceitar um `payload` genérico
+async function tentarEnvioUnico(numero: string, payload: any, tentativa: number): Promise<boolean> {
   try {
-    console.log(`📤 [SEND ${tentativa}] Tentando enviar para: ${numero}`);
+    console.log(`�� [SEND ${tentativa}] Tentando enviar para: ${numero}`);
 
-    const payload = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: numero,
-      type: 'text',
-      text: {
-        preview_url: false,
-        body: texto.substring(0, 4096) // Mensagens do WhatsApp têm limite de 4096 caracteres
-      }
-    };
-
-    console.log(`📝 [SEND ${tentativa}] Payload:`, JSON.stringify(payload, null, 2));
-
-    // Uso das variáveis de ambiente padronizadas
     const WHATSAPP_API_URL = `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
     const response = await fetch(WHATSAPP_API_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`, // Uso de WHATSAPP_ACCESS_TOKEN
+        'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -114,14 +47,13 @@ async function tentarEnvioUnico(numero: string, texto: string, tentativa: number
 
     const responseText = await response.text();
 
-    console.log(`📨 [SEND ${tentativa}] Status: ${response.status}`);
+    console.log(`�� [SEND ${tentativa}] Status: ${response.status}`);
     console.log(`📨 [SEND ${tentativa}] Response: ${responseText}`);
 
     if (response.ok) {
       console.log(`🎉 [SEND ${tentativa}] ✅ SUCESSO para: ${numero}`);
       return true;
     } else {
-      // Registrar erros específicos para depuração
       try {
         const errorData = JSON.parse(responseText);
         console.error(`💥 [SEND ${tentativa}] ❌ FALHA para: ${numero} - Status: ${response.status}, Erro:`, errorData);
@@ -137,31 +69,92 @@ async function tentarEnvioUnico(numero: string, texto: string, tentativa: number
   }
 }
 
-// Funções enviarComFormatosCorretos é o wrapper para testar e enviar.
-// Já está definida acima junto com suas dependências.
+// Esta função foi mantida apenas para enviar TEXTO simples
 async function enviarComFormatosCorretos(numeroOriginal: string, texto: string): Promise<boolean> {
-  try {
-    console.log('🎯 [SEND FIXED] Usando formatos comprovadamente funcionais para:', numeroOriginal);
+  console.log('🎯 [SEND TEXT] Tentando enviar texto para:', numeroOriginal);
+  const formatos = converterParaFormatoFuncional(numeroOriginal);
 
-    const formatoFuncional = await testarFormatosSequencial(numeroOriginal, texto);
+  const textPayload = { // Cria um payload de texto padrão
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '', // Será preenchido por tentarEnvioUnico
+      type: 'text',
+      text: {
+        preview_url: false,
+        body: texto.substring(0, 4096)
+      }
+  };
 
-    if (formatoFuncional) {
-      console.log(`✅ [SEND FIXED] Mensagem enviada com sucesso usando formato: ${formatoFuncional}`);
+  for (let i = 0; i < formatos.length; i++) {
+    const formato = formatos[i];
+    textPayload.to = formato; // Atribui o formato atual ao payload
+    const sucesso = await tentarEnvioUnico(formato, textPayload, i + 1);
+    if (sucesso) {
+      console.log(`✅ [SEND TEXT] Mensagem de texto enviada com sucesso usando formato: ${formato}`);
       return true;
-    } else {
-      console.log(`❌ [SEND FIXED] Não foi possível enviar para nenhum formato de: ${numeroOriginal}`);
-      return false;
     }
-
-  } catch (error) {
-    console.error('❌ [SEND FIXED] Erro crítico no envio:', error);
-    return false;
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
+
+  console.log(`❌ [SEND TEXT] Não foi possível enviar texto para nenhum formato de: ${numeroOriginal}`);
+  return false;
 }
 
-// =========================================================================
-// FUNÇÕES AUXILIARES PARA PROCESSAMENTO DE MENSAGENS (minha lógica)
-// =========================================================================
+// NOVAS FUNÇÕES AUXILIARES PARA MENSAGENS INTERATIVAS DO WHATSAPP
+async function sendListMessage(to: string, header: string, body: string, buttonText: string, sectionTitle: string, rows: { id: string; title: string; description?: string }[]): Promise<boolean> {
+    const payload = {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: to,
+        type: 'interactive',
+        interactive: {
+            type: 'list',
+            header: { type: 'text', text: header.substring(0, 60) }, // Header max 60 chars
+            body: { text: body.substring(0, 1024) }, // Body max 1024 chars
+            action: {
+                button: buttonText.substring(0, 20), // Button max 20 chars
+                sections: [
+                    {
+                        title: sectionTitle.substring(0, 24), // Section title max 24 chars
+                        rows: rows.map(row => ({
+                            id: row.id.substring(0, 200), // ID max 200 chars
+                            title: row.title.substring(0, 24), // Title max 24 chars
+                            description: row.description ? row.description.substring(0, 72) : undefined // Description max 72 chars
+                        }))
+                    }
+                ]
+            }
+        }
+    };
+    return await tentarEnvioUnico(to, payload, 1);
+}
+
+async function sendReplyButtons(to: string, body: string, buttons: { id: string; title: string }[]): Promise<boolean> {
+    const payload = {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: to,
+        type: 'interactive',
+        interactive: {
+            type: 'button',
+            body: { text: body.substring(0, 1024) }, // Body max 1024 chars
+            action: {
+                buttons: buttons.map(btn => ({
+                    type: 'reply',
+                    reply: {
+                        id: btn.id.substring(0, 256), // ID max 256 chars
+                        title: btn.title.substring(0, 20) // Title max 20 chars
+                    }
+                }))
+            }
+        }
+    };
+    return await tentarEnvioUnico(to, payload, 1);
+}
+
+
+// ... (Funções auxiliares para processamento de mensagens - parseUserMessageForDrugInfo) ...
+// (Este bloco deve ser o mesmo que você já tem no seu arquivo)
 
 /**
  * Tenta extrair o nome do medicamento e o tipo de informação desejada da mensagem do usuário.
@@ -172,56 +165,60 @@ async function enviarComFormatosCorretos(numeroOriginal: string, texto: string):
  *          ambos opcionais, indicando se a extração foi bem-sucedida.
  */
 function parseUserMessageForDrugInfo(message: string): { drugName?: string; infoType?: string } {
-  const lowerMessage = message.toLowerCase();
-  let drugName: string | undefined;
-  let infoType: string | undefined;
+    const lowerMessage = message.toLowerCase();
+    let drugName: string | undefined;
+    let infoType: string | undefined;
 
-  // CORREÇÃO APLICADA AQUI: REMOVIDAS AS BARRAS INVERTIDAS EXTRAS
-  const infoTypeKeywords: { [key: string]: string[] } = {
-    "classe terapeutica": ["classe terapeutica", "classe farmacologica", "categoria", "grupo de medicamentos", "tipo de remedio"],
-    "posologia": ["posologia", "dose", "como usar", "modo de usar", "dosagem", "quantas vezes", "como tomar"],
-    "indicacoes": ["indicacoes", "para que serve", "usos", "quando usar", "utilizacao", "beneficios"],
-    "efeitos colaterais": ["efeitos colaterais", "reacoes adversas", "colaterais", "o que pode causar", "problemas", "efeitos indesejados"],
-    "contraindicacoes": ["contraindicacoes", "contra indicado", "nao usar quando", "quem nao pode usar", "restricoes", "quando nao usar", "proibido"],
-    "mecanismo de acao": ["mecanismo de acao", "como funciona", "acao do remedio", "age no organismo", "mecanismo"],
-    "interacoes medicamentosas": ["interacoes medicamentosas", "pode misturar com", "outros remedios", "combinar com", "interage com", "interagir"],
-    "tudo": ["tudo", "informacoes completas", "tudo sobre", "informacoes gerais", "ficha completa", "informacao completa"],
-  };
+    const infoTypeKeywords: { [key: string]: string[] } = {
+        "classe terapeutica": ["classe terapeutica", "classe farmacologica", "categoria", "grupo de medicamentos", "tipo de remedio"],
+        "posologia": ["posologia", "dose", "como usar", "modo de usar", "dosagem", "quantas vezes", "como tomar"],
+        "indicacoes": ["indicacoes", "para que serve", "usos", "quando usar", "utilizacao", "beneficios"],
+        "efeitos colaterais": ["efeitos colaterais", "reacoes adversas", "colaterais", "o que pode causar", "problemas", "efeitos indesejados"],
+        "contraindicacoes": ["contraindicacoes", "contra indicado", "nao usar quando", "quem nao pode usar", "restricoes", "quando nao usar", "proibido"],
+        "mecanismo de acao": ["mecanismo de acao", "como funciona", "acao do remedio", "age no organismo", "mecanismo"],
+        "interacoes medicamentosas": ["interacoes medicamentosas", "pode misturar com", "outros remedios", "combinar com", "interage com", "interagir"],
+        "tudo": ["tudo", "informacoes completas", "tudo sobre", "informacoes gerais", "ficha completa", "informacao completa"],
+    };
 
-  for (const typeKey in infoTypeKeywords) {
-    if (infoTypeKeywords[typeKey].some(keyword => lowerMessage.includes(keyword))) {
-      infoType = typeKey;
-      break;
+    for (const typeKey in infoTypeKeywords) {
+        if (infoTypeKeywords[typeKey].some(keyword => lowerMessage.includes(keyword))) {
+            infoType = typeKey;
+            break;
+        }
     }
-  }
 
-  const allDrugNames = medicamentosData.map(m => m["Nome do Medicamento"].toLowerCase());
-  let bestMatchDrug: string | undefined;
-  let bestMatchLength = 0;
+    const allDrugNames = medicamentosData.map(m => m["Nome do Medicamento"].toLowerCase());
+    let bestMatchDrug: string | undefined;
+    let bestMatchLength = 0;
 
-  for (const drug of allDrugNames) {
-    if (lowerMessage.includes(drug) && drug.length > bestMatchLength) {
-      bestMatchDrug = drug;
-      bestMatchLength = drug.length;
+    for (const drug of allDrugNames) {
+        if (lowerMessage.includes(drug) && drug.length > bestMatchLength) {
+            bestMatchDrug = drug;
+            bestMatchLength = drug.length;
+        }
     }
-  }
-  drugName = bestMatchDrug;
+    drugName = bestMatchDrug;
 
-  return { drugName, infoType };
+    return { drugName, infoType };
 }
+
 
 // =========================================================================
 // ROTA NEXT.JS API - WEBHOOK PARA WHATSAPP BUSINESS API (do seu código anterior, com ajustes)
 // =========================================================================
 
+// ... (Debug inicial, GET handler, POST handler - estes blocos devem ser os mesmos que você já tem) ...
+
 // Debug inicial
 console.log('🎯 [COMPLETE SYSTEM] Sistema completo com IA ativada!');
-console.log('✅ [FORMATS] Formatos que funcionam:', FORMATOS_COMPROVADOS);
+// console.log('✅ [FORMATS] Formatos que funcionam:', FORMATOS_COMPROVADOS); // Remover se FORMATOS_COMPROVADOS não for mais usado
 console.log('📊 [CONFIG] Status completo:');
 console.log('   WEBHOOK_TOKEN:', process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN ? '✅' : '❌');
 console.log('   PHONE_ID:', process.env.WHATSAPP_PHONE_NUMBER_ID || '❌');
 console.log('   ACCESS_TOKEN:', process.env.WHATSAPP_ACCESS_TOKEN ? '✅' : '❌');
 console.log('   GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ IA ATIVADA!' : '❌ IA DESATIVADA');
+console.log('   FLASK_API_URL:', process.env.FLASK_API_URL ? '✅ URL FLASK CONFIGURADA!' : '❌ URL FLASK AUSENTE!');
+
 
 // GET handler - Verificação do Webhook
 export async function GET(request: NextRequest) {
@@ -230,7 +227,7 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
-  console.log('🔐 [WEBHOOK VERIFICATION] Verificação do webhook:', {
+  console.log('�� [WEBHOOK VERIFICATION] Verificação do webhook:', {
     mode,
     tokenMatch: token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
     challenge: challenge?.substring(0, 20) + '...'
@@ -256,36 +253,30 @@ export async function POST(request: NextRequest) {
   try {
     console.log('📨 [WEBHOOK] Nova mensagem recebida');
 
-    // Validação de configuração crítica
-    if (!process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN) {
-      console.error('❌ [WEBHOOK] Configuração crítica faltando: WHATSAPP_PHONE_NUMBER_ID ou WHATSAPP_ACCESS_TOKEN');
-      // Envia uma resposta 500 para o WhatsApp, indicando que o webhook falhou internamente.
+    if (!process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN || !process.env.FLASK_API_URL) {
+      console.error('❌ [WEBHOOK] Configuração crítica faltando: WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN ou FLASK_API_URL');
       return NextResponse.json({ error: 'Configuration error' }, { status: 500 });
     }
 
     const body = await request.json();
     console.log('📦 [WEBHOOK] Payload recebido:', JSON.stringify(body, null, 2));
 
-    // Extrair dados do webhook
     const value = body.entry?.[0]?.changes?.[0]?.value;
 
-    // Processar status de entrega (mensagens que você enviou, que foram entregues, lidas, etc.)
     if (value?.statuses) {
       const status = value.statuses[0]?.status;
       console.log('📊 [STATUS] Status de entrega recebido:', status);
       return NextResponse.json({ status: 'ok' }, { status: 200 });
     }
 
-    // Processar mensagens recebidas
     const messages = value?.messages;
     if (!messages?.length) {
       console.log('ℹ️ [WEBHOOK] Nenhuma mensagem para processar ou tipo inválido');
       return NextResponse.json({ status: 'ok' }, { status: 200 });
     }
 
-    console.log(`🔄 [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
+    console.log(`�� [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
 
-    // Processar cada mensagem
     for (const message of messages) {
       await processarComIACompleta(message);
     }
@@ -294,12 +285,28 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('❌ [WEBHOOK] Erro crítico no sistema:', error);
-    // Em caso de erro crítico no webhook, retorna 500
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// 🤖 PROCESSAMENTO COMPLETO COM IA E FALLBACK
+
+// =========================================================================
+// NOVO: Gerenciamento de estado da conversa (em memória - apenas para demonstração)
+// Para produção em Vercel, use um banco de dados externo (Redis, Postgres, etc.) para persistência.
+// =========================================================================
+const conversationState: Record<string, {
+    state: string; // 'IDLE', 'AWAITING_PRODUCT_SELECTION', 'AWAITING_ORDER_CONFIRMATION_YES_NO', 'AWAITING_ORDER_QUANTITY', 'AWAITING_ORDER_CLIENT_NAME_OR_CONFIRMATION', 'AWAITING_ORDER_FINAL_CONFIRMATION'
+    searchResults?: any[];
+    selectedProduct?: any;
+    orderQuantity?: number;
+    clientName?: string;
+    clientPhone?: string;
+    // Adicione outros dados de contexto conforme necessário
+}> = {};
+// =========================================================================
+
+
+// �� PROCESSAMENTO COMPLETO COM IA E FALLBACK
 async function processarComIACompleta(message: any): Promise<void> {
   const { from, text, type, id } = message;
 
@@ -311,13 +318,28 @@ async function processarComIACompleta(message: any): Promise<void> {
   });
 
   try {
-    if (type !== 'text' || !text?.body) {
-      console.log('⚠️ [AI PROCESS] Mensagem ignorada (não é texto)');
+    if (type !== 'text' && type !== 'interactive') { // Agora aceita tipo 'interactive'
+      console.log('⚠️ [AI PROCESS] Mensagem ignorada (não é texto nem interativa)');
       return;
     }
 
-    const userMessage = text.body.trim();
+    // --- NOVO: Extrair o conteúdo da mensagem, seja texto ou resposta interativa ---
+    let userMessageRaw: string;
+    if (type === 'interactive') {
+        if (message.interactive.type === 'list_reply') {
+            userMessageRaw = message.interactive.list_reply.id; // O ID do item da lista selecionado
+        } else if (message.interactive.type === 'button_reply') {
+            userMessageRaw = message.interactive.button_reply.id; // O ID do botão selecionado
+        } else {
+            userMessageRaw = text?.body?.trim() || ''; // Fallback para outros tipos interativos
+        }
+    } else { // type === 'text'
+        userMessageRaw = text?.body?.trim() || '';
+    }
+
+    const userMessage = userMessageRaw; // Agora userMessage contém o conteúdo ou o ID da resposta interativa
     const lowerMessage = userMessage.toLowerCase();
+    // --- FIM NOVO ---
 
     console.log(`   [AI PROCESS] De ${from}: "${userMessage}"`);
 
@@ -326,16 +348,18 @@ async function processarComIACompleta(message: any): Promise<void> {
     // Comandos administrativos (mantidos do seu código)
     if (lowerMessage === '/test' || lowerMessage === 'test') {
       const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA ATIVA' : '⚠️ IA INATIVA';
-      const statusMsg = `✅ *SISTEMA COMPLETO FUNCIONANDO!*\\n\\n🔗 WhatsApp: ✅ Conectado\\n${statusIA}\\n📊 Formatos: ✅ Corretos\\n🚀 Status: 100% Operacional\\n\\nTudo funcionando perfeitamente!`;
+      const statusMsg = `✅ *SISTEMA COMPLETO FUNCIONANDO!*\n\n🔗 WhatsApp: ✅ Conectado\n${statusIA}\n�� Flask API: ${process.env.FLASK_API_URL ? '✅ Conectado' : '❌ Não configurado'}\n🚀 Status: 100% Operacional\n\nTudo funcionando perfeitamente!`;
       await enviarComFormatosCorretos(from, statusMsg);
+      conversationState[from] = { state: 'IDLE' }; // Reset state after admin command
       return;
     }
 
     if (lowerMessage === '/debug' || lowerMessage === 'debug') {
       const formatos = converterParaFormatoFuncional(from);
       const statusIA = process.env.GEMINI_API_KEY ? '✅ ATIVA' : '❌ INATIVA';
-      const debugInfo = `🔧 *DEBUG SISTEMA COMPLETO*\\n\\n📱 Seu número: ${from}\\n🎯 Convertido para:\\n• ${formatos[0]}\\n• ${formatos[1]}\\n\\n🤖 IA Status: ${statusIA}\\n📊 Formatos: ${FORMATOS_COMPROVADOS.length} testados\\n✅ Sistema: 100% Operacional\\n\\n🚀 *TUDO FUNCIONANDO!*`;
+      const debugInfo = `🔧 *DEBUG SISTEMA COMPLETO*\n\n📱 Seu número: ${from}\n🎯 Convertido para:\n• ${formatos[0]}\n• ${formatos[1]}\n\n🤖 IA Status: ${statusIA}\n📊 Flask API: ${process.env.FLASK_API_URL ? process.env.FLASK_API_URL : 'Não configurado'}\n✅ Sistema: 100% Operacional\n\n🚀 *TUDO FUNCIONANDO!*`;
       await enviarComFormatosCorretos(from, debugInfo);
+      conversationState[from] = { state: 'IDLE' }; // Reset state after admin command
       return;
     }
 
@@ -343,37 +367,290 @@ async function processarComIACompleta(message: any): Promise<void> {
       try {
         if (process.env.GEMINI_API_KEY) {
           geminiService.clearHistory(from); // Usa a instância do serviço para limpar histórico
-          await enviarComFormatosCorretos(from, '🗑️ *HISTÓRICO LIMPO!*\\n\\nMemória da IA resetada com sucesso.\\nVamos começar uma nova conversa! 🚀');
+          await enviarComFormatosCorretos(from, '��️ *HISTÓRICO LIMPO!*\n\nMemória da IA resetada com sucesso.\nVamos começar uma nova conversa! 🚀');
         } else {
-          await enviarComFormatosCorretos(from, '🗑️ *COMANDO RECEBIDO!*\\n\\nIA será ativada em breve.\\nSistema WhatsApp funcionando normalmente.');
+          await enviarComFormatosCorretos(from, '🗑️ *COMANDO RECEBIDO!*\n\nIA será ativada em breve.\nSistema WhatsApp funcionando normalmente.');
         }
+        conversationState[from] = { state: 'IDLE' }; // Reset state after admin command
       } catch (error) {
         console.error('❌ [LIMPAR] Erro:', error);
-        await enviarComFormatosCorretos(from, '❌ Erro ao limpar histórico.\\nSistema continua funcionando normalmente.');
+        await enviarComFormatosCorretos(from, '❌ Erro ao limpar histórico.\nSistema continua funcionando normalmente.');
       }
       return;
     }
 
     if (lowerMessage === '/ajuda' || lowerMessage === 'ajuda' || lowerMessage === '/help') {
-      const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA totalmente ativa - Posso conversar sobre qualquer assunto!' : '⚙️ IA sendo configurada';
-      const helpMsg = `🤖 *ASSISTENTE INTELIGENTE ATIVO*\\n\\n` +
-        `✅ */test* - Status do sistema\\n` +
-        `🔧 */debug* - Informações técnicas\\n` +
-        `🗑️ */limpar* - Resetar conversa\\n` +
-        `❓ */ajuda* - Esta mensagem\\n\\n` +
-        `${statusIA}\\n\\n` +
-        `💬 *Como usar:*\\n` +
-        `Envie qualquer mensagem para conversar comigo!\\n` +
-        `Sou um assistente inteligente pronto para ajudar.\\n\\n` +
-        `🚀 *STATUS: TOTALMENTE OPERACIONAL*`;
+      const statusIA = process.env.GEMINI_API_KEY ? '�� IA totalmente ativa - Posso conversar sobre qualquer assunto!' : '⚙️ IA sendo configurada';
+      const helpMsg = `🤖 *ASSISTENTE INTELIGENTE ATIVO*\n\n` +
+        `✅ */test* - Status do sistema\n` +
+        `🔧 */debug* - Informações técnicas\n` +
+        `🗑️ */limpar* - Resetar conversa\n` +
+        `❓ */ajuda* - Esta mensagem\n\n` +
+        `${statusIA}\n\n` +
+        `💬 *Como usar:*\n` +
+        `Envie qualquer mensagem para conversar comigo!\n` +
+        `Ou pergunte sobre um produto (ex: "Tem Losartana?").\n\n` +
+        `�� *STATUS: TOTALMENTE OPERACIONAL*`;
       await enviarComFormatosCorretos(from, helpMsg);
+      conversationState[from] = { state: 'IDLE' }; // Reset state after admin command
       return;
     }
 
-    // Processamento com Inteligência Artificial
+    // =========================================================================
+    // LÓGICA DE BUSCA DE PRODUTOS E ENCOMENDA
+    // =========================================================================
+
+    // Recupera o estado atual da conversa para este usuário
+    let currentState = conversationState[from] || { state: 'IDLE' };
+    console.log(`[AI PROCESS] Estado da conversa para ${from}: ${currentState.state}`);
+
+    // --- State 1: AWAITING_PRODUCT_SELECTION (Usuário escolheu um item da lista) ---
+    if (currentState.state === 'AWAITING_PRODUCT_SELECTION') {
+        const selectedIndex = parseInt(userMessage); // O ID enviado pela lista é o índice (1-baseado)
+        if (!isNaN(selectedIndex) && selectedIndex > 0 && currentState.searchResults && currentState.searchResults[selectedIndex - 1]) {
+            const chosenProduct = currentState.searchResults[selectedIndex - 1];
+            currentState.selectedProduct = chosenProduct;
+
+            let responseText = `Você escolheu: *${chosenProduct.nome_produto}*\n` +
+                               `Laboratório: ${chosenProduct.nom_laboratorio}\n` +
+                               `Preço Final: ${chosenProduct.preco_final_venda}\n` +
+                               `Estoque: ${chosenProduct.qtd_estoque} unidades.`;
+
+            await enviarComFormatosCorretos(from, responseText); // Envia o texto primeiro
+
+            if (chosenProduct.qtd_estoque === 0) {
+                // Se estiver fora de estoque, pergunta sobre encomenda
+                await sendReplyButtons(from, "No momento, este item está *fora de estoque*. Gostaria de encomendar?", [
+                    { id: 'encomendar_sim', title: 'Sim' },
+                    { id: 'encomendar_nao', title: 'Não' }
+                ]);
+                currentState.state = 'AWAITING_ORDER_CONFIRMATION_YES_NO';
+            } else {
+                // Se tiver estoque, apenas pergunta se precisa de algo mais
+                await enviarComandosCorretos(from, "Posso ajudar com algo mais?");
+                currentState.state = 'IDLE'; // Volta ao estado inicial
+            }
+        } else {
+            await enviarComandosCorretos(from, "Opção inválida. Por favor, selecione um número válido da lista de produtos.");
+            // Mantém o estado para que o usuário possa tentar novamente ou oferece para reiniciar
+            // Para simplicidade, vamos apenas enviar o erro e manter o estado.
+        }
+        conversationState[from] = currentState; // Atualiza o estado
+        return; // Sai da função, pois a mensagem foi tratada
+    }
+
+    // --- State 2: AWAITING_ORDER_CONFIRMATION_YES_NO (Usuário respondeu "Sim" ou "Não" para encomendar) ---
+    if (currentState.state === 'AWAITING_ORDER_CONFIRMATION_YES_NO') {
+        if (lowerMessage === 'encomendar_sim') {
+            await enviarComandosCorretos(from, `Excelente! Quantas unidades de *${currentState.selectedProduct.nome_produto}* você gostaria de encomendar? Por favor, digite apenas o número.`);
+            currentState.state = 'AWAITING_ORDER_QUANTITY';
+        } else if (lowerMessage === 'encomendar_nao') {
+            await enviarComandosCorretos(from, "Tudo bem! A encomenda foi cancelada. Posso te ajudar com algo mais?");
+            currentState.state = 'IDLE';
+        } else {
+            await enviarComandosCorretos(from, "Resposta inválida. Por favor, clique 'Sim' ou 'Não'.");
+        }
+        conversationState[from] = currentState;
+        return;
+    }
+
+    // --- State 3: AWAITING_ORDER_QUANTITY (Usuário informou a quantidade) ---
+    if (currentState.state === 'AWAITING_ORDER_QUANTITY') {
+        const quantity = parseInt(userMessage);
+        if (!isNaN(quantity) && quantity > 0) {
+            currentState.orderQuantity = quantity;
+            await enviarComandosCorretos(from, `Certo, *${quantity}* unidades de *${currentState.selectedProduct.nome_produto}*. Para quem devemos registrar a encomenda? (Nome completo e telefone, se for diferente do seu WhatsApp)`);
+            currentState.state = 'AWAITING_ORDER_CLIENT_NAME_OR_CONFIRMATION';
+        } else {
+            await enviarComandosCorretos(from, "Quantidade inválida. Por favor, digite um número válido para a quantidade.");
+        }
+        conversationState[from] = currentState;
+        return;
+    }
+
+    // --- State 4: AWAITING_ORDER_CLIENT_NAME_OR_CONFIRMATION (Usuário informou os dados do cliente) ---
+    if (currentState.state === 'AWAITING_ORDER_CLIENT_NAME_OR_CONFIRMATION') {
+        const clientInfo = userMessage;
+        // Tentativa de extrair nome e telefone. O número do WhatsApp do próprio usuário será o fallback.
+        const clientNameMatch = clientInfo.match(/^[^\(]+/); // Pega tudo antes do primeiro '('
+        const clientName = clientNameMatch ? clientNameMatch[0].trim() : "Cliente WhatsApp";
+        const clientPhoneMatch = clientInfo.match(/(\(?\d{2}\)?\s?\d{4,5}-?\d{4})/); // Busca um padrão de telefone
+        const clientPhone = clientPhoneMatch ? clientPhoneMatch[1].replace(/\D/g, '') : from; // Limpa o telefone, senão usa o WhatsApp do remetente
+
+        const product = currentState.selectedProduct;
+        const quantity = currentState.orderQuantity;
+
+        let confirmationMessage = `Por favor, confirme os detalhes da encomenda:\n\n` +
+                                  `*Produto:* ${product.nome_produto}\n` +
+                                  `*Quantidade:* ${quantity}\n` +
+                                  `*Preço Unitário:* ${product.preco_final_venda}\n` +
+                                  `*Cliente:* ${clientName}\n` +
+                                  `*Contato:* ${clientPhone}\n\n` +
+                                  `Confirma o pedido?`;
+
+        await enviarComandosCorretos(from, confirmationMessage); // Envia texto primeiro
+        await sendReplyButtons(from, "Confirma o pedido?", [
+            { id: 'confirmar_pedido_sim', title: 'Sim, Confirmar' },
+            { id: 'confirmar_pedido_nao', title: 'Não, Cancelar' }
+        ]);
+        currentState.state = 'AWAITING_ORDER_FINAL_CONFIRMATION';
+        currentState.clientName = clientName;
+        currentState.clientPhone = clientPhone;
+
+        conversationState[from] = currentState;
+        return;
+    }
+
+    // --- State 5: AWAITING_ORDER_FINAL_CONFIRMATION (Usuário confirmou ou cancelou o pedido final) ---
+    if (currentState.state === 'AWAITING_ORDER_FINAL_CONFIRMATION') {
+        if (lowerMessage === 'confirmar_pedido_sim') {
+            const product = currentState.selectedProduct;
+            const quantity = currentState.orderQuantity;
+            const clientName = currentState.clientName;
+            const clientPhone = currentState.clientPhone;
+
+            try {
+                const formData = new FormData();
+                formData.append('cod_reduzido', product.cod_reduzido.toString());
+                formData.append('nome_produto', product.nome_produto);
+                formData.append('cod_barra', ''); // Cod barra não está na resposta do search_live, poderia ser buscado se necessário
+                formData.append('laboratorio', product.nom_laboratorio || 'Não cadastrado');
+                formData.append('preco_final', product.vlr_liquido_raw_float.toString());
+                formData.append('cod_cliente_selecionado', ''); // Assumindo que não temos o código do cliente neste fluxo
+                formData.append('cliente_nome', clientName || 'Cliente WhatsApp');
+                formData.append('funcionario', 'Bot-WhatsApp');
+                formData.append('unidades', quantity.toString());
+                formData.append('telefone', clientPhone || from);
+                formData.append('observacao', `Encomenda via WhatsApp. Cliente: ${clientName || 'Cliente WhatsApp'}. Contato: ${clientPhone || from}`);
+
+                const response = await fetch(`${process.env.FLASK_API_URL}/processar_pedido`, {
+                    method: 'POST',
+                    body: formData,
+                    // OBS: Se o seu Flask exigir headers específicos (como Content-Type para FormData), você pode precisar adicioná-los.
+                    // No caso de FormData, fetch geralmente lida com isso automaticamente.
+                });
+
+                if (response.ok) {
+                    await enviarComandosCorretos(from, `✅ Pedido de encomenda para *${product.nome_produto}* (${quantity} unidades) foi registrado com sucesso para *${clientName}*! Entraremos em contato em breve.`);
+                } else {
+                    const errorData = await response.text();
+                    console.error('Erro ao processar pedido Flask:', errorData);
+                    await enviarComandosCorretos(from, `❌ Ocorreu um erro ao registrar seu pedido. Por favor, tente novamente ou fale com um atendente. Detalhes: ${errorData}`);
+                }
+            } catch (error) {
+                console.error('Erro de rede ao chamar Flask /processar_pedido:', error);
+                await enviarComandosCorretos(from, '❌ Ocorreu um erro de comunicação ao tentar registrar seu pedido. Por favor, tente novamente mais tarde.');
+            }
+        } else if (lowerMessage === 'confirmar_pedido_nao') {
+            await enviarComandosCorretos(from, "Pedido cancelado. Posso te ajudar com algo mais?");
+        } else {
+            await enviarComandosCorretos(from, "Opção inválida. Por favor, clique 'Sim, Confirmar' ou 'Não, Cancelar'.");
+        }
+        // Reseta o estado após a tentativa de pedido ou cancelamento
+        currentState.state = 'IDLE';
+        currentState.searchResults = undefined;
+        currentState.selectedProduct = undefined;
+        currentState.orderQuantity = undefined;
+        currentState.clientName = undefined;
+        currentState.clientPhone = undefined;
+        conversationState[from] = currentState;
+        return;
+    }
+
+    // --- Default IDLE state ou Busca de Produto Geral ---
+    // Este bloco será executado se nenhuma ação dependente de estado foi tomada
+    if (currentState.state === 'IDLE') {
+        const productSearchKeywords = ['tem', 'preço', 'disponível', 'estoque', 'qual o valor', 'gostaria de saber sobre', 'buscar'];
+        const isProductSearchIntent = productSearchKeywords.some(keyword => lowerMessage.includes(keyword));
+
+        let potentialProductName = lowerMessage;
+        const commonPrefixes = ['vc tem', 'você tem', 'tem', 'qual o', 'gostaria de saber o', 'quero saber do', 'buscar por'];
+        for (const prefix of commonPrefixes) {
+            if (potentialProductName.startsWith(prefix)) {
+                potentialProductName = potentialProductName.substring(prefix.length).trim();
+                break;
+            }
+        }
+        // Remove termos comuns de busca que não fazem parte do nome do produto
+        potentialProductName = potentialProductName.replace(/em estoque|o preço|disponível|qual o valor|tem|você tem|preço de/g, '').trim();
+
+        // Considera uma busca de produto se houver intenção explícita ou o texto parecer um nome de produto
+        if (isProductSearchIntent || potentialProductName.length > 2) {
+            console.log(`[AI PROCESS] Tentando busca de produto para: "${potentialProductName}"`);
+            try {
+                const searchResponse = await fetch(`${process.env.FLASK_API_URL}/search_live?search_term=${encodeURIComponent(potentialProductName)}`);
+                if (!searchResponse.ok) {
+                    throw new Error(`Erro HTTP! status: ${searchResponse.status}`);
+                }
+                const products = await searchResponse.json();
+
+                if (products.length === 0) {
+                    await enviarComandosCorretos(from, `Desculpe, não encontrei nenhum item relacionado a "*${potentialProductName}*". Por favor, tente um nome diferente ou mais específico.`);
+                    currentState.state = 'IDLE';
+                } else if (products.length === 1) {
+                    const product = products[0];
+                    currentState.selectedProduct = product; // Armazena o produto único para futura encomenda
+
+                    let responseText = `Encontrei: *${product.nome_produto}*\n` +
+                                       `Laboratório: ${product.nom_laboratorio}\n` +
+                                       `Preço Final: ${product.preco_final_venda}\n` +
+                                       `Estoque: ${product.qtd_estoque} unidades.`;
+
+                    await enviarComandosCorretos(from, responseText); // Envia o texto primeiro
+
+                    if (product.qtd_estoque === 0) {
+                        // Se estiver fora de estoque, pergunta sobre encomenda
+                        await sendReplyButtons(from, "No momento, este item está *fora de estoque*. Gostaria de encomendar?", [
+                            { id: 'encomendar_sim', title: 'Sim' },
+                            { id: 'encomendar_nao', title: 'Não' }
+                        ]);
+                        currentState.state = 'AWAITING_ORDER_CONFIRMATION_YES_NO';
+                    } else {
+                        await enviarComandosCorretos(from, "Posso ajudar com algo mais?");
+                        currentState.state = 'IDLE';
+                    }
+                } else { // Múltiplos produtos encontrados
+                    currentState.searchResults = products;
+                    const rows = products.slice(0, 10).map((p: any, index: number) => ({ // Limita a 10 opções para mensagem de lista do WhatsApp
+                        id: (index + 1).toString(), // IDs precisam ser string
+                        title: p.nome_produto,
+                        description: `Estoque: ${p.qtd_estoque}, Preço: ${p.preco_final_venda}`
+                    }));
+
+                    await sendListMessage(from,
+                        "Encontrei vários produtos",
+                        "Por favor, selecione o item desejado na lista abaixo para mais detalhes:",
+                        "Ver produtos",
+                        "Produtos Encontrados",
+                        rows
+                    );
+                    currentState.state = 'AWAITING_PRODUCT_SELECTION';
+                }
+                conversationState[from] = currentState;
+                return; // Sai, pois a busca de produto foi tratada
+            } catch (error) {
+                console.error('Erro ao buscar produtos no Flask:', error);
+                await enviarComandosCorretos(from, 'Ocorreu um erro ao consultar nosso estoque. Por favor, tente novamente mais tarde.');
+                currentState.state = 'IDLE';
+                conversationState[from] = currentState;
+                return;
+            }
+        }
+    }
+
+
+    // =========================================================================
+    // LÓGICA DE PROCESSAMENTO COM INTELIGÊNCIA ARTIFICIAL (EXISTENTE)
+    // Este bloco só será executado se a busca de produtos acima NÃO tiver sido acionada ou resolvida.
+    // =========================================================================
+
+    // ... (Seu código existente para processamento com Gemini e fallback médico) ...
+    // Certifique-se de que o 'return;' após cada bloco de estado ou busca de produto garanta que esta parte
+    // só seja alcançada se nenhuma das lógicas anteriores for aplicada.
+
     if (!process.env.GEMINI_API_KEY) {
       console.log('⚠️ [AI PROCESS] GEMINI_API_KEY não encontrada');
-      await enviarComFormatosCorretos(from, '🤖 *ASSISTENTE QUASE PRONTO!*\\n\\nSistema WhatsApp: ✅ Funcionando perfeitamente\\nIA: ⚙️ Sendo configurada\\n\\nEm breve estarei conversando inteligentemente!\\nUse */test* para verificar status.');
+      await enviarComandosCorretos(from, '🤖 *ASSISTENTE QUASE PRONTO!*\n\nSistema WhatsApp: ✅ Funcionando perfeitamente\nIA: ⚙️ Sendo configurada\n\nEm breve estarei conversando inteligentemente!\nUse */test* para verificar status.');
       return;
     }
 
@@ -381,81 +658,69 @@ async function processarComIACompleta(message: any): Promise<void> {
     try {
       console.log('🤖 [AI] Iniciando processamento com Gemini IA...');
       aiResponseText = await geminiService.generateResponse(userMessage, from); // Usa o serviço Gemini
-      console.log(`🤖 [AI] Resposta da IA gerada com sucesso (${aiResponseText.length} caracteres)`);
+      console.log(`�� [AI] Resposta da IA gerada com sucesso (${aiResponseText.length} caracteres)`);
     } catch (aiError: any) {
       console.error('❌ [AI] Erro na inteligência artificial:', aiError);
-      // Se o Gemini bloquear o conteúdo ou houver um erro, tenta ativar o fallback
       if (aiError.response && aiError.response.promptFeedback && aiError.response.promptFeedback.blockReason) {
         console.warn(`⚠️ Gemini API bloqueou o prompt: ${aiError.response.promptFeedback.blockReason}. Forçando fallback de medicamentos.`);
         aiResponseText = "Atenção (Política de Conteúdo da IA)"; // Força o texto para ativar o fallback local
       } else {
-        // Mensagem de erro genérica da IA, sem ativar o fallback de medicamentos
-        const errorMsg = `🤖 *ASSISTENTE TEMPORARIAMENTE INDISPONÍVEL*\\n\\n` +
-          `Estou com dificuldades momentâneas para processar sua mensagem.\\n\\n` +
-          `💡 *Sugestões:*\\n` +
-          `• Tente reformular sua pergunta\\n` +
-          `• Envie uma mensagem mais simples\\n` +
-          `• Use */test* para verificar o status\\n\\n` +
+        const errorMsg = `🤖 *ASSISTENTE TEMPORARIAMENTE INDISPONÍVEL*\n\n` +
+          `Estou com dificuldades momentâneas para processar sua mensagem.\n\n` +
+          `💡 *Sugestões:*\n` +
+          `• Tente reformular sua pergunta\n` +
+          `• Envie uma mensagem mais simples\n` +
+          `• Use */test* para verificar o status\n\n` +
           `🔄 Tentarei novamente em alguns instantes...`;
-        await enviarComFormatosCorretos(from, errorMsg);
-        return; // Retorna para não continuar com o fallback de medicamentos se o erro for genérico
+        await enviarComandosCorretos(from, errorMsg);
+        return;
       }
     }
 
-    // Padrão Regex para identificar o disclaimer de política de conteúdo (com escapes para WhatsApp)
-    // Este regex também foi levemente ajustado para simplificar os escapes, caso a string do Gemini mude no futuro.
-    // O importante é que ele capture a frase "Política de Conteúdo da IA" ou as outras frases de disclaimer.
     const medicalDisclaimerPattern = /atenção \(política de conteúdo da ia\)|não posso fornecer informações médicas|não sou um profissional de saúde|não estou qualificado para dar conselhos médicos|consulte um médico ou farmacêutico/i;
     const isMedicalDisclaimer = medicalDisclaimerPattern.test(aiResponseText.toLowerCase());
 
-    // Lógica principal: se a IA retornou um disclaimer médico ou foi bloqueada, tenta o fallback de medicamentos.
     if (isMedicalDisclaimer) {
       console.log("➡️ LLM acionou o disclaimer médico ou foi bloqueado. Tentando consultar a Lib/medicamentos_data.ts como fallback.");
-
       const parsedInfo = parseUserMessageForDrugInfo(userMessage);
 
-      // Verificamos se conseguimos extrair o medicamento e o tipo de info
       if (parsedInfo.drugName && parsedInfo.infoType) {
         console.log(`🔎 Informação extraída para fallback: Medicamento: '${parsedInfo.drugName}', Tipo: '${parsedInfo.infoType}'`);
         const libResult = getMedicamentoInfo(parsedInfo.drugName, parsedInfo.infoType);
 
-        // Ajuste CRÍTICO aqui: Agora verificamos se o `libResult` *NÃO* é uma mensagem de erro
         if (libResult.includes("Não encontrei informações sobre o medicamento") || libResult.includes("Não tenho a informação específica sobre")) {
-          // Se a Lib também não encontrou ou não tem a informação
           const finalResponse = `_Atenção (Política de Conteúdo da IA)_ - Para sua segurança, por favor, consulte diretamente um *farmacêutico* em nossa loja ou um *médico*. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas ${libResult.toLowerCase()}. Por favor, procure um profissional de saúde para obter orientação.`;
-          await enviarComFormatosCorretos(from, finalResponse);
+          await enviarComandosCorretos(from, finalResponse);
         } else {
-          // Se a Lib ENCONTROU a informação, retornamos a informação da Lib + disclaimer
-          const finalResponse = `_De acordo com nossa base de dados interna:_\\n\\n${libResult}\\n\\n*_Importante:_ Esta informação é para fins educacionais e informativos e não substitui o conselho, diagnóstico ou tratamento de um profissional de saúde qualificado. Sempre consulte um *médico* ou *farmacêutico* para orientações específicas sobre sua saúde e para a interpretação correta das informações.`;
-          await enviarComFormatosCorretos(from, finalResponse);
+          const finalResponse = `_De acordo com nossa base de dados interna:_\n\n${libResult}\n\n*_Importante:_ Esta informação é para fins educacionais e informativos e não substitui o conselho, diagnóstico ou tratamento de um profissional de saúde qualificado. Sempre consulte um *médico* ou *farmacêutico* para orientações específicas sobre sua saúde e para a interpretação correta das informações.`;
+          await enviarComandosCorretos(from, finalResponse);
         }
       } else {
-        // Caso não tenha conseguido extrair nome do medicamento ou tipo de informação para o fallback
         console.warn("⚠️ Não foi possível extrair nome do medicamento ou tipo de informação da mensagem do usuário para o fallback.");
         const finalResponse = `_Atenção (Política de Conteúdo da IA)_ - Para sua segurança, por favor, consulte diretamente um *farmacêutico* em nossa loja ou um *médico*. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas não consegui entender qual medicamento ou informação específica você procura. Por favor, tente perguntar de forma mais direta (ex: _'Qual a posologia da losartana?'_ ou _'Indicações do paracetamol?'_).`;
-        await enviarComFormatosCorretos(from, finalResponse);
+        await enviarComandosCorretos(from, finalResponse);
       }
     } else {
-      // Se o LLM deu uma resposta considerada "normal" (sem disclaimer médico), envia diretamente.
-      await enviarComFormatosCorretos(from, aiResponseText);
+      await enviarComandosCorretos(from, aiResponseText);
     }
-
   } catch (error) {
     console.error('❌ [AI PROCESS] Erro crítico no processamento:', error);
-
-    // Mensagem de recuperação para o usuário em caso de erro crítico
-    const recoveryMsg = `⚠️ *ERRO TEMPORÁRIO DETECTADO*\\n\\n` +
-      `O sistema detectou um problema momentâneo e está se recuperando automaticamente.\\n\\n` +
-      `🔄 *Ações tomadas:*\\n` +
-      `• Reinicialização automática em andamento\\n` +
-      `• Sistema WhatsApp mantido ativo\\n` +
-      `• Logs de erro registrados\\n\\n` +
+    const recoveryMsg = `⚠️ *ERRO TEMPORÁRIO DETECTADO*\n\n` +
+      `O sistema detectou um problema momentâneo e está se recuperando automaticamente.\n\n` +
+      `🔄 *Ações tomadas:*\n` +
+      `• Reinicialização automática em andamento\n` +
+      `• Sistema WhatsApp mantido ativo\n` +
+      `• Logs de erro registrados\n\n` +
       `Use */test* para verificar o status de recuperação.`;
-
     try {
-      await enviarComFormatosCorretos(from, recoveryMsg);
+      await enviarComandosCorretos(from, recoveryMsg);
     } catch (recoveryError) {
       console.error('❌ [RECOVERY] Falha crítica na recuperação:', recoveryError);
     }
+  } finally {
+      // Garante que o estado seja resetado em caso de erro crítico não tratado,
+      // ou que seja salvo após o processamento, se não houve 'return' antecipado.
+      // Para fins de demonstração com in-memory state, precisamos disso no finally.
+      conversationState[from] = currentState;
   }
 }
