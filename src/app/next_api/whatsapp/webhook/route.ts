@@ -1,24 +1,27 @@
 // src/app/next_api/whatsapp/webhook/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getGeminiService } from '../../../../lib/services/gemini-service'; // Caminho ajustado para o novo serviço
-import { getMedicamentoInfo, medicamentosData } from '../../../../../Lib/medicamentos_data'; // Mantido do seu projeto
+import { getGeminiService } from '../../../../src/lib/services/gemini-service'; // Caminho CORRIGIDO para o gemini-service
+import { getMedicamentoInfo, medicamentosData } from '../../../../../Lib/medicamentos_data'; // Caminho CORRIGIDO para o medicamentos_data
 
 // =========================================================================
-// VARIÁVEIS E FUNÇÕES AUXILIARES PARA ENVIO WHATSAPP (do seu código anterior)
+// VARIÁVEIS E FUNÇÕES AUXILIARES PARA ENVIO WHATSAPP
 // =========================================================================
-
-// ... (Suas funções existentes: converterParaFormatoFuncional, etc.) ...
-// Mantive o corpo das funções converterParaFormatoFuncional e tentarEnvioUnico simplificado aqui,
-// mas no seu código, elas devem estar completas conforme o documento original.
 
 function converterParaFormatoFuncional(numeroOriginal: string): string[] {
-  // Sua implementação original completa aqui
-  const numeroLimpo = numeroOriginal.replace(/\D/g, '');
-  if (numeroLimpo === '555584557096') {
-    return ['+5555984557096', '5555984557096'];
+  const numeroLimpo = numeroOriginal.replace(/\D/g, ''); // Remove todos os caracteres não-dígitos
+  
+  if (numeroLimpo === '555584557096') { // Lógica específica do seu teste
+    const formatosFuncionais = [
+      '+5555984557096',
+      '5555984557096',
+    ];
+    return formatosFuncionais;
   }
+  
   let numeroConvertido = numeroLimpo;
+
+  // Heurística para adicionar o '9' a números de celular brasileiros que possam vir sem ele.
   if (numeroLimpo.length === 12 && numeroLimpo.startsWith('55')) {
     const ddd = numeroLimpo.substring(2, 4);
     const numeroSemDDIeDDD = numeroLimpo.substring(4);
@@ -26,13 +29,17 @@ function converterParaFormatoFuncional(numeroOriginal: string): string[] {
         numeroConvertido = '55' + ddd + '9' + numeroSemDDIeDDD;
     }
   }
-  return ['+' + numeroConvertido, numeroConvertido];
+
+  const formatosFinais = [
+    '+' + numeroConvertido,
+    numeroConvertido
+  ];
+  return formatosFinais;
 }
 
-// ATENÇÃO: Esta função foi modificada para aceitar um `payload` genérico
 async function tentarEnvioUnico(numero: string, payload: any, tentativa: number): Promise<boolean> {
   try {
-    console.log(`�� [SEND ${tentativa}] Tentando enviar para: ${numero}`);
+    console.log(`[SEND ${tentativa}] Tentando enviar para: ${numero}`);
 
     const WHATSAPP_API_URL = `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
@@ -47,8 +54,8 @@ async function tentarEnvioUnico(numero: string, payload: any, tentativa: number)
 
     const responseText = await response.text();
 
-    console.log(`�� [SEND ${tentativa}] Status: ${response.status}`);
-    console.log(`📨 [SEND ${tentativa}] Response: ${responseText}`);
+    console.log(`[SEND ${tentativa}] Status: ${response.status}`);
+    console.log(`[SEND ${tentativa}] Response: ${responseText}`);
 
     if (response.ok) {
       console.log(`🎉 [SEND ${tentativa}] ✅ SUCESSO para: ${numero}`);
@@ -56,7 +63,7 @@ async function tentarEnvioUnico(numero: string, payload: any, tentativa: number)
     } else {
       try {
         const errorData = JSON.parse(responseText);
-        console.error(`💥 [SEND ${tentativa}] ❌ FALHA para: ${numero} - Status: ${response.status}, Erro:`, errorData);
+        console.error(`�� [SEND ${tentativa}] ❌ FALHA para: ${numero} - Status: ${response.status}, Erro:`, errorData);
       } catch (e) {
         console.error(`💥 [SEND ${tentativa}] ❌ FALHA para: ${numero} - Status: ${response.status}, Response: ${responseText}`);
       }
@@ -69,9 +76,8 @@ async function tentarEnvioUnico(numero: string, payload: any, tentativa: number)
   }
 }
 
-// Esta função foi mantida apenas para enviar TEXTO simples
 async function enviarComFormatosCorretos(numeroOriginal: string, texto: string): Promise<boolean> {
-  console.log('🎯 [SEND TEXT] Tentando enviar texto para:', numeroOriginal);
+  console.log('�� [SEND TEXT] Tentando enviar texto para:', numeroOriginal);
   const formatos = converterParaFormatoFuncional(numeroOriginal);
 
   const textPayload = { // Cria um payload de texto padrão
@@ -100,7 +106,7 @@ async function enviarComFormatosCorretos(numeroOriginal: string, texto: string):
   return false;
 }
 
-// NOVAS FUNÇÕES AUXILIARES PARA MENSAGENS INTERATIVAS DO WHATSAPP
+// FUNÇÕES AUXILIARES PARA MENSAGENS INTERATIVAS DO WHATSAPP
 async function sendListMessage(to: string, header: string, body: string, buttonText: string, sectionTitle: string, rows: { id: string; title: string; description?: string }[]): Promise<boolean> {
     const payload = {
         messaging_product: 'whatsapp',
@@ -152,10 +158,6 @@ async function sendReplyButtons(to: string, body: string, buttons: { id: string;
     return await tentarEnvioUnico(to, payload, 1);
 }
 
-
-// ... (Funções auxiliares para processamento de mensagens - parseUserMessageForDrugInfo) ...
-// (Este bloco deve ser o mesmo que você já tem no seu arquivo)
-
 /**
  * Tenta extrair o nome do medicamento e o tipo de informação desejada da mensagem do usuário.
  * Esta função é crucial para o mecanismo de fallback, pois ela tenta identificar
@@ -204,14 +206,11 @@ function parseUserMessageForDrugInfo(message: string): { drugName?: string; info
 
 
 // =========================================================================
-// ROTA NEXT.JS API - WEBHOOK PARA WHATSAPP BUSINESS API (do seu código anterior, com ajustes)
+// ROTA NEXT.JS API - WEBHOOK PARA WHATSAPP BUSINESS API
 // =========================================================================
-
-// ... (Debug inicial, GET handler, POST handler - estes blocos devem ser os mesmos que você já tem) ...
 
 // Debug inicial
 console.log('🎯 [COMPLETE SYSTEM] Sistema completo com IA ativada!');
-// console.log('✅ [FORMATS] Formatos que funcionam:', FORMATOS_COMPROVADOS); // Remover se FORMATOS_COMPROVADOS não for mais usado
 console.log('📊 [CONFIG] Status completo:');
 console.log('   WEBHOOK_TOKEN:', process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN ? '✅' : '❌');
 console.log('   PHONE_ID:', process.env.WHATSAPP_PHONE_NUMBER_ID || '❌');
@@ -227,7 +226,7 @@ export async function GET(request: NextRequest) {
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
-  console.log('�� [WEBHOOK VERIFICATION] Verificação do webhook:', {
+  console.log('[WEBHOOK VERIFICATION] Verificação do webhook:', {
     mode,
     tokenMatch: token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
     challenge: challenge?.substring(0, 20) + '...'
@@ -251,7 +250,7 @@ export async function GET(request: NextRequest) {
 // POST handler - Processamento de mensagens
 export async function POST(request: NextRequest) {
   try {
-    console.log('📨 [WEBHOOK] Nova mensagem recebida');
+    console.log('�� [WEBHOOK] Nova mensagem recebida');
 
     if (!process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN || !process.env.FLASK_API_URL) {
       console.error('❌ [WEBHOOK] Configuração crítica faltando: WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN ou FLASK_API_URL');
@@ -275,7 +274,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: 'ok' }, { status: 200 });
     }
 
-    console.log(`�� [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
+    console.log(`[WEBHOOK] Processando ${messages.length} mensagem(ns)`);
 
     for (const message of messages) {
       await processarComIACompleta(message);
@@ -306,7 +305,7 @@ const conversationState: Record<string, {
 // =========================================================================
 
 
-// �� PROCESSAMENTO COMPLETO COM IA E FALLBACK
+// PROCESSAMENTO COMPLETO COM IA E FALLBACK
 async function processarComIACompleta(message: any): Promise<void> {
   const { from, text, type, id } = message;
 
@@ -348,7 +347,7 @@ async function processarComIACompleta(message: any): Promise<void> {
     // Comandos administrativos (mantidos do seu código)
     if (lowerMessage === '/test' || lowerMessage === 'test') {
       const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA ATIVA' : '⚠️ IA INATIVA';
-      const statusMsg = `✅ *SISTEMA COMPLETO FUNCIONANDO!*\n\n🔗 WhatsApp: ✅ Conectado\n${statusIA}\n�� Flask API: ${process.env.FLASK_API_URL ? '✅ Conectado' : '❌ Não configurado'}\n🚀 Status: 100% Operacional\n\nTudo funcionando perfeitamente!`;
+      const statusMsg = `✅ *SISTEMA COMPLETO FUNCIONANDO!*\n\n🔗 WhatsApp: ✅ Conectado\n${statusIA}\n📊 Flask API: ${process.env.FLASK_API_URL ? '✅ Conectado' : '❌ Não configurado'}\n🚀 Status: 100% Operacional\n\nTudo funcionando perfeitamente!`;
       await enviarComFormatosCorretos(from, statusMsg);
       conversationState[from] = { state: 'IDLE' }; // Reset state after admin command
       return;
@@ -367,7 +366,7 @@ async function processarComIACompleta(message: any): Promise<void> {
       try {
         if (process.env.GEMINI_API_KEY) {
           geminiService.clearHistory(from); // Usa a instância do serviço para limpar histórico
-          await enviarComFormatosCorretos(from, '��️ *HISTÓRICO LIMPO!*\n\nMemória da IA resetada com sucesso.\nVamos começar uma nova conversa! 🚀');
+          await enviarComFormatosCorretos(from, '🗑️ *HISTÓRICO LIMPO!*\n\nMemória da IA resetada com sucesso.\nVamos começar uma nova conversa! 🚀');
         } else {
           await enviarComFormatosCorretos(from, '🗑️ *COMANDO RECEBIDO!*\n\nIA será ativada em breve.\nSistema WhatsApp funcionando normalmente.');
         }
@@ -380,17 +379,17 @@ async function processarComIACompleta(message: any): Promise<void> {
     }
 
     if (lowerMessage === '/ajuda' || lowerMessage === 'ajuda' || lowerMessage === '/help') {
-      const statusIA = process.env.GEMINI_API_KEY ? '�� IA totalmente ativa - Posso conversar sobre qualquer assunto!' : '⚙️ IA sendo configurada';
+      const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA totalmente ativa - Posso conversar sobre qualquer assunto!' : '⚙️ IA sendo configurada';
       const helpMsg = `🤖 *ASSISTENTE INTELIGENTE ATIVO*\n\n` +
         `✅ */test* - Status do sistema\n` +
-        `🔧 */debug* - Informações técnicas\n` +
+        `�� */debug* - Informações técnicas\n` +
         `🗑️ */limpar* - Resetar conversa\n` +
         `❓ */ajuda* - Esta mensagem\n\n` +
         `${statusIA}\n\n` +
         `💬 *Como usar:*\n` +
         `Envie qualquer mensagem para conversar comigo!\n` +
         `Ou pergunte sobre um produto (ex: "Tem Losartana?").\n\n` +
-        `�� *STATUS: TOTALMENTE OPERACIONAL*`;
+        `🚀 *STATUS: TOTALMENTE OPERACIONAL*`;
       await enviarComFormatosCorretos(from, helpMsg);
       conversationState[from] = { state: 'IDLE' }; // Reset state after admin command
       return;
@@ -416,7 +415,7 @@ async function processarComIACompleta(message: any): Promise<void> {
                                `Preço Final: ${chosenProduct.preco_final_venda}\n` +
                                `Estoque: ${chosenProduct.qtd_estoque} unidades.`;
 
-            await enviarComFormatosCorretos(from, responseText); // Envia o texto primeiro
+            await enviarComFormatosCorretos(from, responseText); // Corrected function name
 
             if (chosenProduct.qtd_estoque === 0) {
                 // Se estiver fora de estoque, pergunta sobre encomenda
@@ -427,13 +426,11 @@ async function processarComIACompleta(message: any): Promise<void> {
                 currentState.state = 'AWAITING_ORDER_CONFIRMATION_YES_NO';
             } else {
                 // Se tiver estoque, apenas pergunta se precisa de algo mais
-                await enviarComandosCorretos(from, "Posso ajudar com algo mais?");
+                await enviarComFormatosCorretos(from, "Posso ajudar com algo mais?"); // Corrected function name
                 currentState.state = 'IDLE'; // Volta ao estado inicial
             }
         } else {
-            await enviarComandosCorretos(from, "Opção inválida. Por favor, selecione um número válido da lista de produtos.");
-            // Mantém o estado para que o usuário possa tentar novamente ou oferece para reiniciar
-            // Para simplicidade, vamos apenas enviar o erro e manter o estado.
+            await enviarComFormatosCorretos(from, "Opção inválida. Por favor, selecione um número válido da lista de produtos."); // Corrected function name
         }
         conversationState[from] = currentState; // Atualiza o estado
         return; // Sai da função, pois a mensagem foi tratada
@@ -442,13 +439,13 @@ async function processarComIACompleta(message: any): Promise<void> {
     // --- State 2: AWAITING_ORDER_CONFIRMATION_YES_NO (Usuário respondeu "Sim" ou "Não" para encomendar) ---
     if (currentState.state === 'AWAITING_ORDER_CONFIRMATION_YES_NO') {
         if (lowerMessage === 'encomendar_sim') {
-            await enviarComandosCorretos(from, `Excelente! Quantas unidades de *${currentState.selectedProduct.nome_produto}* você gostaria de encomendar? Por favor, digite apenas o número.`);
+            await enviarComFormatosCorretos(from, `Excelente! Quantas unidades de *${currentState.selectedProduct.nome_produto}* você gostaria de encomendar? Por favor, digite apenas o número.`); // Corrected function name
             currentState.state = 'AWAITING_ORDER_QUANTITY';
         } else if (lowerMessage === 'encomendar_nao') {
-            await enviarComandosCorretos(from, "Tudo bem! A encomenda foi cancelada. Posso te ajudar com algo mais?");
+            await enviarComFormatosCorretos(from, "Tudo bem! A encomenda foi cancelada. Posso te ajudar com algo mais?"); // Corrected function name
             currentState.state = 'IDLE';
         } else {
-            await enviarComandosCorretos(from, "Resposta inválida. Por favor, clique 'Sim' ou 'Não'.");
+            await enviarComFormatosCorretos(from, "Resposta inválida. Por favor, clique 'Sim' ou 'Não'."); // Corrected function name
         }
         conversationState[from] = currentState;
         return;
@@ -459,10 +456,10 @@ async function processarComIACompleta(message: any): Promise<void> {
         const quantity = parseInt(userMessage);
         if (!isNaN(quantity) && quantity > 0) {
             currentState.orderQuantity = quantity;
-            await enviarComandosCorretos(from, `Certo, *${quantity}* unidades de *${currentState.selectedProduct.nome_produto}*. Para quem devemos registrar a encomenda? (Nome completo e telefone, se for diferente do seu WhatsApp)`);
+            await enviarComFormatosCorretos(from, `Certo, *${quantity}* unidades de *${currentState.selectedProduct.nome_produto}*. Para quem devemos registrar a encomenda? (Nome completo e telefone, se for diferente do seu WhatsApp)`); // Corrected function name
             currentState.state = 'AWAITING_ORDER_CLIENT_NAME_OR_CONFIRMATION';
         } else {
-            await enviarComandosCorretos(from, "Quantidade inválida. Por favor, digite um número válido para a quantidade.");
+            await enviarComFormatosCorretos(from, "Quantidade inválida. Por favor, digite um número válido para a quantidade."); // Corrected function name
         }
         conversationState[from] = currentState;
         return;
@@ -488,7 +485,7 @@ async function processarComIACompleta(message: any): Promise<void> {
                                   `*Contato:* ${clientPhone}\n\n` +
                                   `Confirma o pedido?`;
 
-        await enviarComandosCorretos(from, confirmationMessage); // Envia texto primeiro
+        await enviarComFormatosCorretos(from, confirmationMessage); // Corrected function name // Envia texto primeiro
         await sendReplyButtons(from, "Confirma o pedido?", [
             { id: 'confirmar_pedido_sim', title: 'Sim, Confirmar' },
             { id: 'confirmar_pedido_nao', title: 'Não, Cancelar' }
@@ -526,25 +523,23 @@ async function processarComIACompleta(message: any): Promise<void> {
                 const response = await fetch(`${process.env.FLASK_API_URL}/processar_pedido`, {
                     method: 'POST',
                     body: formData,
-                    // OBS: Se o seu Flask exigir headers específicos (como Content-Type para FormData), você pode precisar adicioná-los.
-                    // No caso de FormData, fetch geralmente lida com isso automaticamente.
                 });
 
                 if (response.ok) {
-                    await enviarComandosCorretos(from, `✅ Pedido de encomenda para *${product.nome_produto}* (${quantity} unidades) foi registrado com sucesso para *${clientName}*! Entraremos em contato em breve.`);
+                    await enviarComFormatosCorretos(from, `✅ Pedido de encomenda para *${product.nome_produto}* (${quantity} unidades) foi registrado com sucesso para *${clientName}*! Entraremos em contato em breve.`); // Corrected function name
                 } else {
                     const errorData = await response.text();
                     console.error('Erro ao processar pedido Flask:', errorData);
-                    await enviarComandosCorretos(from, `❌ Ocorreu um erro ao registrar seu pedido. Por favor, tente novamente ou fale com um atendente. Detalhes: ${errorData}`);
+                    await enviarComFormatosCorretos(from, `❌ Ocorreu um erro ao registrar seu pedido. Por favor, tente novamente ou fale com um atendente. Detalhes: ${errorData}`); // Corrected function name
                 }
             } catch (error) {
                 console.error('Erro de rede ao chamar Flask /processar_pedido:', error);
-                await enviarComandosCorretos(from, '❌ Ocorreu um erro de comunicação ao tentar registrar seu pedido. Por favor, tente novamente mais tarde.');
+                await enviarComFormatosCorretos(from, '❌ Ocorreu um erro de comunicação ao tentar registrar seu pedido. Por favor, tente novamente mais tarde.'); // Corrected function name
             }
         } else if (lowerMessage === 'confirmar_pedido_nao') {
-            await enviarComandosCorretos(from, "Pedido cancelado. Posso te ajudar com algo mais?");
+            await enviarComFormatosCorretos(from, "Pedido cancelado. Posso te ajudar com algo mais?"); // Corrected function name
         } else {
-            await enviarComandosCorretos(from, "Opção inválida. Por favor, clique 'Sim, Confirmar' ou 'Não, Cancelar'.");
+            await enviarComFormatosCorretos(from, "Opção inválida. Por favor, clique 'Sim, Confirmar' ou 'Não, Cancelar'."); // Corrected function name
         }
         // Reseta o estado após a tentativa de pedido ou cancelamento
         currentState.state = 'IDLE';
@@ -585,7 +580,7 @@ async function processarComIACompleta(message: any): Promise<void> {
                 const products = await searchResponse.json();
 
                 if (products.length === 0) {
-                    await enviarComandosCorretos(from, `Desculpe, não encontrei nenhum item relacionado a "*${potentialProductName}*". Por favor, tente um nome diferente ou mais específico.`);
+                    await enviarComFormatosCorretos(from, `Desculpe, não encontrei nenhum item relacionado a "*${potentialProductName}*". Por favor, tente um nome diferente ou mais específico.`); // Corrected function name
                     currentState.state = 'IDLE';
                 } else if (products.length === 1) {
                     const product = products[0];
@@ -596,7 +591,7 @@ async function processarComIACompleta(message: any): Promise<void> {
                                        `Preço Final: ${product.preco_final_venda}\n` +
                                        `Estoque: ${product.qtd_estoque} unidades.`;
 
-                    await enviarComandosCorretos(from, responseText); // Envia o texto primeiro
+                    await enviarComFormatosCorretos(from, responseText); // Corrected function name // Envia o texto primeiro
 
                     if (product.qtd_estoque === 0) {
                         // Se estiver fora de estoque, pergunta sobre encomenda
@@ -606,7 +601,7 @@ async function processarComIACompleta(message: any): Promise<void> {
                         ]);
                         currentState.state = 'AWAITING_ORDER_CONFIRMATION_YES_NO';
                     } else {
-                        await enviarComandosCorretos(from, "Posso ajudar com algo mais?");
+                        await enviarComFormatosCorretos(from, "Posso ajudar com algo mais?"); // Corrected function name
                         currentState.state = 'IDLE';
                     }
                 } else { // Múltiplos produtos encontrados
@@ -630,7 +625,7 @@ async function processarComIACompleta(message: any): Promise<void> {
                 return; // Sai, pois a busca de produto foi tratada
             } catch (error) {
                 console.error('Erro ao buscar produtos no Flask:', error);
-                await enviarComandosCorretos(from, 'Ocorreu um erro ao consultar nosso estoque. Por favor, tente novamente mais tarde.');
+                await enviarComFormatosCorretos(from, 'Ocorreu um erro ao consultar nosso estoque. Por favor, tente novamente mais tarde.'); // Corrected function name
                 currentState.state = 'IDLE';
                 conversationState[from] = currentState;
                 return;
@@ -638,27 +633,22 @@ async function processarComIACompleta(message: any): Promise<void> {
         }
     }
 
-
     // =========================================================================
     // LÓGICA DE PROCESSAMENTO COM INTELIGÊNCIA ARTIFICIAL (EXISTENTE)
     // Este bloco só será executado se a busca de produtos acima NÃO tiver sido acionada ou resolvida.
     // =========================================================================
 
-    // ... (Seu código existente para processamento com Gemini e fallback médico) ...
-    // Certifique-se de que o 'return;' após cada bloco de estado ou busca de produto garanta que esta parte
-    // só seja alcançada se nenhuma das lógicas anteriores for aplicada.
-
     if (!process.env.GEMINI_API_KEY) {
       console.log('⚠️ [AI PROCESS] GEMINI_API_KEY não encontrada');
-      await enviarComandosCorretos(from, '🤖 *ASSISTENTE QUASE PRONTO!*\n\nSistema WhatsApp: ✅ Funcionando perfeitamente\nIA: ⚙️ Sendo configurada\n\nEm breve estarei conversando inteligentemente!\nUse */test* para verificar status.');
+      await enviarComFormatosCorretos(from, '🤖 *ASSISTENTE QUASE PRONTO!*\n\nSistema WhatsApp: ✅ Funcionando perfeitamente\nIA: ⚙️ Sendo configurada\n\nEm breve estarei conversando inteligentemente!\nUse */test* para verificar status.'); // Corrected function name
       return;
     }
 
     let aiResponseText: string;
     try {
-      console.log('🤖 [AI] Iniciando processamento com Gemini IA...');
+      console.log('[AI] Iniciando processamento com Gemini IA...');
       aiResponseText = await geminiService.generateResponse(userMessage, from); // Usa o serviço Gemini
-      console.log(`�� [AI] Resposta da IA gerada com sucesso (${aiResponseText.length} caracteres)`);
+      console.log(`[AI] Resposta da IA gerada com sucesso (${aiResponseText.length} caracteres)`);
     } catch (aiError: any) {
       console.error('❌ [AI] Erro na inteligência artificial:', aiError);
       if (aiError.response && aiError.response.promptFeedback && aiError.response.promptFeedback.blockReason) {
@@ -672,7 +662,7 @@ async function processarComIACompleta(message: any): Promise<void> {
           `• Envie uma mensagem mais simples\n` +
           `• Use */test* para verificar o status\n\n` +
           `🔄 Tentarei novamente em alguns instantes...`;
-        await enviarComandosCorretos(from, errorMsg);
+        await enviarComFormatosCorretos(from, errorMsg); // Corrected function name
         return;
       }
     }
@@ -690,18 +680,18 @@ async function processarComIACompleta(message: any): Promise<void> {
 
         if (libResult.includes("Não encontrei informações sobre o medicamento") || libResult.includes("Não tenho a informação específica sobre")) {
           const finalResponse = `_Atenção (Política de Conteúdo da IA)_ - Para sua segurança, por favor, consulte diretamente um *farmacêutico* em nossa loja ou um *médico*. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas ${libResult.toLowerCase()}. Por favor, procure um profissional de saúde para obter orientação.`;
-          await enviarComandosCorretos(from, finalResponse);
+          await enviarComFormatosCorretos(from, finalResponse); // Corrected function name
         } else {
           const finalResponse = `_De acordo com nossa base de dados interna:_\n\n${libResult}\n\n*_Importante:_ Esta informação é para fins educacionais e informativos e não substitui o conselho, diagnóstico ou tratamento de um profissional de saúde qualificado. Sempre consulte um *médico* ou *farmacêutico* para orientações específicas sobre sua saúde e para a interpretação correta das informações.`;
-          await enviarComandosCorretos(from, finalResponse);
+          await enviarComFormatosCorretos(from, finalResponse); // Corrected function name
         }
       } else {
         console.warn("⚠️ Não foi possível extrair nome do medicamento ou tipo de informação da mensagem do usuário para o fallback.");
         const finalResponse = `_Atenção (Política de Conteúdo da IA)_ - Para sua segurança, por favor, consulte diretamente um *farmacêutico* em nossa loja ou um *médico*. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas não consegui entender qual medicamento ou informação específica você procura. Por favor, tente perguntar de forma mais direta (ex: _'Qual a posologia da losartana?'_ ou _'Indicações do paracetamol?'_).`;
-        await enviarComandosCorretos(from, finalResponse);
+        await enviarComFormatosCorretos(from, finalResponse); // Corrected function name
       }
     } else {
-      await enviarComandosCorretos(from, aiResponseText);
+      await enviarComFormatosCorretos(from, aiResponseText); // Corrected function name
     }
   } catch (error) {
     console.error('❌ [AI PROCESS] Erro crítico no processamento:', error);
@@ -713,14 +703,9 @@ async function processarComIACompleta(message: any): Promise<void> {
       `• Logs de erro registrados\n\n` +
       `Use */test* para verificar o status de recuperação.`;
     try {
-      await enviarComandosCorretos(from, recoveryMsg);
+      await enviarComFormatosCorretos(from, recoveryMsg); // Corrected function name
     } catch (recoveryError) {
       console.error('❌ [RECOVERY] Falha crítica na recuperação:', recoveryError);
     }
-  } finally {
-      // Garante que o estado seja resetado em caso de erro crítico não tratado,
-      // ou que seja salvo após o processamento, se não houve 'return' antecipado.
-      // Para fins de demonstração com in-memory state, precisamos disso no finally.
-      conversationState[from] = currentState;
   }
 }
