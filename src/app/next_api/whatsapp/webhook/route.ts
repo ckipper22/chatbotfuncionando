@@ -1,27 +1,53 @@
 // src/app/next_api/whatsapp/webhook/route.ts
-
+import { consultarProduto } from '@/lib/api-confere-nota';
 import { NextRequest, NextResponse } from 'next/server';
+<<<<<<< HEAD
 import { getGeminiService } from '../../../../src/lib/services/gemini-service'; // Caminho CORRIGIDO para o gemini-service
 import { getMedicamentoInfo, medicamentosData } from '../../../../../Lib/medicamentos_data'; // Caminho CORRIGIDO para o medicamentos_data
+=======
+import { getGeminiService } from '../../../../lib/services/gemini-service';
+import { getMedicamentoInfo, medicamentosData } from '../../../../../Lib/medicamentos_data';
+>>>>>>> integracao-whatsapp-api
 
 // =========================================================================
 // VARIÁVEIS E FUNÇÕES AUXILIARES PARA ENVIO WHATSAPP
 // =========================================================================
 
+<<<<<<< HEAD
 function converterParaFormatoFuncional(numeroOriginal: string): string[] {
   const numeroLimpo = numeroOriginal.replace(/\D/g, ''); // Remove todos os caracteres não-dígitos
   
   if (numeroLimpo === '555584557096') { // Lógica específica do seu teste
+=======
+const FORMATOS_COMPROVADOS = [
+  '+5555984557096',
+  '5555984557096',
+];
+
+function converterParaFormatoFuncional(numeroOriginal: string): string[] {
+  console.log('🎯 [CONVERT] Convertendo para formato funcional:', numeroOriginal);
+
+  const numeroLimpo = numeroOriginal.replace(/\D/g, '');
+  console.log('🎯 [CONVERT] Número limpo:', numeroLimpo);
+
+  if (numeroLimpo === '555584557096') {
+>>>>>>> integracao-whatsapp-api
     const formatosFuncionais = [
       '+5555984557096',
       '5555984557096',
     ];
     return formatosFuncionais;
   }
+<<<<<<< HEAD
   
   let numeroConvertido = numeroLimpo;
 
   // Heurística para adicionar o '9' a números de celular brasileiros que possam vir sem ele.
+=======
+
+  let numeroConvertido = numeroLimpo;
+
+>>>>>>> integracao-whatsapp-api
   if (numeroLimpo.length === 12 && numeroLimpo.startsWith('55')) {
     const ddd = numeroLimpo.substring(2, 4);
     const numeroSemDDIeDDD = numeroLimpo.substring(4);
@@ -37,10 +63,52 @@ function converterParaFormatoFuncional(numeroOriginal: string): string[] {
   return formatosFinais;
 }
 
+<<<<<<< HEAD
 async function tentarEnvioUnico(numero: string, payload: any, tentativa: number): Promise<boolean> {
+=======
+async function testarFormatosSequencial(numero: string, texto: string): Promise<string | null> {
+  console.log('🧪 [SEQUENTIAL TEST] Iniciando teste sequencial para:', numero);
+
+  const formatos = converterParaFormatoFuncional(numero);
+
+  for (let i = 0; i < formatos.length; i++) {
+    const formato = formatos[i];
+    console.log(`🧪 [SEQUENTIAL TEST] Tentativa ${i + 1}/${formatos.length}: ${formato}`);
+
+    const sucesso = await tentarEnvioUnico(formato, texto, i + 1);
+    if (sucesso) {
+      console.log(`✅ [SEQUENTIAL TEST] SUCESSO no formato ${i + 1}: ${formato}`);
+      return formato;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+
+  console.log('❌ [SEQUENTIAL TEST] Todos os formatos falharam');
+  return null;
+}
+
+async function tentarEnvioUnico(numero: string, texto: string, tentativa: number): Promise<boolean> {
+>>>>>>> integracao-whatsapp-api
   try {
     console.log(`[SEND ${tentativa}] Tentando enviar para: ${numero}`);
 
+<<<<<<< HEAD
+=======
+    const payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: numero,
+      type: 'text',
+      text: {
+        preview_url: false,
+        body: texto.substring(0, 4096)
+      }
+    };
+
+    console.log(`📝 [SEND ${tentativa}] Payload:`, JSON.stringify(payload, null, 2));
+
+>>>>>>> integracao-whatsapp-api
     const WHATSAPP_API_URL = `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
     const response = await fetch(WHATSAPP_API_URL, {
@@ -106,6 +174,7 @@ async function enviarComFormatosCorretos(numeroOriginal: string, texto: string):
   return false;
 }
 
+<<<<<<< HEAD
 // FUNÇÕES AUXILIARES PARA MENSAGENS INTERATIVAS DO WHATSAPP
 async function sendListMessage(to: string, header: string, body: string, buttonText: string, sectionTitle: string, rows: { id: string; title: string; description?: string }[]): Promise<boolean> {
     const payload = {
@@ -157,20 +226,18 @@ async function sendReplyButtons(to: string, body: string, buttons: { id: string;
     };
     return await tentarEnvioUnico(to, payload, 1);
 }
+=======
+// =========================================================================
+// FUNÇÕES AUXILIARES PARA PROCESSAMENTO DE MENSAGENS
+// =========================================================================
+>>>>>>> integracao-whatsapp-api
 
-/**
- * Tenta extrair o nome do medicamento e o tipo de informação desejada da mensagem do usuário.
- * Esta função é crucial para o mecanismo de fallback, pois ela tenta identificar
- * a intenção do usuário para consultar a base de dados interna `medicamentosData`.
- * @param message A mensagem de texto enviada pelo usuário.
- * @returns Um objeto contendo `drugName` (nome do medicamento) e `infoType` (tipo de informação),
- *          ambos opcionais, indicando se a extração foi bem-sucedida.
- */
 function parseUserMessageForDrugInfo(message: string): { drugName?: string; infoType?: string } {
     const lowerMessage = message.toLowerCase();
     let drugName: string | undefined;
     let infoType: string | undefined;
 
+<<<<<<< HEAD
     const infoTypeKeywords: { [key: string]: string[] } = {
         "classe terapeutica": ["classe terapeutica", "classe farmacologica", "categoria", "grupo de medicamentos", "tipo de remedio"],
         "posologia": ["posologia", "dose", "como usar", "modo de usar", "dosagem", "quantas vezes", "como tomar"],
@@ -181,6 +248,18 @@ function parseUserMessageForDrugInfo(message: string): { drugName?: string; info
         "interacoes medicamentosas": ["interacoes medicamentosas", "pode misturar com", "outros remedios", "combinar com", "interage com", "interagir"],
         "tudo": ["tudo", "informacoes completas", "tudo sobre", "informacoes gerais", "ficha completa", "informacao completa"],
     };
+=======
+  const infoTypeKeywords: { [key: string]: string[] } = {
+    "classe terapeutica": ["classe terapeutica", "classe farmacologica", "categoria", "grupo de medicamentos", "tipo de remedio"],
+    "posologia": ["posologia", "dose", "como usar", "modo de usar", "dosagem", "quantas vezes", "como tomar"],
+    "indicacoes": ["indicacoes", "para que serve", "usos", "quando usar", "utilizacao", "beneficios"],
+    "efeitos colaterais": ["efeitos colaterais", "reacoes adversas", "colaterais", "o que pode causar", "problemas", "efeitos indesejados"],
+    "contraindicacoes": ["contraindicacoes", "contra indicado", "nao usar quando", "quem nao pode usar", "restricoes", "quando nao usar", "proibido"],
+    "mecanismo de acao": ["mecanismo de acao", "como funciona", "acao do remedio", "age no organismo", "mecanismo"],
+    "interacoes medicamentosas": ["interacoes medicamentosas", "pode misturar com", "outros remedios", "combinar com", "interage com", "interagir"],
+    "tudo": ["tudo", "informacoes completas", "tudo sobre", "informacoes gerais", "ficha completa", "informacao completa"],
+  };
+>>>>>>> integracao-whatsapp-api
 
     for (const typeKey in infoTypeKeywords) {
         if (infoTypeKeywords[typeKey].some(keyword => lowerMessage.includes(keyword))) {
@@ -209,7 +288,6 @@ function parseUserMessageForDrugInfo(message: string): { drugName?: string; info
 // ROTA NEXT.JS API - WEBHOOK PARA WHATSAPP BUSINESS API
 // =========================================================================
 
-// Debug inicial
 console.log('🎯 [COMPLETE SYSTEM] Sistema completo com IA ativada!');
 console.log('📊 [CONFIG] Status completo:');
 console.log('   WEBHOOK_TOKEN:', process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN ? '✅' : '❌');
@@ -219,7 +297,6 @@ console.log('   GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ IA ATIVADA!'
 console.log('   FLASK_API_URL:', process.env.FLASK_API_URL ? '✅ URL FLASK CONFIGURADA!' : '❌ URL FLASK AUSENTE!');
 
 
-// GET handler - Verificação do Webhook
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const mode = searchParams.get('hub.mode');
@@ -247,13 +324,17 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
 
-// POST handler - Processamento de mensagens
 export async function POST(request: NextRequest) {
   try {
     console.log('�� [WEBHOOK] Nova mensagem recebida');
 
+<<<<<<< HEAD
     if (!process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN || !process.env.FLASK_API_URL) {
       console.error('❌ [WEBHOOK] Configuração crítica faltando: WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN ou FLASK_API_URL');
+=======
+    if (!process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN) {
+      console.error('❌ [WEBHOOK] Configuração crítica faltando: WHATSAPP_PHONE_NUMBER_ID ou WHATSAPP_ACCESS_TOKEN');
+>>>>>>> integracao-whatsapp-api
       return NextResponse.json({ error: 'Configuration error' }, { status: 500 });
     }
 
@@ -342,12 +423,94 @@ async function processarComIACompleta(message: any): Promise<void> {
 
     console.log(`   [AI PROCESS] De ${from}: "${userMessage}"`);
 
-    const geminiService = getGeminiService(); // Obtém a instância do serviço Gemini
+    const geminiService = getGeminiService();
 
-    // Comandos administrativos (mantidos do seu código)
+    // 👇👇👇 CONSULTA DE PRODUTOS - ADICIONADO AQUI 👇👇👇
+    if (lowerMessage.startsWith('buscar ') ||
+        lowerMessage.startsWith('produto ') ||
+        lowerMessage.startsWith('consulta ') ||
+        lowerMessage.startsWith('preço ') ||
+        lowerMessage.startsWith('preco ') ||
+        lowerMessage.startsWith('estoque ')) {
+
+      console.log(`🛍️ [PRODUTO] Consultando produto: "${userMessage}"`);
+
+      try {
+        const termoBusca = userMessage.replace(/^(buscar|produto|consulta|preço|preco|estoque)\s*/i, '').trim();
+
+        if (termoBusca.length < 2) {
+          await enviarComFormatosCorretos(from,
+            `🔍 *BUSCA DE PRODUTOS*\\n\\n` +
+            `Por favor, digite o nome do produto que deseja buscar (mínimo 2 caracteres).\\n\\n` +
+            `💡 *Exemplos:*\\n` +
+            `• *buscar paracetamol*\\n` +
+            `• *produto dipirona*\\n` +
+            `• *estoque nimesulida*`
+          );
+          return;
+        }
+
+        console.log(`🔍 [PRODUTO] Buscando: "${termoBusca}" na API Flask...`);
+        const resultado = await consultarProduto(termoBusca);
+        console.log(`✅ [PRODUTO] Resultado: ${resultado.count} produtos encontrados`);
+
+        if (!resultado.success || resultado.count === 0) {
+          await enviarComFormatosCorretos(from,
+            `❌ *PRODUTO NÃO ENCONTRADO*\\n\\n` +
+            `Não encontrei produtos para "*${termoBusca}*".\\n\\n` +
+            `💡 *Sugestões:*\\n` +
+            `• Verifique a ortografia\\n` +
+            `• Tente um termo mais específico\\n` +
+            `• Use apenas o nome principal`
+          );
+          return;
+        }
+
+        let resposta = `🔍 *${resultado.count} PRODUTO(S) ENCONTRADO(S)*\\n` +
+                      `*Busca:* "${termoBusca}"\\n\\n`;
+
+        resultado.data.slice(0, 5).forEach((produto: any, index: number) => {
+          resposta += `*${index + 1}. ${produto.nome_produto}*\\n`;
+          resposta += `🏭 ${produto.nom_laboratorio}\\n`;
+          resposta += `💰 ${produto.preco_final_venda}`;
+          if (produto.desconto_percentual > 0) {
+            resposta += ` (🤑${produto.desconto_percentual.toFixed(1)}% OFF)`;
+          }
+          resposta += `\\n📦 Estoque: ${produto.qtd_estoque} unidades\\n`;
+          resposta += `🔢 Código: ${produto.cod_reduzido}\\n\\n`;
+        });
+
+        if (resultado.count > 5) {
+          resposta += `📋 *E mais ${resultado.count - 5} produtos...*\\n`;
+          resposta += `Use um termo mais específico para ver todos.\\n\\n`;
+        }
+
+        resposta += `💡 *Dica:* Use *"código 12345"* para detalhes de um produto específico.`;
+
+        await enviarComFormatosCorretos(from, resposta);
+        return;
+
+      } catch (error) {
+        console.error('❌ [PRODUTO] Erro na consulta:', error);
+        await enviarComFormatosCorretos(from,
+          `⚠️ *ERRO NA CONSULTA*\\n\\n` +
+          `Não consegui buscar produtos no momento.\\n` +
+          `Nossa equipe foi notificada.\\n\\n` +
+          `Tente novamente em alguns instantes.`
+        );
+        return;
+      }
+    }
+    // 👆👆👆 FIM DA CONSULTA DE PRODUTOS 👆👆👆
+
+    // Comandos administrativos
     if (lowerMessage === '/test' || lowerMessage === 'test') {
       const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA ATIVA' : '⚠️ IA INATIVA';
+<<<<<<< HEAD
       const statusMsg = `✅ *SISTEMA COMPLETO FUNCIONANDO!*\n\n🔗 WhatsApp: ✅ Conectado\n${statusIA}\n📊 Flask API: ${process.env.FLASK_API_URL ? '✅ Conectado' : '❌ Não configurado'}\n🚀 Status: 100% Operacional\n\nTudo funcionando perfeitamente!`;
+=======
+      const statusMsg = `✅ *SISTEMA COMPLETO FUNCIONANDO!*\\n\\n🔗 WhatsApp: ✅ Conectado\\n${statusIA}\\n🛍️ Produtos: ✅ API Conectada\\n📊 Formatos: ✅ Corretos\\n🚀 Status: 100% Operacional\\n\\nTudo funcionando perfeitamente!`;
+>>>>>>> integracao-whatsapp-api
       await enviarComFormatosCorretos(from, statusMsg);
       conversationState[from] = { state: 'IDLE' }; // Reset state after admin command
       return;
@@ -356,7 +519,11 @@ async function processarComIACompleta(message: any): Promise<void> {
     if (lowerMessage === '/debug' || lowerMessage === 'debug') {
       const formatos = converterParaFormatoFuncional(from);
       const statusIA = process.env.GEMINI_API_KEY ? '✅ ATIVA' : '❌ INATIVA';
+<<<<<<< HEAD
       const debugInfo = `🔧 *DEBUG SISTEMA COMPLETO*\n\n📱 Seu número: ${from}\n🎯 Convertido para:\n• ${formatos[0]}\n• ${formatos[1]}\n\n🤖 IA Status: ${statusIA}\n📊 Flask API: ${process.env.FLASK_API_URL ? process.env.FLASK_API_URL : 'Não configurado'}\n✅ Sistema: 100% Operacional\n\n🚀 *TUDO FUNCIONANDO!*`;
+=======
+      const debugInfo = `🔧 *DEBUG SISTEMA COMPLETO*\\n\\n📱 Seu número: ${from}\\n🎯 Convertido para:\\n• ${formatos[0]}\\n• ${formatos[1]}\\n\\n🤖 IA Status: ${statusIA}\\n🛍️ API Produtos: ✅ Conectada\\n📊 Formatos: ${FORMATOS_COMPROVADOS.length} testados\\n✅ Sistema: 100% Operacional\\n\\n🚀 *TUDO FUNCIONANDO!*`;
+>>>>>>> integracao-whatsapp-api
       await enviarComFormatosCorretos(from, debugInfo);
       conversationState[from] = { state: 'IDLE' }; // Reset state after admin command
       return;
@@ -365,8 +532,13 @@ async function processarComIACompleta(message: any): Promise<void> {
     if (lowerMessage === '/limpar' || lowerMessage === 'limpar') {
       try {
         if (process.env.GEMINI_API_KEY) {
+<<<<<<< HEAD
           geminiService.clearHistory(from); // Usa a instância do serviço para limpar histórico
           await enviarComFormatosCorretos(from, '🗑️ *HISTÓRICO LIMPO!*\n\nMemória da IA resetada com sucesso.\nVamos começar uma nova conversa! 🚀');
+=======
+          geminiService.clearHistory(from);
+          await enviarComFormatosCorretos(from, '🗑️ *HISTÓRICO LIMPO!*\\n\\nMemória da IA resetada com sucesso.\\nVamos começar uma nova conversa! 🚀');
+>>>>>>> integracao-whatsapp-api
         } else {
           await enviarComFormatosCorretos(from, '🗑️ *COMANDO RECEBIDO!*\n\nIA será ativada em breve.\nSistema WhatsApp funcionando normalmente.');
         }
@@ -380,6 +552,7 @@ async function processarComIACompleta(message: any): Promise<void> {
 
     if (lowerMessage === '/ajuda' || lowerMessage === 'ajuda' || lowerMessage === '/help') {
       const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA totalmente ativa - Posso conversar sobre qualquer assunto!' : '⚙️ IA sendo configurada';
+<<<<<<< HEAD
       const helpMsg = `🤖 *ASSISTENTE INTELIGENTE ATIVO*\n\n` +
         `✅ */test* - Status do sistema\n` +
         `�� */debug* - Informações técnicas\n` +
@@ -389,6 +562,18 @@ async function processarComIACompleta(message: any): Promise<void> {
         `💬 *Como usar:*\n` +
         `Envie qualquer mensagem para conversar comigo!\n` +
         `Ou pergunte sobre um produto (ex: "Tem Losartana?").\n\n` +
+=======
+      const helpMsg = `🤖 *ASSISTENTE INTELIGENTE ATIVO*\\n\\n` +
+        `🛍️ *buscar [produto]* - Consulta produtos em estoque\\n` +
+        `✅ */test* - Status do sistema\\n` +
+        `🔧 */debug* - Informações técnicas\\n` +
+        `🗑️ */limpar* - Resetar conversa\\n` +
+        `❓ */ajuda* - Esta mensagem\\n\\n` +
+        `${statusIA}\\n\\n` +
+        `💬 *Como usar:*\\n` +
+        `Envie qualquer mensagem para conversar comigo!\\n` +
+        `Sou um assistente inteligente pronto para ajudar.\\n\\n` +
+>>>>>>> integracao-whatsapp-api
         `🚀 *STATUS: TOTALMENTE OPERACIONAL*`;
       await enviarComFormatosCorretos(from, helpMsg);
       conversationState[from] = { state: 'IDLE' }; // Reset state after admin command
@@ -640,21 +825,32 @@ async function processarComIACompleta(message: any): Promise<void> {
 
     if (!process.env.GEMINI_API_KEY) {
       console.log('⚠️ [AI PROCESS] GEMINI_API_KEY não encontrada');
+<<<<<<< HEAD
       await enviarComFormatosCorretos(from, '🤖 *ASSISTENTE QUASE PRONTO!*\n\nSistema WhatsApp: ✅ Funcionando perfeitamente\nIA: ⚙️ Sendo configurada\n\nEm breve estarei conversando inteligentemente!\nUse */test* para verificar status.'); // Corrected function name
+=======
+      await enviarComFormatosCorretos(from, '🤖 *ASSISTENTE QUASE PRONTO!*\\n\\nSistema WhatsApp: ✅ Funcionando perfeitamente\\n🛍️ Produtos: ✅ API Conectada\\nIA: ⚙️ Sendo configurada\\n\\nEm breve estarei conversando inteligentemente!\\nUse */test* para verificar status.');
+>>>>>>> integracao-whatsapp-api
       return;
     }
 
     let aiResponseText: string;
     try {
+<<<<<<< HEAD
       console.log('[AI] Iniciando processamento com Gemini IA...');
       aiResponseText = await geminiService.generateResponse(userMessage, from); // Usa o serviço Gemini
       console.log(`[AI] Resposta da IA gerada com sucesso (${aiResponseText.length} caracteres)`);
+=======
+      console.log('🤖 [AI] Iniciando processamento com Gemini IA...');
+      aiResponseText = await geminiService.generateResponse(userMessage, from);
+      console.log(`🤖 [AI] Resposta da IA gerada com sucesso (${aiResponseText.length} caracteres)`);
+>>>>>>> integracao-whatsapp-api
     } catch (aiError: any) {
       console.error('❌ [AI] Erro na inteligência artificial:', aiError);
       if (aiError.response && aiError.response.promptFeedback && aiError.response.promptFeedback.blockReason) {
         console.warn(`⚠️ Gemini API bloqueou o prompt: ${aiError.response.promptFeedback.blockReason}. Forçando fallback de medicamentos.`);
-        aiResponseText = "Atenção (Política de Conteúdo da IA)"; // Força o texto para ativar o fallback local
+        aiResponseText = "Atenção (Política de Conteúdo da IA)";
       } else {
+<<<<<<< HEAD
         const errorMsg = `🤖 *ASSISTENTE TEMPORARIAMENTE INDISPONÍVEL*\n\n` +
           `Estou com dificuldades momentâneas para processar sua mensagem.\n\n` +
           `💡 *Sugestões:*\n` +
@@ -663,6 +859,16 @@ async function processarComIACompleta(message: any): Promise<void> {
           `• Use */test* para verificar o status\n\n` +
           `🔄 Tentarei novamente em alguns instantes...`;
         await enviarComFormatosCorretos(from, errorMsg); // Corrected function name
+=======
+        const errorMsg = `🤖 *ASSISTENTE TEMPORARIAMENTE INDISPONÍVEL*\\n\\n` +
+          `Estou com dificuldades momentâneas para processar sua mensagem.\\n\\n` +
+          `💡 *Sugestões:*\\n` +
+          `• Tente reformular sua pergunta\\n` +
+          `• Envie uma mensagem mais simples\\n` +
+          `• Use */test* para verificar o status\\n\\n` +
+          `🔄 Tentarei novamente em alguns instantes...`;
+        await enviarComFormatosCorretos(from, errorMsg);
+>>>>>>> integracao-whatsapp-api
         return;
       }
     }
@@ -682,8 +888,13 @@ async function processarComIACompleta(message: any): Promise<void> {
           const finalResponse = `_Atenção (Política de Conteúdo da IA)_ - Para sua segurança, por favor, consulte diretamente um *farmacêutico* em nossa loja ou um *médico*. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas ${libResult.toLowerCase()}. Por favor, procure um profissional de saúde para obter orientação.`;
           await enviarComFormatosCorretos(from, finalResponse); // Corrected function name
         } else {
+<<<<<<< HEAD
           const finalResponse = `_De acordo com nossa base de dados interna:_\n\n${libResult}\n\n*_Importante:_ Esta informação é para fins educacionais e informativos e não substitui o conselho, diagnóstico ou tratamento de um profissional de saúde qualificado. Sempre consulte um *médico* ou *farmacêutico* para orientações específicas sobre sua saúde e para a interpretação correta das informações.`;
           await enviarComFormatosCorretos(from, finalResponse); // Corrected function name
+=======
+          const finalResponse = `_De acordo com nossa base de dados interna:_\\n\\n${libResult}\\n\\n*_Importante:_ Esta informação é para fins educacionais e informativos e não substitui o conselho, diagnóstico ou tratamento de um profissional de saúde qualificado. Sempre consulte um *médico* ou *farmacêutico* para orientações específicas sobre sua saúde e para a interpretação correta das informações.`;
+          await enviarComFormatosCorretos(from, finalResponse);
+>>>>>>> integracao-whatsapp-api
         }
       } else {
         console.warn("⚠️ Não foi possível extrair nome do medicamento ou tipo de informação da mensagem do usuário para o fallback.");
@@ -691,16 +902,30 @@ async function processarComIACompleta(message: any): Promise<void> {
         await enviarComFormatosCorretos(from, finalResponse); // Corrected function name
       }
     } else {
+<<<<<<< HEAD
       await enviarComFormatosCorretos(from, aiResponseText); // Corrected function name
+=======
+      await enviarComFormatosCorretos(from, aiResponseText);
+>>>>>>> integracao-whatsapp-api
     }
   } catch (error) {
     console.error('❌ [AI PROCESS] Erro crítico no processamento:', error);
+<<<<<<< HEAD
     const recoveryMsg = `⚠️ *ERRO TEMPORÁRIO DETECTADO*\n\n` +
       `O sistema detectou um problema momentâneo e está se recuperando automaticamente.\n\n` +
       `🔄 *Ações tomadas:*\n` +
       `• Reinicialização automática em andamento\n` +
       `• Sistema WhatsApp mantido ativo\n` +
       `• Logs de erro registrados\n\n` +
+=======
+
+    const recoveryMsg = `⚠️ *ERRO TEMPORÁRIO DETECTADO*\\n\\n` +
+      `O sistema detectou um problema momentâneo e está se recuperando automaticamente.\\n\\n` +
+      `🔄 *Ações tomadas:*\\n` +
+      `• Reinicialização automática em andamento\\n` +
+      `• Sistema WhatsApp mantido ativo\\n` +
+      `• Logs de erro registrados\\n\\n` +
+>>>>>>> integracao-whatsapp-api
       `Use */test* para verificar o status de recuperação.`;
     try {
       await enviarComFormatosCorretos(from, recoveryMsg); // Corrected function name
