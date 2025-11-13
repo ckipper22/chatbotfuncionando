@@ -1,49 +1,38 @@
 // src/app/next_api/whatsapp/webhook/route.ts
-
+import { consultarProduto } from '@/lib/services/api-confere-nota';
 import { NextRequest, NextResponse } from 'next/server';
-import { getGeminiService } from '../../../../lib/services/gemini-service'; // Caminho ajustado para o novo serviço
-import { getMedicamentoInfo, medicamentosData } from '../../../../../Lib/medicamentos_data'; // Mantido do seu projeto
+import { getGeminiService } from '../../../../lib/services/gemini-service';
+import { getMedicamentoInfo, medicamentosData } from '../../../../../Lib/medicamentos_data';
 
 // =========================================================================
-// VARIÁVEIS E FUNÇÕES AUXILIARES PARA ENVIO WHATSAPP (do seu código anterior)
+// VARIÁVEIS E FUNÇÕES AUXILIARES PARA ENVIO WHATSAPP
 // =========================================================================
 
-// 🎯 FORMATOS QUE SABEMOS QUE FUNCIONAM (Apenas para referência/debug, a função abaixo é dinâmica)
 const FORMATOS_COMPROVADOS = [
-  '+5555984557096',   // Exemplo de formato funcional
-  '5555984557096',    // Exemplo de formato funcional
+  '+5555984557096',
+  '5555984557096',
 ];
 
-// 🧠 FUNÇÃO PARA CONVERTER NÚMERO PARA FORMATOS TENTÁVEIS
 function converterParaFormatoFuncional(numeroOriginal: string): string[] {
   console.log('🎯 [CONVERT] Convertendo para formato funcional:', numeroOriginal);
 
-  const numeroLimpo = numeroOriginal.replace(/\\D/g, ''); // Remove todos os caracteres não-dígitos
+  const numeroLimpo = numeroOriginal.replace(/\D/g, '');
   console.log('🎯 [CONVERT] Número limpo:', numeroLimpo);
 
-  // **** LÓGICA ESPECÍFICA DO SEU TESTE PARA O NÚMERO '555584557096' ****
-  // Esta lógica foi mantida exatamente como no seu snippet, pois você confirmou que funcionava.
   if (numeroLimpo === '555584557096') {
     const formatosFuncionais = [
-      '+5555984557096',   // Formato que funcionou no seu teste
-      '5555984557096',    // Formato que funcionou no seu teste
+      '+5555984557096',
+      '5555984557096',
     ];
     console.log('🎯 [CONVERT] ✅ Convertido para formatos funcionais (caso específico):', formatosFuncionais);
     return formatosFuncionais;
   }
-  // *******************************************************************
 
-  // Lógica genérica para outros números (com heurística para adicionar '9' em celulares brasileiros)
   let numeroConvertido = numeroLimpo;
 
-  // Heurística para adicionar o '9' a números de celular brasileiros que possam vir sem ele.
-  // Assume que um número de celular brasileiro tem 11 dígitos após o DDI (55).
-  // Ex: 55 DDD XXXXXXXX (10 dígitos) -> 55 DDD 9 XXXXXXXX (11 dígitos)
-  if (numeroLimpo.length === 12 && numeroLimpo.startsWith('55')) { // Ex: '551181234567' (55 DDD 8 digitos)
+  if (numeroLimpo.length === 12 && numeroLimpo.startsWith('55')) {
     const ddd = numeroLimpo.substring(2, 4);
     const numeroSemDDIeDDD = numeroLimpo.substring(4);
-    // Verifica se é um número de celular de 8 dígitos (sem o 9) e adiciona o 9.
-    // Exclui prefixos que geralmente não teriam o 9 (ex: 3003-xxxx, 4004-xxxx)
     if (numeroSemDDIeDDD.length === 8 && !['1','2','3','4','5'].includes(numeroSemDDIeDDD.charAt(0))) {
         numeroConvertido = '55' + ddd + '9' + numeroSemDDIeDDD;
         console.log('🎯 [CONVERT] ✅ Adicionado 9 para celular brasileiro (heurística):', numeroConvertido);
@@ -59,7 +48,6 @@ function converterParaFormatoFuncional(numeroOriginal: string): string[] {
   return formatosFinais;
 }
 
-// 🧪 TESTE SEQUENCIAL DOS FORMATOS
 async function testarFormatosSequencial(numero: string, texto: string): Promise<string | null> {
   console.log('🧪 [SEQUENTIAL TEST] Iniciando teste sequencial para:', numero);
 
@@ -75,14 +63,13 @@ async function testarFormatosSequencial(numero: string, texto: string): Promise<
       return formato;
     }
 
-    await new Promise(resolve => setTimeout(resolve, 300)); // Pequena pausa entre tentativas
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
 
   console.log('❌ [SEQUENTIAL TEST] Todos os formatos falharam');
   return null;
 }
 
-// 🚀 ENVIO ÚNICO COM LOG DETALHADO
 async function tentarEnvioUnico(numero: string, texto: string, tentativa: number): Promise<boolean> {
   try {
     console.log(`📤 [SEND ${tentativa}] Tentando enviar para: ${numero}`);
@@ -94,19 +81,18 @@ async function tentarEnvioUnico(numero: string, texto: string, tentativa: number
       type: 'text',
       text: {
         preview_url: false,
-        body: texto.substring(0, 4096) // Mensagens do WhatsApp têm limite de 4096 caracteres
+        body: texto.substring(0, 4096)
       }
     };
 
     console.log(`📝 [SEND ${tentativa}] Payload:`, JSON.stringify(payload, null, 2));
 
-    // Uso das variáveis de ambiente padronizadas
     const WHATSAPP_API_URL = `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
     const response = await fetch(WHATSAPP_API_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`, // Uso de WHATSAPP_ACCESS_TOKEN
+        'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -121,7 +107,6 @@ async function tentarEnvioUnico(numero: string, texto: string, tentativa: number
       console.log(`🎉 [SEND ${tentativa}] ✅ SUCESSO para: ${numero}`);
       return true;
     } else {
-      // Registrar erros específicos para depuração
       try {
         const errorData = JSON.parse(responseText);
         console.error(`💥 [SEND ${tentativa}] ❌ FALHA para: ${numero} - Status: ${response.status}, Erro:`, errorData);
@@ -137,8 +122,6 @@ async function tentarEnvioUnico(numero: string, texto: string, tentativa: number
   }
 }
 
-// Funções enviarComFormatosCorretos é o wrapper para testar e enviar.
-// Já está definida acima junto com suas dependências.
 async function enviarComFormatosCorretos(numeroOriginal: string, texto: string): Promise<boolean> {
   try {
     console.log('🎯 [SEND FIXED] Usando formatos comprovadamente funcionais para:', numeroOriginal);
@@ -160,23 +143,14 @@ async function enviarComFormatosCorretos(numeroOriginal: string, texto: string):
 }
 
 // =========================================================================
-// FUNÇÕES AUXILIARES PARA PROCESSAMENTO DE MENSAGENS (minha lógica)
+// FUNÇÕES AUXILIARES PARA PROCESSAMENTO DE MENSAGENS
 // =========================================================================
 
-/**
- * Tenta extrair o nome do medicamento e o tipo de informação desejada da mensagem do usuário.
- * Esta função é crucial para o mecanismo de fallback, pois ela tenta identificar
- * a intenção do usuário para consultar a base de dados interna `medicamentosData`.
- * @param message A mensagem de texto enviada pelo usuário.
- * @returns Um objeto contendo `drugName` (nome do medicamento) e `infoType` (tipo de informação),
- *          ambos opcionais, indicando se a extração foi bem-sucedida.
- */
 function parseUserMessageForDrugInfo(message: string): { drugName?: string; infoType?: string } {
   const lowerMessage = message.toLowerCase();
   let drugName: string | undefined;
   let infoType: string | undefined;
 
-  // CORREÇÃO APLICADA AQUI: REMOVIDAS AS BARRAS INVERTIDAS EXTRAS
   const infoTypeKeywords: { [key: string]: string[] } = {
     "classe terapeutica": ["classe terapeutica", "classe farmacologica", "categoria", "grupo de medicamentos", "tipo de remedio"],
     "posologia": ["posologia", "dose", "como usar", "modo de usar", "dosagem", "quantas vezes", "como tomar"],
@@ -211,10 +185,9 @@ function parseUserMessageForDrugInfo(message: string): { drugName?: string; info
 }
 
 // =========================================================================
-// ROTA NEXT.JS API - WEBHOOK PARA WHATSAPP BUSINESS API (do seu código anterior, com ajustes)
+// ROTA NEXT.JS API - WEBHOOK PARA WHATSAPP BUSINESS API
 // =========================================================================
 
-// Debug inicial
 console.log('🎯 [COMPLETE SYSTEM] Sistema completo com IA ativada!');
 console.log('✅ [FORMATS] Formatos que funcionam:', FORMATOS_COMPROVADOS);
 console.log('📊 [CONFIG] Status completo:');
@@ -223,7 +196,6 @@ console.log('   PHONE_ID:', process.env.WHATSAPP_PHONE_NUMBER_ID || '❌');
 console.log('   ACCESS_TOKEN:', process.env.WHATSAPP_ACCESS_TOKEN ? '✅' : '❌');
 console.log('   GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ IA ATIVADA!' : '❌ IA DESATIVADA');
 
-// GET handler - Verificação do Webhook
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const mode = searchParams.get('hub.mode');
@@ -251,32 +223,26 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
 
-// POST handler - Processamento de mensagens
 export async function POST(request: NextRequest) {
   try {
     console.log('📨 [WEBHOOK] Nova mensagem recebida');
 
-    // Validação de configuração crítica
     if (!process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN) {
       console.error('❌ [WEBHOOK] Configuração crítica faltando: WHATSAPP_PHONE_NUMBER_ID ou WHATSAPP_ACCESS_TOKEN');
-      // Envia uma resposta 500 para o WhatsApp, indicando que o webhook falhou internamente.
       return NextResponse.json({ error: 'Configuration error' }, { status: 500 });
     }
 
     const body = await request.json();
     console.log('📦 [WEBHOOK] Payload recebido:', JSON.stringify(body, null, 2));
 
-    // Extrair dados do webhook
     const value = body.entry?.[0]?.changes?.[0]?.value;
 
-    // Processar status de entrega (mensagens que você enviou, que foram entregues, lidas, etc.)
     if (value?.statuses) {
       const status = value.statuses[0]?.status;
       console.log('📊 [STATUS] Status de entrega recebido:', status);
       return NextResponse.json({ status: 'ok' }, { status: 200 });
     }
 
-    // Processar mensagens recebidas
     const messages = value?.messages;
     if (!messages?.length) {
       console.log('ℹ️ [WEBHOOK] Nenhuma mensagem para processar ou tipo inválido');
@@ -285,7 +251,6 @@ export async function POST(request: NextRequest) {
 
     console.log(`🔄 [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
 
-    // Processar cada mensagem
     for (const message of messages) {
       await processarComIACompleta(message);
     }
@@ -294,7 +259,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('❌ [WEBHOOK] Erro crítico no sistema:', error);
-    // Em caso de erro crítico no webhook, retorna 500
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -321,12 +285,88 @@ async function processarComIACompleta(message: any): Promise<void> {
 
     console.log(`   [AI PROCESS] De ${from}: "${userMessage}"`);
 
-    const geminiService = getGeminiService(); // Obtém a instância do serviço Gemini
+    const geminiService = getGeminiService();
 
-    // Comandos administrativos (mantidos do seu código)
+    // 👇👇👇 CONSULTA DE PRODUTOS - ADICIONADO AQUI 👇👇👇
+    if (lowerMessage.startsWith('buscar ') ||
+        lowerMessage.startsWith('produto ') ||
+        lowerMessage.startsWith('consulta ') ||
+        lowerMessage.startsWith('preço ') ||
+        lowerMessage.startsWith('preco ') ||
+        lowerMessage.startsWith('estoque ')) {
+
+      console.log(`🛍️ [PRODUTO] Consultando produto: "${userMessage}"`);
+
+      try {
+        const termoBusca = userMessage.replace(/^(buscar|produto|consulta|preço|preco|estoque)\s*/i, '').trim();
+
+        if (termoBusca.length < 2) {
+          await enviarComFormatosCorretos(from,
+            `🔍 *BUSCA DE PRODUTOS*\\n\\n` +
+            `Por favor, digite o nome do produto que deseja buscar (mínimo 2 caracteres).\\n\\n` +
+            `💡 *Exemplos:*\\n` +
+            `• *buscar paracetamol*\\n` +
+            `• *produto dipirona*\\n` +
+            `• *estoque nimesulida*`
+          );
+          return;
+        }
+
+        const resultado = await consultarProduto(termoBusca);
+
+        if (!resultado.success || resultado.count === 0) {
+          await enviarComFormatosCorretos(from,
+            `❌ *PRODUTO NÃO ENCONTRADO*\\n\\n` +
+            `Não encontrei produtos para "*${termoBusca}*".\\n\\n` +
+            `💡 *Sugestões:*\\n` +
+            `• Verifique a ortografia\\n` +
+            `• Tente um termo mais específico\\n` +
+            `• Use apenas o nome principal`
+          );
+          return;
+        }
+
+        let resposta = `🔍 *${resultado.count} PRODUTO(S) ENCONTRADO(S)*\\n` +
+                      `*Busca:* "${termoBusca}"\\n\\n`;
+
+        resultado.data.slice(0, 5).forEach((produto: any, index: number) => {
+          resposta += `*${index + 1}. ${produto.nome_produto}*\\n`;
+          resposta += `💊 ${produto.nom_laboratorio}\\n`;
+          resposta += `💰 ${produto.preco_final_venda}`;
+          if (produto.desconto_percentual > 0) {
+            resposta += ` (🔻${produto.desconto_percentual.toFixed(1)}% OFF)`;
+          }
+          resposta += `\\n📦 Estoque: ${produto.qtd_estoque} unidades\\n`;
+          resposta += `📋 Código: ${produto.cod_reduzido}\\n\\n`;
+        });
+
+        if (resultado.count > 5) {
+          resposta += `📊 *E mais ${resultado.count - 5} produtos...*\\n`;
+          resposta += `Use um termo mais específico para ver todos.\\n\\n`;
+        }
+
+        resposta += `💡 *Dica:* Use *"código 12345"* para detalhes de um produto específico.`;
+
+        await enviarComFormatosCorretos(from, resposta);
+        return;
+
+      } catch (error) {
+        console.error('❌ [PRODUTO] Erro na consulta:', error);
+        await enviarComFormatosCorretos(from,
+          `⚠️ *ERRO NA CONSULTA*\\n\\n` +
+          `Não consegui buscar produtos no momento.\\n` +
+          `Nossa equipe foi notificada.\\n\\n` +
+          `Tente novamente em alguns instantes.`
+        );
+        return;
+      }
+    }
+    // 👆👆👆 FIM DA CONSULTA DE PRODUTOS 👆👆👆
+
+    // Comandos administrativos
     if (lowerMessage === '/test' || lowerMessage === 'test') {
       const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA ATIVA' : '⚠️ IA INATIVA';
-      const statusMsg = `✅ *SISTEMA COMPLETO FUNCIONANDO!*\\n\\n🔗 WhatsApp: ✅ Conectado\\n${statusIA}\\n📊 Formatos: ✅ Corretos\\n🚀 Status: 100% Operacional\\n\\nTudo funcionando perfeitamente!`;
+      const statusMsg = `✅ *SISTEMA COMPLETO FUNCIONANDO!*\\n\\n🔗 WhatsApp: ✅ Conectado\\n${statusIA}\\n🛍️ Produtos: ✅ API Conectada\\n📊 Formatos: ✅ Corretos\\n🚀 Status: 100% Operacional\\n\\nTudo funcionando perfeitamente!`;
       await enviarComFormatosCorretos(from, statusMsg);
       return;
     }
@@ -334,7 +374,7 @@ async function processarComIACompleta(message: any): Promise<void> {
     if (lowerMessage === '/debug' || lowerMessage === 'debug') {
       const formatos = converterParaFormatoFuncional(from);
       const statusIA = process.env.GEMINI_API_KEY ? '✅ ATIVA' : '❌ INATIVA';
-      const debugInfo = `🔧 *DEBUG SISTEMA COMPLETO*\\n\\n📱 Seu número: ${from}\\n🎯 Convertido para:\\n• ${formatos[0]}\\n• ${formatos[1]}\\n\\n🤖 IA Status: ${statusIA}\\n📊 Formatos: ${FORMATOS_COMPROVADOS.length} testados\\n✅ Sistema: 100% Operacional\\n\\n🚀 *TUDO FUNCIONANDO!*`;
+      const debugInfo = `🔧 *DEBUG SISTEMA COMPLETO*\\n\\n📱 Seu número: ${from}\\n🎯 Convertido para:\\n• ${formatos[0]}\\n• ${formatos[1]}\\n\\n🤖 IA Status: ${statusIA}\\n🛍️ API Produtos: ✅ Conectada\\n📊 Formatos: ${FORMATOS_COMPROVADOS.length} testados\\n✅ Sistema: 100% Operacional\\n\\n🚀 *TUDO FUNCIONANDO!*`;
       await enviarComFormatosCorretos(from, debugInfo);
       return;
     }
@@ -342,7 +382,7 @@ async function processarComIACompleta(message: any): Promise<void> {
     if (lowerMessage === '/limpar' || lowerMessage === 'limpar') {
       try {
         if (process.env.GEMINI_API_KEY) {
-          geminiService.clearHistory(from); // Usa a instância do serviço para limpar histórico
+          geminiService.clearHistory(from);
           await enviarComFormatosCorretos(from, '🗑️ *HISTÓRICO LIMPO!*\\n\\nMemória da IA resetada com sucesso.\\nVamos começar uma nova conversa! 🚀');
         } else {
           await enviarComFormatosCorretos(from, '🗑️ *COMANDO RECEBIDO!*\\n\\nIA será ativada em breve.\\nSistema WhatsApp funcionando normalmente.');
@@ -357,6 +397,7 @@ async function processarComIACompleta(message: any): Promise<void> {
     if (lowerMessage === '/ajuda' || lowerMessage === 'ajuda' || lowerMessage === '/help') {
       const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA totalmente ativa - Posso conversar sobre qualquer assunto!' : '⚙️ IA sendo configurada';
       const helpMsg = `🤖 *ASSISTENTE INTELIGENTE ATIVO*\\n\\n` +
+        `🛍️ *buscar [produto]* - Consulta produtos em estoque\\n` +
         `✅ */test* - Status do sistema\\n` +
         `🔧 */debug* - Informações técnicas\\n` +
         `🗑️ */limpar* - Resetar conversa\\n` +
@@ -373,23 +414,21 @@ async function processarComIACompleta(message: any): Promise<void> {
     // Processamento com Inteligência Artificial
     if (!process.env.GEMINI_API_KEY) {
       console.log('⚠️ [AI PROCESS] GEMINI_API_KEY não encontrada');
-      await enviarComFormatosCorretos(from, '🤖 *ASSISTENTE QUASE PRONTO!*\\n\\nSistema WhatsApp: ✅ Funcionando perfeitamente\\nIA: ⚙️ Sendo configurada\\n\\nEm breve estarei conversando inteligentemente!\\nUse */test* para verificar status.');
+      await enviarComFormatosCorretos(from, '🤖 *ASSISTENTE QUASE PRONTO!*\\n\\nSistema WhatsApp: ✅ Funcionando perfeitamente\\n🛍️ Produtos: ✅ API Conectada\\nIA: ⚙️ Sendo configurada\\n\\nEm breve estarei conversando inteligentemente!\\nUse */test* para verificar status.');
       return;
     }
 
     let aiResponseText: string;
     try {
       console.log('🤖 [AI] Iniciando processamento com Gemini IA...');
-      aiResponseText = await geminiService.generateResponse(userMessage, from); // Usa o serviço Gemini
+      aiResponseText = await geminiService.generateResponse(userMessage, from);
       console.log(`🤖 [AI] Resposta da IA gerada com sucesso (${aiResponseText.length} caracteres)`);
     } catch (aiError: any) {
       console.error('❌ [AI] Erro na inteligência artificial:', aiError);
-      // Se o Gemini bloquear o conteúdo ou houver um erro, tenta ativar o fallback
       if (aiError.response && aiError.response.promptFeedback && aiError.response.promptFeedback.blockReason) {
         console.warn(`⚠️ Gemini API bloqueou o prompt: ${aiError.response.promptFeedback.blockReason}. Forçando fallback de medicamentos.`);
-        aiResponseText = "Atenção (Política de Conteúdo da IA)"; // Força o texto para ativar o fallback local
+        aiResponseText = "Atenção (Política de Conteúdo da IA)";
       } else {
-        // Mensagem de erro genérica da IA, sem ativar o fallback de medicamentos
         const errorMsg = `🤖 *ASSISTENTE TEMPORARIAMENTE INDISPONÍVEL*\\n\\n` +
           `Estou com dificuldades momentâneas para processar sua mensagem.\\n\\n` +
           `💡 *Sugestões:*\\n` +
@@ -398,52 +437,41 @@ async function processarComIACompleta(message: any): Promise<void> {
           `• Use */test* para verificar o status\\n\\n` +
           `🔄 Tentarei novamente em alguns instantes...`;
         await enviarComFormatosCorretos(from, errorMsg);
-        return; // Retorna para não continuar com o fallback de medicamentos se o erro for genérico
+        return;
       }
     }
 
-    // Padrão Regex para identificar o disclaimer de política de conteúdo (com escapes para WhatsApp)
-    // Este regex também foi levemente ajustado para simplificar os escapes, caso a string do Gemini mude no futuro.
-    // O importante é que ele capture a frase "Política de Conteúdo da IA" ou as outras frases de disclaimer.
     const medicalDisclaimerPattern = /atenção \(política de conteúdo da ia\)|não posso fornecer informações médicas|não sou um profissional de saúde|não estou qualificado para dar conselhos médicos|consulte um médico ou farmacêutico/i;
     const isMedicalDisclaimer = medicalDisclaimerPattern.test(aiResponseText.toLowerCase());
 
-    // Lógica principal: se a IA retornou um disclaimer médico ou foi bloqueada, tenta o fallback de medicamentos.
     if (isMedicalDisclaimer) {
       console.log("➡️ LLM acionou o disclaimer médico ou foi bloqueado. Tentando consultar a Lib/medicamentos_data.ts como fallback.");
 
       const parsedInfo = parseUserMessageForDrugInfo(userMessage);
 
-      // Verificamos se conseguimos extrair o medicamento e o tipo de info
       if (parsedInfo.drugName && parsedInfo.infoType) {
         console.log(`🔎 Informação extraída para fallback: Medicamento: '${parsedInfo.drugName}', Tipo: '${parsedInfo.infoType}'`);
         const libResult = getMedicamentoInfo(parsedInfo.drugName, parsedInfo.infoType);
 
-        // Ajuste CRÍTICO aqui: Agora verificamos se o `libResult` *NÃO* é uma mensagem de erro
         if (libResult.includes("Não encontrei informações sobre o medicamento") || libResult.includes("Não tenho a informação específica sobre")) {
-          // Se a Lib também não encontrou ou não tem a informação
           const finalResponse = `_Atenção (Política de Conteúdo da IA)_ - Para sua segurança, por favor, consulte diretamente um *farmacêutico* em nossa loja ou um *médico*. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas ${libResult.toLowerCase()}. Por favor, procure um profissional de saúde para obter orientação.`;
           await enviarComFormatosCorretos(from, finalResponse);
         } else {
-          // Se a Lib ENCONTROU a informação, retornamos a informação da Lib + disclaimer
           const finalResponse = `_De acordo com nossa base de dados interna:_\\n\\n${libResult}\\n\\n*_Importante:_ Esta informação é para fins educacionais e informativos e não substitui o conselho, diagnóstico ou tratamento de um profissional de saúde qualificado. Sempre consulte um *médico* ou *farmacêutico* para orientações específicas sobre sua saúde e para a interpretação correta das informações.`;
           await enviarComFormatosCorretos(from, finalResponse);
         }
       } else {
-        // Caso não tenha conseguido extrair nome do medicamento ou tipo de informação para o fallback
         console.warn("⚠️ Não foi possível extrair nome do medicamento ou tipo de informação da mensagem do usuário para o fallback.");
         const finalResponse = `_Atenção (Política de Conteúdo da IA)_ - Para sua segurança, por favor, consulte diretamente um *farmacêutico* em nossa loja ou um *médico*. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas não consegui entender qual medicamento ou informação específica você procura. Por favor, tente perguntar de forma mais direta (ex: _'Qual a posologia da losartana?'_ ou _'Indicações do paracetamol?'_).`;
         await enviarComFormatosCorretos(from, finalResponse);
       }
     } else {
-      // Se o LLM deu uma resposta considerada "normal" (sem disclaimer médico), envia diretamente.
       await enviarComFormatosCorretos(from, aiResponseText);
     }
 
   } catch (error) {
     console.error('❌ [AI PROCESS] Erro crítico no processamento:', error);
 
-    // Mensagem de recuperação para o usuário em caso de erro crítico
     const recoveryMsg = `⚠️ *ERRO TEMPORÁRIO DETECTADO*\\n\\n` +
       `O sistema detectou um problema momentâneo e está se recuperando automaticamente.\\n\\n` +
       `🔄 *Ações tomadas:*\\n` +
