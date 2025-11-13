@@ -312,7 +312,9 @@ async function processarComIACompleta(message: any): Promise<void> {
           return;
         }
 
+        console.log(`🔍 [PRODUTO] Buscando: "${termoBusca}" na API Flask...`);
         const resultado = await consultarProduto(termoBusca);
+        console.log(`✅ [PRODUTO] Resultado: ${resultado.count} produtos encontrados`);
 
         if (!resultado.success || resultado.count === 0) {
           await enviarComFormatosCorretos(from,
@@ -331,17 +333,17 @@ async function processarComIACompleta(message: any): Promise<void> {
 
         resultado.data.slice(0, 5).forEach((produto: any, index: number) => {
           resposta += `*${index + 1}. ${produto.nome_produto}*\\n`;
-          resposta += `💊 ${produto.nom_laboratorio}\\n`;
+          resposta += `🏭 ${produto.nom_laboratorio}\\n`;
           resposta += `💰 ${produto.preco_final_venda}`;
           if (produto.desconto_percentual > 0) {
-            resposta += ` (🔻${produto.desconto_percentual.toFixed(1)}% OFF)`;
+            resposta += ` (🤑${produto.desconto_percentual.toFixed(1)}% OFF)`;
           }
           resposta += `\\n📦 Estoque: ${produto.qtd_estoque} unidades\\n`;
-          resposta += `📋 Código: ${produto.cod_reduzido}\\n\\n`;
+          resposta += `🔢 Código: ${produto.cod_reduzido}\\n\\n`;
         });
 
         if (resultado.count > 5) {
-          resposta += `📊 *E mais ${resultado.count - 5} produtos...*\\n`;
+          resposta += `📋 *E mais ${resultado.count - 5} produtos...*\\n`;
           resposta += `Use um termo mais específico para ver todos.\\n\\n`;
         }
 
