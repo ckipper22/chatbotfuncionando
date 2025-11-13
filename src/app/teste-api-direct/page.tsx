@@ -23,7 +23,7 @@ export default function TesteAPIDirect() {
           setResultado({ success: false, error: `HTTP ${response.status}` });
         }
       } catch (error) {
-        setResultado({ success: false, error: error.message });
+    setResultado({ success: false, error: String(error) });
       }
     }
 
