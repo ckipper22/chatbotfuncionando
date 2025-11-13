@@ -1,5 +1,5 @@
 // src/app/next_api/whatsapp/webhook/route.ts
-import { consultarProduto } from '@/lib/services/api-confere-nota';
+import { consultarProduto } from '@/lib/api-confere-nota';
 import { NextRequest, NextResponse } from 'next/server';
 import { getGeminiService } from '../../../../lib/services/gemini-service';
 import { getMedicamentoInfo, medicamentosData } from '../../../../../Lib/medicamentos_data';
