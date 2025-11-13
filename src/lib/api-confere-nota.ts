@@ -1,12 +1,20 @@
 ﻿// src/lib/api-confere-nota.ts
 import { cacheService } from './cache-service';
 
-export async function consultarProduto(termo: string) {
+// Interface para tipagem do resultado
+export interface ConsultaProdutoResult {
+  success: boolean;
+  count: number;
+  data: any[];
+  error?: string;
+}
+
+export async function consultarProduto(termo: string): Promise<ConsultaProdutoResult> {
   try {
     const cacheKey = `produto:${termo.toLowerCase().trim()}`;
 
     // Tenta cache primeiro
-    const cachedResult = cacheService.get(cacheKey);
+    const cachedResult = cacheService.get<ConsultaProdutoResult>(cacheKey);
     if (cachedResult) {
       console.log(`🔍 [CACHE] Cache hit: "${termo}" - ${cachedResult.count} produtos`);
       return cachedResult;
@@ -24,7 +32,7 @@ export async function consultarProduto(termo: string) {
 
     const data = await response.json();
 
-    const resultado = {
+    const resultado: ConsultaProdutoResult = {
       success: data.success,
       count: data.count,
       data: data.data
