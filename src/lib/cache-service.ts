@@ -25,7 +25,7 @@ export class CacheService {
   }
 
   get<T>(key: string): T | null {
-    const item = this.cache.get(key);
+    const item = this.cache.get(key);  // CORRIGIDO: era .set, agora é .get
     
     if (!item) return null;
     
