@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2020", // Sugeri ES2020 para recursos mais modernos, mas ES2017 também funciona.
+    "target": "ES2020",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
@@ -18,12 +18,15 @@
         "name": "next"
       }
     ],
-    // 🚀 MUDANÇAS AQUI PARA RESOLVER CAMINHOS
-    "baseUrl": ".", // Diz ao TypeScript para resolver caminhos absolutos a partir da raiz do projeto
+    "baseUrl": ".", // Mantém a raiz do projeto como base para resolução de módulos
     "paths": {
-      "@/*": ["./*"] // Mapeia "@/" para a raiz do projeto (onde packages/multi-tenant está)
+      // 🚀 MUDANÇA ESSENCIAL AQUI:
+      // Tenta resolver primeiro a partir de 'src/*', depois a partir da raiz do projeto './*'
+      // Isso permite que '@/components/...' resolva para 'src/components/...'
+      // E '@/packages/...' resolva para 'packages/...' (na raiz)
+      "@/*": ["./src/*", "./*"]
     },
-    "forceConsistentCasingInFileNames": true // Boa prática adicionada
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
