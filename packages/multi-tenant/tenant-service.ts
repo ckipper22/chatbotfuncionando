@@ -1,4 +1,5 @@
-﻿import { createPool, Pool } from 'pg'; // Biblioteca para conectar ao PostgreSQL
+﻿// packages/multi-tenant/tenant-service.ts
+import { createPool, Pool } from 'pg'; // Biblioteca para conectar ao PostgreSQL
 import { supabase } from './supabase-client'; // Nosso cliente Supabase
 import crypto from 'crypto'; // Para criptografia/decriptografia de senhas
 
@@ -7,6 +8,8 @@ interface Client {
   id: string;
   name: string;
   whatsapp_phone_id: string;
+  cod_rede: number; // <-- NOVO: Código da rede do cliente
+  cod_filial: number; // <-- NOVO: Código da filial padrão do cliente
   // Adicione outros campos da tabela 'clients' aqui se necessário
 }
 
@@ -45,10 +48,16 @@ export class TenantService {
     }
   }
 
+  // Novo método para descriptografar a senha - útil no webhook
+  async decryptPassword(encryptedPassword: string): Promise<string> {
+    return decrypt(encryptedPassword);
+  }
+
   async findClientByPhoneId(whatsappPhoneId: string): Promise<Client | null> {
+    // 💡 ATENÇÃO: Adicionei 'cod_rede' e 'cod_filial' ao SELECT
     const { data, error } = await supabase
       .from('clients')
-      .select('*')
+      .select('id, name, whatsapp_phone_id, cod_rede, cod_filial')
       .eq('whatsapp_phone_id', whatsappPhoneId)
       .single();
 
@@ -110,15 +119,14 @@ export class TenantService {
     }
   }
 
-  async getProductInfo(clientId: string, searchTerm: string): Promise<any[] | null> {
+  // 💡 MODIFICADO: Agora recebe codRede e codFilial como parâmetros
+  async getProductInfo(clientId: string, searchTerm: string, codRede: number, codFilial: number): Promise<any[] | null> {
     const pool = await this.getClientDbConnectionPool(clientId);
     if (!pool) {
       return null;
     }
 
     try {
-      // A query SQL exata que você já usa no seu Flask API
-      // Certifique-se de que o nome das tabelas e colunas correspondem ao banco do cliente
       const result = await pool.query(`
         SELECT
           t1.cod_reduzido,
@@ -129,23 +137,53 @@ export class TenantService {
           t1.vlr_venda
         FROM cadprodu t1
         LEFT JOIN cadestoq t3 ON t1.cod_reduzido = t3.cod_reduzido
-          AND t3.cod_rede = t1.cod_rede
-          AND t3.cod_filial = $1
+          AND t3.cod_rede = $1
+          AND t3.cod_filial = $2
         LEFT JOIN desconto_produto_vw AS t4 ON t4.cod_reduzido = t1.cod_reduzido
         LEFT JOIN public.cadlabor t5 ON t1.cod_laborat = t5.cod_laborat
-        WHERE t1.nom_produto ILIKE $2
+        WHERE t1.nom_produto ILIKE $3 AND t1.cod_rede = $1
         ORDER BY
           CASE WHEN t3.qtd_estoque > 0 THEN 0 ELSE 1 END,
           t1.nom_produto
         LIMIT 10;
-      `, [1, `%${searchTerm}%`]); // O $1 e $2 são placeholders para os parâmetros
-
-      // TODO: O cod_rede e cod_filial (aqui como '1') devem vir da configuração do cliente no Supabase.
-      // Por enquanto, estamos usando '1' como um valor fixo.
+      `, [codRede, codFilial, `%${searchTerm}%`]); // Use os novos parâmetros aqui
 
       return result.rows;
     } catch (queryError) {
       console.error(`Error querying product for client ${clientId}:`, queryError);
+      return null;
+    }
+  }
+
+  // �� NOVO MÉTODO: Para buscar produtos por código
+  async getProductByCode(clientId: string, productCode: string, codRede: number, codFilial: number): Promise<any | null> {
+    const pool = await this.getClientDbConnectionPool(clientId);
+    if (!pool) {
+      return null;
+    }
+
+    try {
+      const result = await pool.query(`
+        SELECT
+          t1.cod_reduzido,
+          t1.nom_produto,
+          t4.vlr_liquido,
+          t3.qtd_estoque,
+          t5.nom_laborat,
+          t1.vlr_venda
+        FROM cadprodu t1
+        LEFT JOIN cadestoq t3 ON t1.cod_reduzido = t3.cod_reduzido
+          AND t3.cod_rede = $1
+          AND t3.cod_filial = $2
+        LEFT JOIN desconto_produto_vw AS t4 ON t4.cod_reduzido = t1.cod_reduzido
+        LEFT JOIN public.cadlabor t5 ON t1.cod_laborat = t5.cod_laborat
+        WHERE t1.cod_reduzido = $3 AND t1.cod_rede = $1
+        LIMIT 1;
+      `, [codRede, codFilial, productCode]);
+
+      return result.rows[0] || null; // Retorna o primeiro produto encontrado ou null
+    } catch (queryError) {
+      console.error(`Error querying product by code for client ${clientId}:`, queryError);
       return null;
     }
   }

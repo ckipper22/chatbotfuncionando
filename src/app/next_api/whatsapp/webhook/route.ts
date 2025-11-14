@@ -1,16 +1,14 @@
 // src/app/next_api/whatsapp/webhook/route.ts
-import { consultarProduto, ConsultaProdutoResult } from '@/lib/api-confere-nota'; // Mantido para outras funcionalidades se houver
 import { NextRequest, NextResponse } from 'next/server';
 import { getGeminiService } from '../../../../lib/services/gemini-service';
 import { getMedicamentoInfo, medicamentosData } from '../../../../../Lib/medicamentos_data';
 
 // 🚀 MULTI-TENANT IMPORTS
-import { Pool } from 'pg'; // Importar o Pool do 'pg'
-import { supabase } from '@/packages/multi-tenant/supabase-client'; // Importar cliente Supabase
-import { TenantService } from '@/packages/multi-tenant/tenant-service'; // Importar TenantService, ClientConfig, ClientConnectionConfig
+// Removido: import { Pool } from 'pg'; // Não é mais necessário importar diretamente aqui
+// Removido: import { supabase } from '@/packages/multi-tenant/supabase-client'; // Não é mais necessário importar diretamente aqui
+import { tenantService } from '@/packages/multi-tenant/tenant-service'; // Importar a instância JÁ EXPORTADA do TenantService
 
-// 🚀 MULTI-TENANT: Inicializa o TenantService
-const tenantService = new TenantService(supabase);
+// Removido: const tenantService = new TenantService(supabase); // Não instanciamos mais aqui, usamos a instância exportada
 
 // =========================================================================
 // VARIÁVEIS E FUNÇÕES AUXILIARES PARA ENVIO WHATSAPP
@@ -284,13 +282,12 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
         hasText: !!text?.body
     });
 
-    // 🚀 MULTI-TENANT: Início da identificação do cliente
-    let clientDbConfig: any = null;
     let clientWhatsAppPhoneNumberId: string | undefined;
     let clientWhatsAppAccessToken: string | undefined; // Para enviar a mensagem com o token do cliente
 
+    // 🚀 MULTI-TENANT: Início da identificação do cliente
+    let client: any; // Declaramos 'client' aqui para ser acessível em todo o escopo
     try {
-        // ⚠️ AQUI ESTÁ A CHAVE: Extrair o phone_number_id do payload do webhook
         const phoneNumberId = rawPayload.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
 
         if (!phoneNumberId) {
@@ -300,38 +297,29 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
         }
 
         console.log(`[MULTI-TENANT] Phone Number ID recebido: ${phoneNumberId}`);
-        clientWhatsAppPhoneNumberId = phoneNumberId; // Armazena para debug ou uso futuro
+        clientWhatsAppPhoneNumberId = phoneNumberId;
 
         // Busca o cliente pelo Phone Number ID
-        const client = await tenantService.identifyClient(phoneNumberId);
+        client = await tenantService.findClientByPhoneId(phoneNumberId); // Usamos o método do TenantService
 
-        if (client) {
-            // Busca as configurações de conexão com o banco de dados do cliente
-            const dbConfig = await tenantService.getClientDatabaseConfig(client.id);
-            if (dbConfig) {
-                // Descriptografa a senha (ainda um placeholder, implemente uma lógica de criptografia forte aqui)
-                const decryptedPassword = await tenantService.decrypt(dbConfig.db_password_encrypted);
-                clientDbConfig = {
-                    host: dbConfig.db_host,
-                    database: dbConfig.db_name,
-                    user: dbConfig.db_user,
-                    password: decryptedPassword,
-                    port: 5432 // Assumindo porta padrão PostgreSQL
-                };
-                console.log(`✅ [MULTI-TENANT] Cliente identificado e configuração de DB obtida para: ${client.name}`);
-                // 🚀 MULTI-TENANT: Recuperar o Access Token do cliente, se armazenado no Supabase
-                // Isso permitiria que cada cliente use seu próprio token para enviar mensagens
-                // Por enquanto, continuaremos usando o WHATSAPP_ACCESS_TOKEN do .env.local
-            } else {
-                console.warn(`⚠️ [MULTI-TENANT] Nenhuma configuração de DB encontrada para o cliente ${client.name}. Enviando mensagem de erro.`);
-                await enviarComFormatosCorretos(from, `⚠️ Não foi possível carregar a configuração de banco de dados para sua farmácia. Favor contatar o suporte.`);
-                return;
-            }
-        } else {
+        if (!client) {
             console.warn(`⚠️ [MULTI-TENANT] Nenhum cliente encontrado para o Phone Number ID: ${phoneNumberId}. Enviando mensagem de não configurado.`);
             await enviarComFormatosCorretos(from, `❌ Seu número WhatsApp não está configurado em nosso sistema. Por favor, entre em contato para ativar o serviço.`);
             return;
         }
+
+        // Se o cliente foi encontrado, buscamos as credenciais de conexão do DB
+        const dbConnection = await tenantService.findClientConnection(client.id);
+
+        if (!dbConnection) {
+             console.warn(`⚠️ [MULTI-TENANT] Nenhuma configuração de DB encontrada para o cliente ${client.name}. Enviando mensagem de erro.`);
+             await enviarComFormatosCorretos(from, `⚠️ Não foi possível carregar a configuração de banco de dados para sua farmácia. Favor contatar o suporte.`);
+             return;
+        }
+
+        console.log(`✅ [MULTI-TENANT] Cliente '${client.name}' identificado. Cod. Rede: ${client.cod_rede}, Cod. Filial: ${client.cod_filial}.`);
+        // Aqui, 'client' agora contém 'cod_rede' e 'cod_filial' que vêm do Supabase
+        // Esses valores serão usados nas chamadas ao tenantService.getProductInfo
 
     } catch (multiTenantError) {
         console.error('❌ [MULTI-TENANT] Erro crítico na fase de identificação multi-tenant:', multiTenantError);
@@ -339,6 +327,7 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
         return;
     }
     // 🚀 MULTI-TENANT: Fim da identificação do cliente
+
 
     try {
         if (type !== 'text' || !text?.body) {
@@ -353,76 +342,97 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
 
         const geminiService = getGeminiService();
 
-        // 👇👇👇 CONSULTA DE PRODUTOS - AGORA USA A CONEXÃO DO CLIENTE 👇👇👇
+        // 👇👇👇 CONSULTA DE PRODUTOS - AGORA USA O tenantService e as configurações do cliente 👇👇👇
         if (lowerMessage.startsWith('buscar ') ||
             lowerMessage.startsWith('produto ') ||
             lowerMessage.startsWith('consulta ') ||
             lowerMessage.startsWith('preço ') ||
             lowerMessage.startsWith('preco ') ||
-            lowerMessage.startsWith('estoque ')) {
+            lowerMessage.startsWith('estoque ') ||
+            lowerMessage.startsWith('código ')) { // Adicionado "código" para busca por código
 
-            console.log(`🛍️ [PRODUTO] Consultando produto: "${userMessage}"`);
+            console.log(`🛍️ [PRODUTO] Consultando produto: "${userMessage}" para cliente (ID: ${client.id})`);
 
             try {
-                const termoBusca = userMessage.replace(/^(buscar|produto|consulta|preço|preco|estoque)\s*/i, '').trim();
+                let produtos: any[] | null = null;
+                let termoBusca = userMessage.replace(/^(buscar|produto|consulta|preço|preco|estoque|código)\s*/i, '').trim();
 
-                if (termoBusca.length < 2) {
-                    await enviarComFormatosCorretos(from,
-                        `🔍 *BUSCA DE PRODUTOS*\n\n` +
-                        `Por favor, digite o nome do produto que deseja buscar (mínimo 2 caracteres).\n\n` +
-                        `💡 *Exemplos:*\n` +
-                        `• *buscar paracetamol*\n` +
-                        `• *produto dipirona*\n` +
-                        `• *estoque nimesulida*`
-                    );
+                const buscaPorCodigo = lowerMessage.startsWith('código ');
+
+                if (buscaPorCodigo) {
+                    console(`🔍 [PRODUTO] Buscando por código: "${termoBusca}" no banco do cliente '${client.name}'...`);
+                    const produtoUnico = await tenantService.getProductByCode(client.id, termoBusca, client.cod_rede, client.cod_filial);
+                    if (produtoUnico) {
+                        produtos = [produtoUnico]; // Coloca o produto em um array para reusar a lógica de formatação
+                    } else {
+                        produtos = [];
+                    }
+                } else {
+                    if (termoBusca.length < 2) {
+                        await enviarComFormatosCorretos(from,
+                            `🔍 *BUSCA DE PRODUTOS*\n\n` +
+                            `Por favor, digite o nome ou o código do produto que deseja buscar (mínimo 2 caracteres para nome).\n\n` +
+                            `💡 *Exemplos:*\n` +
+                            `• *buscar paracetamol*\n` +
+                            `• *produto dipirona*\n` +
+                            `• *estoque nimesulida*\n` +
+                            `• *código 12345*`
+                        );
+                        return;
+                    }
+                    console.log(`🔍 [PRODUTO] Buscando por nome: "${termoBusca}" no banco do cliente '${client.name}'...`);
+                    produtos = await tenantService.getProductInfo(client.id, termoBusca, client.cod_rede, client.cod_filial);
+                }
+
+                if (!produtos || produtos.length === 0) {
+                    const mensagemNaoEncontrado = buscaPorCodigo
+                        ? `❌ *PRODUTO NÃO ENCONTRADO*\n\nNão encontrei o produto com o código "*${termoBusca}*" em seu estoque.\n\n💡 *Sugestão:*\n• Verifique se o código está correto.`
+                        : `❌ *PRODUTO NÃO ENCONTRADO*\n\nNão encontrei produtos para "*${termoBusca}*" em seu estoque.\n\n💡 *Sugestões:*\n• Verifique a ortografia\n• Tente um termo mais específico\n• Use apenas o nome principal`;
+
+                    await enviarComFormatosCorretos(from, mensagemNaoEncontrado);
                     return;
                 }
 
-                console.log(`🔍 [PRODUTO] Buscando: "${termoBusca}" na API Flask do cliente...`);
-                // 🚀 MULTI-TENANT: CHAMA A FUNÇÃO DE BUSCA NO BANCO DO CLIENTE
-                const resultado = await consultarProdutoNoCliente(termoBusca, clientDbConfig);
-                console.log(`✅ [PRODUTO] Resultado: ${resultado.count} produtos encontrados para o cliente.`);
+                let resposta = buscaPorCodigo
+                    ? `🔍 *DETALHES DO PRODUTO (CÓD: ${termoBusca})*\n`
+                    : `🔍 *${produtos.length} PRODUTO(S) ENCONTRADO(S)*\n*Busca:* "${termoBusca}"\n\n`;
 
-                if (!resultado.success || resultado.count === 0) {
-                    await enviarComFormatosCorretos(from,
-                        `❌ *PRODUTO NÃO ENCONTRADO*\n\n` +
-                        `Não encontrei produtos para "*${termoBusca}*" em seu estoque.\n\n` +
-                        `💡 *Sugestões:*\n` +
-                        `• Verifique a ortografia\n` +
-                        `• Tente um termo mais específico\n` +
-                        `• Use apenas o nome principal`
-                    );
-                    return;
-                }
+                const produtosParaExibir = buscaPorCodigo ? produtos : produtos.slice(0, 5);
 
-                let resposta = `🔍 *${resultado.count} PRODUTO(S) ENCONTRADO(S)*\n` +
-                               `*Busca:* "${termoBusca}"\n\n`;
+                produtosParaExibir.forEach((produto: any, index: number) => {
+                    resposta += `*${buscaPorCodigo ? '' : `${index + 1}. `}${produto.nom_produto}*\n`;
+                    resposta += `🏭 ${produto.nom_laborat || 'Não informado'}\n`;
 
-                resultado.data.slice(0, 5).forEach((produto: any, index: number) => {
-                    resposta += `*${index + 1}. ${produto.nome_produto}*\n`;
-                    resposta += `🏭 ${produto.nom_laboratorio}\n`;
-                    resposta += `💰 R$ ${produto.vlr_liquido.toFixed(2).replace('.', ',')}`; // Formatação de preço
-                    // Se o seu resultado da query Postgres já incluir o desconto, use-o
-                    // Por enquanto, não temos o desconto no `consultarProdutoNoCliente`
-                    // if (produto.desconto_percentual > 0) {
-                    //   resposta += ` (🤑${produto.desconto_percentual.toFixed(1)}% OFF)`;
-                    // }
-                    resposta += `\n📦 Estoque: ${produto.qtd_estoque} unidades\n`;
+                    const vlr_venda_float = parseFloat(produto.vlr_venda);
+                    const vlr_liquido_float = parseFloat(produto.vlr_liquido);
+                    let preco_final_venda_str = (vlr_liquido_float || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                    let desconto_percentual_str = '';
+
+                    if (vlr_venda_float > 0 && vlr_liquido_float < vlr_venda_float) {
+                        const desconto_percentual = ((vlr_venda_float - vlr_liquido_float) / vlr_venda_float) * 100;
+                        desconto_percentual_str = ` (🤑${desconto_percentual.toFixed(1)}% OFF)`;
+                    }
+
+                    resposta += `💰 ${preco_final_venda_str}${desconto_percentual_str}`;
+                    resposta += `\n📦 Estoque: ${produto.qtd_estoque || 0} unidades\n`;
                     resposta += `🔢 Código: ${produto.cod_reduzido}\n\n`;
                 });
 
-                if (resultado.count > 5) {
-                    resposta += `📋 *E mais ${resultado.count - 5} produtos...*\n`;
+                if (!buscaPorCodigo && produtos.length > 5) {
+                    resposta += `📋 *E mais ${produtos.length - 5} produtos...*\n`;
                     resposta += `Use um termo mais específico para ver todos.\n\n`;
                 }
 
-                resposta += `💡 *Dica:* Use *"código 12345"* para detalhes de um produto específico.`;
+                if (!buscaPorCodigo) {
+                    resposta += `💡 *Dica:* Use *"código 12345"* para detalhes de um produto específico.`;
+                }
+
 
                 await enviarComFormatosCorretos(from, resposta);
                 return;
 
             } catch (error) {
-                console.error('❌ [PRODUTO] Erro na consulta do cliente:', error);
+                console.error('❌ [PRODUTO] Erro na consulta de produtos do cliente via TenantService:', error);
                 await enviarComFormatosCorretos(from,
                     `⚠️ *ERRO NA CONSULTA*\n\n` +
                     `Não consegui buscar produtos em seu estoque no momento.\n` +
@@ -445,7 +455,7 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
         if (lowerMessage === '/debug' || lowerMessage === 'debug') {
             const formatos = converterParaFormatoFuncional(from);
             const statusIA = process.env.GEMINI_API_KEY ? '✅ ATIVA' : '❌ INATIVA';
-            const debugInfo = `🔧 *DEBUG SISTEMA COMPLETO*\n\n📱 Seu número: ${from}\n🎯 Convertido para:\n• ${formatos[0]}\n• ${formatos[1]}\n\n🤖 IA Status: ${statusIA}\n🛍️ API Produtos: ✅ Conectada\n📊 Formatos: ${FORMATOS_COMPROVADOS.length} testados\n✅ Sistema: 100% Operacional\n\n🚀 *TUDO FUNCIONANDO!*\n[MULTI-TENANT] Phone ID: ${clientWhatsAppPhoneNumberId}`;
+            const debugInfo = `🔧 *DEBUG SISTEMA COMPLETO*\n\n📱 Seu número: ${from}\n🎯 Convertido para:\n• ${formatos[0]}\n• ${formatos[1]}\n\n🤖 IA Status: ${statusIA}\n🛍️ API Produtos: ✅ Conectada\n📊 Formatos: ${FORMATOS_COMPROVADOS.length} testados\n✅ Sistema: 100% Operacional\n\n🚀 *TUDO FUNCIONANDO!*\n[MULTI-TENANT] Phone ID: ${clientWhatsAppPhoneNumberId}\n[MULTI-TENANT] Cliente: ${client?.name || 'Não identificado'}\n[MULTI-TENANT] Cod. Rede: ${client?.cod_rede || 'N/A'}\n[MULTI-TENANT] Cod. Filial: ${client?.cod_filial || 'N/A'}`;
             await enviarComFormatosCorretos(from, debugInfo);
             return;
         }
@@ -468,7 +478,8 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
         if (lowerMessage === '/ajuda' || lowerMessage === 'ajuda' || lowerMessage === '/help') {
             const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA totalmente ativa - Posso conversar sobre qualquer assunto!' : '⚙️ IA sendo configurada';
             const helpMsg = `🤖 *ASSISTENTE INTELIGENTE ATIVO*\n\n` +
-                `🛍️ *buscar [produto]* - Consulta produtos em estoque\n` +
+                `🛍️ *buscar [produto]* - Consulta produtos em estoque por nome\n` +
+                `🔢 *código [12345]* - Consulta produtos em estoque por código\n` +
                 `✅ */test* - Status do sistema\n` +
                 `🔧 */debug* - Informações técnicas\n` +
                 `🗑️ */limpar* - Resetar conversa\n` +
@@ -555,65 +566,6 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
             await enviarComFormatosCorretos(from, recoveryMsg);
         } catch (recoveryError) {
             console.error('❌ [RECOVERY] Falha crítica na recuperação:', recoveryError);
-        }
-    }
-}
-
-// 🚀 MULTI-TENANT: Nova função para consultar produtos no banco de dados do cliente
-async function consultarProdutoNoCliente(termo: string, dbConfig: any): Promise<ConsultaProdutoResult> {
-    console.log(`🔍 [MULTI-TENANT-DB] Consultando produto "${termo}" no banco do cliente...`);
-    let pool: Pool | undefined;
-    let conn: any | undefined;
-    try {
-        pool = new Pool(dbConfig);
-        conn = await pool.connect();
-        const result = await conn.query(`
-            SELECT
-                t1.cod_reduzido,
-                t1.nom_produto,
-                t4.vlr_liquido,
-                t3.qtd_estoque,
-                t5.nom_laborat,
-                t1.vlr_venda
-            FROM cadprodu t1
-            LEFT JOIN cadestoq t3 ON t1.cod_reduzido = t3.cod_reduzido
-                AND t3.cod_rede = t1.cod_rede
-                AND t3.cod_filial = 1 -- ⚠️ AJUSTAR: Este valor deve vir da configuração do cliente (client_connections)
-            LEFT JOIN desconto_produto_vw AS t4 ON t4.cod_reduzido = t1.cod_reduzido
-            LEFT JOIN public.cadlabor t5 ON t1.cod_laborat = t5.cod_laborat
-            WHERE t1.nom_produto ILIKE $1 AND t1.cod_rede = 1 -- ⚠️ AJUSTAR: Este valor também deve vir da configuração do cliente
-            ORDER BY
-                CASE WHEN t3.qtd_estoque > 0 THEN 0 ELSE 1 END,
-                t1.nom_produto
-            LIMIT 10;
-        `, [`%${termo}%`]); // ⚠️ AJUSTAR: Os parâmetros devem incluir cod_filial e cod_rede do cliente
-
-        return {
-            success: true,
-            count: result.rows.length,
-            data: result.rows.map(row => ({
-                cod_reduzido: row.cod_reduzido,
-                nome_produto: row.nom_produto,
-                nom_laboratorio: row.nom_laborat,
-                vlr_liquido: row.vlr_liquido, // Retornando o valor como está
-                qtd_estoque: row.qtd_estoque,
-                // vlr_venda: row.vlr_venda // Adicione outros campos que precisar
-            }))
-        };
-    } catch (error: any) {
-        console.error('❌ [MULTI-TENANT-DB] Erro ao consultar produto no banco do cliente:', error);
-        return {
-            success: false,
-            count: 0,
-            data: [],
-            error: error.message
-        };
-    } finally {
-        if (conn) {
-            conn.release();
-        }
-        if (pool) {
-            await pool.end(); // Fechar o pool de conexão após o uso
         }
     }
 }
