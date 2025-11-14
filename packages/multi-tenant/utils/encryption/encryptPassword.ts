@@ -1,26 +1,34 @@
 import crypto from 'crypto';
-import dotenv from 'dotenv';
+import dotenv from 'dotenv'; // Mantido para compatibilidade, mas a ENCRYPTION_KEY será hardcoded aqui.
 import path from 'path';
-import { fileURLToPath } from 'url'; // Adicionado para auxiliar na normalização de URLs para caminhos
+import { fileURLToPath } from 'url';
 
-// Carregar variáveis de ambiente do .env.multi-tenant
-const pathToEnv = path.resolve(process.cwd(), '.env.multi-tenant');
-dotenv.config({ path: pathToEnv });
+// =======================================================
+// CONFIGURAÇÃO CRÍTICA
+// =======================================================
 
-// Tamanho do Initialization Vector (IV) em bytes. 16 bytes é o padrão para AES.
-const IV_LENGTH = 16;
-// Algoritmo de criptografia. AES-256-CBC é uma escolha comum e segura.
-const ALGORITHM = 'aes-256-cbc';
+// !!! ATENÇÃO !!!
+// Esta é a ENCRYPTION_KEY SECRETA que você gerou no PASSO 1.
+// Ela DEVE ser uma string hexadecimal de 64 caracteres.
+// COPIE ESTA CHAVE PARA AS VARIÁVEIS DE AMBIENTE DO SEU VERCEl (ENCRYPTION_KEY)!
+const ENCRYPTION_KEY_HEX = '5c648b912680248fb56f2c62586da018bd43b4560deded4828f8865a5f8faa79';
 
-// Pega a chave de criptografia do ambiente.
-const ENCRYPTION_KEY_HEX = process.env.ENCRYPTION_KEY;
+// =======================================================
+// VARIÁVEIS GLOBAIS E FUNÇÕES AUXILIARES DE CRIPTOGRAFIA
+// =======================================================
 
-// LOG PARA DEPURAR: Mostra o que foi lido para ENCRYPTION_KEY_HEX
-console.log('Valor lido para ENCRYPTION_KEY_HEX:', ENCRYPTION_KEY_HEX ? 'Disponível' : 'Não disponível', ENCRYPTION_KEY_HEX?.length || 0, 'caracteres');
+const IV_LENGTH = 16; // Tamanho do Initialization Vector (IV) em bytes. Padrão para AES.
+const ALGORITHM = 'aes-256-cbc'; // Algoritmo de criptografia
 
+// Validação da chave de criptografia
 if (!ENCRYPTION_KEY_HEX || ENCRYPTION_KEY_HEX.length !== 64) {
-  console.error('ERRO: Variável de ambiente ENCRYPTION_KEY não encontrada ou com formato inválido. Deve ser uma string hexadecimal de 64 caracteres.');
-  throw new Error('ENCRYPTION_KEY is not defined or invalid.');
+  console.error('\n--------------------------------------------------------------------------------------------------------------------------------------------------------------------');
+  console.error('ERRO CRÍTICO: ENCRYPTION_KEY_HEX não está definida ou com formato inválido neste script.');
+  console.error('Ela deve ser uma string hexadecimal de 64 caracteres (equivalente a 32 bytes para AES-256).');
+  // Linha CORRIGIDA para usar template literals (crases)
+  console.error(`Para gerar uma chave segura, execute no seu terminal (ou Node.js REPL): node -e "console.log(crypto.randomBytes(32).toString('hex'))"`);
+  console.error('--------------------------------------------------------------------------------------------------------------------------------------------------------------------');
+  throw new Error('ENCRYPTION_KEY_HEX is not defined or invalid.');
 }
 
 const ENCRYPTION_KEY = Buffer.from(ENCRYPTION_KEY_HEX, 'hex');
@@ -54,13 +62,13 @@ export function decrypt(encryptedText: string): string {
   try {
     const parts = encryptedText.split(':');
     if (parts.length !== 2) {
-      throw new Error('Formato de texto criptografado inválido.');
+      throw new Error('Formato de texto criptografado inválido. Esperado "iv:encryptedData".');
     }
     const iv = Buffer.from(parts[0], 'hex');
     const encryptedData = parts[1];
 
     if (iv.length !== IV_LENGTH) {
-      throw new Error('IV inválido ou com tamanho incorreto.');
+      throw new Error('IV inválido ou com tamanho incorreto. Esperado 16 bytes.');
     }
 
     const decipher = crypto.createDecipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
@@ -74,44 +82,48 @@ export function decrypt(encryptedText: string): string {
 }
 
 // =======================================================
-// EXECUTAR ESTA SEÇÃO APENAS PARA GERAR A SENHA CRIPTOGRAFADA
-// REMOVA OU COMENTE EM PRODUÇÃO!
+// FERRAMENTA DE GERAÇÃO DE SENHA CRIPTOGRAFADA (EXECUÇÃO DIRETA)
+// =======================================================
+// ESTA SEÇÃO SÓ É EXECUTADA QUANDO O ARQUIVO É EXECUTADO DIRETAMENTE
+// Ex: npx ts-node packages/multi-tenant/utils/encryption/encryptPassword.ts
 // =======================================================
 
-// Debugando a condição de execução direta em ESM
-const currentModulePath = fileURLToPath(import.meta.url);
-const mainScriptPath = path.resolve(process.argv[1]); // Normaliza para um caminho absoluto do sistema de arquivos
+const currentModuleResolvedPath = path.resolve(fileURLToPath(import.meta.url));
+const mainScriptResolvedPath = path.resolve(process.argv[1]);
 
-// Logs para verificação
-console.log('--- Debug de Execução Direta (tentativa 3) ---');
-console.log('Caminho do módulo atual (normalizado):', currentModulePath);
-console.log('Caminho do script principal (normalizado):', mainScriptPath);
-console.log('Comparação (currentModulePath === mainScriptPath):', currentModulePath === mainScriptPath);
-console.log('--- Fim do Debug ---');
+if (currentModuleResolvedPath === mainScriptResolvedPath) {
+  console.log('--------------------------------------------------------------------------------------------------------------------------------------------------------------------');
+  console.log('-> MODO DE GERAÇÃO DE SENHA CRIPTOGRAFADA ATIVADO <-');
+  console.log('   Usando a ENCRYPTION_KEY fixa neste script para garantir consistência na geração.');
+  console.log('--------------------------------------------------------------------------------------------------------------------------------------------------------------------');
 
-// Usamos a comparação de caminhos normalizados para compatibilidade com ES Modules no Node.js
-if (currentModulePath === mainScriptPath) {
-  console.log('-> Executando bloco de geração de senha...'); // Indicador de execução
-  // Substitua 'SUA_SENHA_DO_BANCO_DE_DADOS_DO_CLIENTE_AQUI' pela senha REAL e em texto puro do DB do cliente.
-  const databasePassword = 'postgres'; // <--- ALTERE AQUI!
-  console.log('Senha original:', databasePassword);
+  // !!!!! AQUI VOCÊ DEVE ALTERAR !!!!!
+  // Substitua 'postgres' pela SENHA REAL (em texto puro) do SEU banco de dados.
+  // Exemplo: 'MinhaSenhaSegura123'
+const databasePassword = 'postgres';
+  // !!!!! AQUI VOCÊ DEVE ALTERAR !!!!!
+
+
+  if (databasePassword === 'SUA_SENHA_REAL_DO_DB') {
+    console.error('\nERRO: Por favor, altere a variável databasePassword para a senha real do seu banco de dados.');
+    process.exit(1); // Sai com erro
+  }
+
+  console.log('Senha original a ser criptografada:', databasePassword);
 
   try {
     const encryptedPassword = encrypt(databasePassword);
-    console.log('Senha Criptografada (para Supabase):', encryptedPassword);
-
-    // Você pode testar a descriptografia aqui se quiser, mas o foco é gerar a senha criptografada.
-    // const decryptedPassword = decrypt(encryptedPassword);
-    // console.log('Senha Descriptografada:', decryptedPassword);
-    // if (databasePassword === decryptedPassword) {
-    //   console.log('Criptografia e Descriptografia bem-sucedidas!');
-    // } else {
-    //   console.log('ERRO: O texto descriptografado não corresponde ao original.');
-    // }
+    console.log('\n====================================================================================================================================================================');
+    console.log('   SENHA CRIPTOGRAFADA GERADA (COPIE E COLE ESTE VALOR NO SEU SUPABASE/DB):');
+    console.log('   ', encryptedPassword);
+    console.log('====================================================================================================================================================================');
 
   } catch (e) {
-    console.error('Ocorreu um erro durante a criptografia:', e);
+    console.error('\nOcorreu um erro durante a criptografia:', e);
+  } finally {
+      console.log('\n--------------------------------------------------------------------------------------------------------------------------------------------------------------------');
+      console.log('Lembre-se: Use esta ENCRYPTION_KEY (a de 64 caracteres) no Vercel e a Senha Criptografada (com :) no Supabase!');
+      console.log('ENCRYPTION_KEY para Vercel: ' + ENCRYPTION_KEY_HEX);
+      console.log('--------------------------------------------------------------------------------------------------------------------------------------------------------------------');
   }
-} else {
-  console.log('-> Script não executado diretamente (provavelmente importado).');
 }
