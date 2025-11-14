@@ -360,7 +360,7 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
                 const buscaPorCodigo = lowerMessage.startsWith('código ');
 
                 if (buscaPorCodigo) {
-                    console(`🔍 [PRODUTO] Buscando por código: "${termoBusca}" no banco do cliente '${client.name}'...`);
+                    console.log(`🔍 [PRODUTO] Buscando por código: "${termoBusca}" no banco do cliente '${client.name}'...`);
                     const produtoUnico = await tenantService.getProductByCode(client.id, termoBusca, client.cod_rede, client.cod_filial);
                     if (produtoUnico) {
                         produtos = [produtoUnico]; // Coloca o produto em um array para reusar a lógica de formatação
