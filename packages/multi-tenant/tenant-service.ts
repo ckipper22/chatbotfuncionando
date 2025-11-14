@@ -1,15 +1,50 @@
 ﻿// packages/multi-tenant/tenant-service.ts
-import { Pool, PoolClient, QueryResult } from 'pg'; // Adicionado QueryResult e PoolClient para melhor tipagem
-import { supabase } from './supabase-client'; // Nosso cliente Supabase
-import crypto from 'crypto'; // Para criptografia/decriptografia de senhas
+import { Pool, PoolClient, QueryResult } from 'pg';
+import { supabase } from './supabase-client';
+import crypto from 'crypto';
 
-// Interfaces para tipagem dos dados dos clientes
+// --- Variáveis de Ambiente e Configuração de Segurança ---
+const ENCRYPTION_KEY_RAW = process.env.ENCRYPTION_KEY;
+const IV_LENGTH = 16; // Para AES-256-CBC, o IV deve ter 16 bytes.
+const AES_KEY_BYTES = 32; // AES-256 requer uma chave de 32 bytes.
+
+let ENCRYPTION_KEY_BUFFER: Buffer;
+
+// Validação e conversão da chave de criptografia
+if (!ENCRYPTION_KEY_RAW) {
+  console.warn(
+    '⚠️ WARNING: ENCRYPTION_KEY environment variable is missing. ' +
+    'Using a default key for demonstration. THIS IS INSECURE FOR PRODUCTION!'
+  );
+  // Chave de fallback para 32 bytes (ASCII/UTF-8)
+  ENCRYPTION_KEY_BUFFER = Buffer.from('a_very_secret_key_for_demo_purposes_only'.padEnd(AES_KEY_BYTES, '\0').substring(0, AES_KEY_BYTES), 'utf8');
+} else if (ENCRYPTION_KEY_RAW.length !== AES_KEY_BYTES * 2) { // Verifica se tem o comprimento esperado para HEX (32 bytes = 64 caracteres hexadecimais)
+  console.warn(
+    `⚠️ WARNING: ENCRYPTION_KEY has incorrect length (${ENCRYPTION_KEY_RAW.length}). ` +
+    `Expected ${AES_KEY_BYTES * 2} hex characters for a ${AES_KEY_BYTES}-byte key. ` +
+    `Attempting to use as raw string. THIS MAY LEAD TO DECRYPTION ISSUES OR INSECURITY!`
+  );
+  // Se a chave não tem o comprimento hexadecimal esperado, tenta usá-la como string UTF-8 e a ajusta para 32 bytes.
+  ENCRYPTION_KEY_BUFFER = Buffer.from(ENCRYPTION_KEY_RAW.padEnd(AES_KEY_BYTES, '\0').substring(0, AES_KEY_BYTES), 'utf8');
+} else {
+  // Esta é a parte CRÍTICA: Converte a string HEX de 64 caracteres para um Buffer de 32 bytes.
+  ENCRYPTION_KEY_BUFFER = Buffer.from(ENCRYPTION_KEY_RAW, 'hex');
+  if (ENCRYPTION_KEY_BUFFER.length !== AES_KEY_BYTES) {
+    console.error(`❌ ERROR: Converted ENCRYPTION_KEY_BUFFER has incorrect length (${ENCRYPTION_KEY_BUFFER.length}). Expected ${AES_KEY_BYTES} bytes. This is a critical error.`);
+    // Em um ambiente de produção, você pode querer lançar um erro ou encerrar o processo aqui.
+    // Para depuração, vamos forçar uma chave padrão para evitar que o serviço falhe completamente.
+    ENCRYPTION_KEY_BUFFER = Buffer.from('default_fallback_key_for_errors'.padEnd(AES_KEY_BYTES, '\0').substring(0, AES_KEY_BYTES), 'utf8');
+  }
+}
+
+
+// --- Interfaces para Tipagem ---
 interface Client {
   id: string;
   name: string;
   whatsapp_phone_id: string;
-  cod_rede: number; // Código da rede do cliente
-  cod_filial: number; // Código da filial padrão do cliente
+  cod_rede: number;
+  cod_filial: number;
   // Adicione outros campos da tabela 'clients' aqui se necessário
 }
 
@@ -23,54 +58,57 @@ interface ClientConnection {
   // Adicione outros campos da tabela 'client_connections' aqui se necessário
 }
 
-// Interface para tipagem dos dados de produtos retornados
 interface ProductInfo {
   cod_reduzido: string;
   nom_produto: string;
-  vlr_liquido: number | null; // Pode ser null se não houver desconto ou valor líquido
-  qtd_estoque: number | null; // Pode ser null se não houver registro de estoque
-  nom_laborat: string | null; // Pode ser null se não houver laboratório associado
+  vlr_liquido: number | null;
+  qtd_estoque: number | null;
+  nom_laborat: string | null;
   vlr_venda: number;
 }
 
-// Chave de criptografia/decriptografia (usar uma variável de ambiente REAL em produção!)
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'a_very_secret_key_for_demo_purposes_only';
-const IV_LENGTH = 16; // Para AES-256-CBC
-
-// Função simples de descriptografia (APENAS PARA DEMONSTRAÇÃO)
-// Em produção, você usaria um serviço de gerenciamento de segredos mais robusto.
+// --- Função de Descriptografia ---
+// IMPORTANTE: Esta função assume que a string criptografada está no formato "ivHex:encryptedTextHex".
 function decrypt(text: string): string {
-  // Verifica se a chave de criptografia tem o tamanho correto para AES-256-CBC (32 bytes = 256 bits)
-  const key = Buffer.from(ENCRYPTION_KEY.padEnd(32, '\0').substring(0, 32)); // Garante 32 bytes
-
-  const textParts = text.split(':');
-  if (textParts.length < 2) {
-    console.error('Invalid encrypted text format.');
+  if (!text || text.indexOf(':') === -1) {
+    console.error('Invalid encrypted text format. Expected "iv:encryptedText".');
     throw new Error('Invalid encrypted text format.');
   }
 
-  const iv = Buffer.from(textParts.shift()!, 'hex');
-  const encryptedText = Buffer.from(textParts.join(':'), 'hex');
+  const textParts = text.split(':');
+  if (textParts.length < 2) {
+    console.error('Invalid encrypted text format: missing IV or encrypted text part.');
+    throw new Error('Invalid encrypted text format.');
+  }
+
+  const ivHex = textParts.shift()!;
+  const encryptedTextHex = textParts.join(':'); // Recompõe se houver ':' no texto criptografado
 
   try {
-    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-    let decrypted = decipher.update(encryptedText);
+    const iv = Buffer.from(ivHex, 'hex');
+    const encryptedBuffer = Buffer.from(encryptedTextHex, 'hex');
+
+    if (iv.length !== IV_LENGTH) {
+      console.error(`Invalid IV length. Expected ${IV_LENGTH} bytes, got ${iv.length}.`);
+      throw new Error('Invalid IV length.');
+    }
+
+    const decipher = crypto.createDecipheriv('aes-256-cbc', ENCRYPTION_KEY_BUFFER, iv);
+    let decrypted = decipher.update(encryptedBuffer);
     decrypted = Buffer.concat([decrypted, decipher.final()]);
-    return decrypted.toString();
-  } catch (e) {
-    console.error('Decryption failed:', e);
-    throw new Error('Decryption failed.');
+    return decrypted.toString('utf8'); // Assumimos que o texto original era UTF-8
+  } catch (e: any) {
+    console.error('Decryption failed:', e.message || e);
+    throw new Error(`Decryption failed: ${e.message || 'Unknown error'}`);
   }
 }
 
+// --- Serviço de Tenancy ---
 export class TenantService {
-  // Cache de conexões com bancos de clientes
   private clientDbPools: Map<string, Pool> = new Map();
 
   constructor() {
-    if (ENCRYPTION_KEY === 'a_very_secret_key_for_demo_purposes_only') {
-      console.warn('⚠️ WARNING: Using default encryption key. Please set ENCRYPTION_KEY environment variable for production!');
-    }
+    // A inicialização da chave foi movida para fora do constructor para ser global e mais segura.
   }
 
   // Novo método para descriptografar a senha - útil no webhook
@@ -166,7 +204,7 @@ export class TenantService {
     } catch (testError) {
       console.error(`❌ Failed to connect to client ${clientId} database:`, testError);
       // Destruir o pool recém-criado em caso de falha na conexão inicial
-      await pool.end();
+      await pool.end(); // Libera os recursos do pool
       return null;
     }
   }
@@ -198,7 +236,7 @@ export class TenantService {
         LEFT JOIN cadestoq t3 ON t1.cod_reduzido = t3.cod_reduzido
           AND t3.cod_rede = $1
           AND t3.cod_filial = $2
-        LEFT JOIN desconto_produto_vw AS t4 ON t4.cod_reduzido = t1.cod_reduzido -- Assumindo que t4.cod_rede/cod_filial são aplicados via view ou não são necessários aqui
+        LEFT JOIN desconto_produto_vw AS t4 ON t4.cod_reduzido = t1.cod_reduzido
         LEFT JOIN public.cadlabor t5 ON t1.cod_laborat = t5.cod_laborat
         WHERE t1.nom_produto ILIKE $3 AND t1.cod_rede = $1
         ORDER BY
