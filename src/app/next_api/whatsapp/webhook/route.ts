@@ -4,14 +4,10 @@ import { getGeminiService } from '../../../../lib/services/gemini-service';
 import { getMedicamentoInfo, medicamentosData } from '../../../../../Lib/medicamentos_data';
 
 // 🚀 MULTI-TENANT IMPORTS
-// Removido: import { Pool } from 'pg'; // Não é mais necessário importar diretamente aqui
-// Removido: import { supabase } from '@/packages/multi-tenant/supabase-client'; // Não é mais necessário importar diretamente aqui
 import { tenantService } from '@/packages/multi-tenant/tenant-service'; // Importar a instância JÁ EXPORTADA do TenantService
 
-// Removido: const tenantService = new TenantService(supabase); // Não instanciamos mais aqui, usamos a instância exportada
-
 // =========================================================================
-// VARIÁVEIS E FUNÇÕES AUXILIARES PARA ENVIO WHATSAPP
+// VARIÁVEIS E FUNÇÕES AUXILIARES PARA ENVIOS WHATSAPP
 // =========================================================================
 
 const FORMATOS_COMPROVADOS = [
@@ -232,6 +228,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+    // 💡 LINHA DE DEBUG ADICIONADA AQUI!
+    console.log('[DEBUG] ENCRYPTION_KEY lida no Vercel (length):', process.env.ENCRYPTION_KEY ? `Presente (${process.env.ENCRYPTION_KEY.length} caracteres)` : 'Ausente');
+    // Se quiser ver o valor completo para o debug (lembre-se de remover depois por segurança!):
+    // console.log('[DEBUG] ENCRYPTION_KEY lida no Vercel (valor completo):', process.env.ENCRYPTION_KEY);
+
     try {
         console.log('📨 [WEBHOOK] Nova mensagem recebida');
 
