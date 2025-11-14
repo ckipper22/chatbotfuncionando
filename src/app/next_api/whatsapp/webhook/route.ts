@@ -151,6 +151,7 @@ async function enviarComFormatosCorretos(numeroOriginal: string, texto: string):
 // =========================================================================
 
 function parseUserMessageForDrugInfo(message: string): { drugName?: string; infoType?: string } {
+    console.log('🔍 [PARSE-DRUG] Iniciando parse da mensagem para informações de medicamento.');
     const lowerMessage = message.toLowerCase();
     let drugName: string | undefined;
     let infoType: string | undefined;
@@ -169,6 +170,7 @@ function parseUserMessageForDrugInfo(message: string): { drugName?: string; info
     for (const typeKey in infoTypeKeywords) {
         if (infoTypeKeywords[typeKey].some(keyword => lowerMessage.includes(keyword))) {
             infoType = typeKey;
+            console.log(`🔍 [PARSE-DRUG] Tipo de informação identificado: ${infoType}`);
             break;
         }
     }
@@ -184,6 +186,7 @@ function parseUserMessageForDrugInfo(message: string): { drugName?: string; info
         }
     }
     drugName = bestMatchDrug;
+    console.log(`🔍 [PARSE-DRUG] Nome do medicamento identificado: ${drugName || 'Nenhum'}`);
 
     return { drugName, infoType };
 }
@@ -228,18 +231,20 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-    // 💡 LINHA DE DEBUG ADICIONADA AQUI!
-    console.log('[DEBUG] ENCRYPTION_KEY lida no Vercel (length):', process.env.ENCRYPTION_KEY ? `Presente (${process.env.ENCRYPTION_KEY.length} caracteres)` : 'Ausente');
-    // Se quiser ver o valor completo para o debug (lembre-se de remover depois por segurança!):
-    // console.log('[DEBUG] ENCRYPTION_KEY lida no Vercel (valor completo):', process.env.ENCRYPTION_KEY);
+    // ⚠️ ATENÇÃO CRÍTICA: Esta linha expõe a ENCRYPTION_KEY nos logs do Vercel.
+    // VOCÊ DEVE REMOVÊ-LA IMEDIATAMENTE APÓS O DIAGNÓSTICO!
+    console.log('[DEBUG-CRITICAL] ENCRYPTION_KEY lida no Vercel (valor completo):', process.env.ENCRYPTION_KEY);
+    console.log('[DEBUG] ENCRYPTION_IV lida no Vercel (valor completo):', process.env.ENCRYPTION_IV); // Também vamos verificar o IV
 
     try {
-        console.log('📨 [WEBHOOK] Nova mensagem recebida');
+        console.log('📨 [WEBHOOK] Nova mensagem recebida. Iniciando processamento.');
 
         if (!process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN) {
-            console.error('❌ [WEBHOOK] Configuração crítica faltando: WHATSAPP_PHONE_NUMBER_ID ou WHATSAPP_ACCESS_TOKEN');
+            console.error('❌ [WEBHOOK] Configuração crítica faltando: WHATSAPP_PHONE_NUMBER_ID ou WHATSAPP_ACCESS_TOKEN. Abortando.');
             return NextResponse.json({ error: 'Configuration error' }, { status: 500 });
         }
+        console.log('✅ [WEBHOOK] WHATSAPP_PHONE_NUMBER_ID e WHATSAPP_ACCESS_TOKEN presentes.');
+
 
         const body = await request.json();
         console.log('📦 [WEBHOOK] Payload recebido:', JSON.stringify(body, null, 2));
@@ -254,20 +259,21 @@ export async function POST(request: NextRequest) {
 
         const messages = value?.messages;
         if (!messages?.length) {
-            console.log('ℹ️ [WEBHOOK] Nenhuma mensagem para processar ou tipo inválido');
+            console.log('ℹ️ [WEBHOOK] Nenhuma mensagem para processar ou tipo inválido. Encerrando.');
             return NextResponse.json({ status: 'ok' }, { status: 200 });
         }
 
-        console.log(`🔄 [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
+        console.log(`🔄 [WEBHOOK] Processando ${messages.length} mensagem(ns).`);
 
         for (const message of messages) {
             await processarComIACompleta(message, body); // 🚀 MULTI-TENANT: Passa o payload completo
         }
 
+        console.log('✅ [WEBHOOK] Processamento de mensagens concluído.');
         return NextResponse.json({ status: 'ok' }, { status: 200 });
 
     } catch (error) {
-        console.error('❌ [WEBHOOK] Erro crítico no sistema:', error);
+        console.error('❌ [WEBHOOK] Erro crítico no sistema (POST principal):', error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }
@@ -276,7 +282,7 @@ export async function POST(request: NextRequest) {
 async function processarComIACompleta(message: any, rawPayload: any): Promise<void> {
     const { from, text, type, id } = message;
 
-    console.log('   [AI PROCESS] Processando com IA completa:', {
+    console.log('   [AI PROCESS] Iniciando processamento de IA completa para mensagem:', {
         from,
         type,
         messageId: id,
@@ -285,22 +291,24 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
 
     let clientWhatsAppPhoneNumberId: string | undefined;
     let clientWhatsAppAccessToken: string | undefined; // Para enviar a mensagem com o token do cliente
+    let client: any; // Declaramos 'client' aqui para ser acessível em todo o escopo
 
     // 🚀 MULTI-TENANT: Início da identificação do cliente
-    let client: any; // Declaramos 'client' aqui para ser acessível em todo o escopo
     try {
+        console.log('[MULTI-TENANT] Iniciando fase de identificação do cliente.');
         const phoneNumberId = rawPayload.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
 
         if (!phoneNumberId) {
-            console.error('[MULTI-TENANT] Erro: phone_number_id não encontrado no payload do webhook.');
+            console.error('[MULTI-TENANT] Erro: phone_number_id não encontrado no payload do webhook. Não é possível identificar o cliente.');
             await enviarComFormatosCorretos(from, "⚠️ Erro interno: Não foi possível identificar o remetente para multitenancy. Favor contatar o suporte.");
             return;
         }
 
-        console.log(`[MULTI-TENANT] Phone Number ID recebido: ${phoneNumberId}`);
+        console.log(`[MULTI-TENANT] Phone Number ID recebido: ${phoneNumberId}.`);
         clientWhatsAppPhoneNumberId = phoneNumberId;
 
         // Busca o cliente pelo Phone Number ID
+        console.log(`[MULTI-TENANT] Buscando cliente no tenantService para phoneId: ${phoneNumberId}.`);
         client = await tenantService.findClientByPhoneId(phoneNumberId); // Usamos o método do TenantService
 
         if (!client) {
@@ -308,8 +316,10 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
             await enviarComFormatosCorretos(from, `❌ Seu número WhatsApp não está configurado em nosso sistema. Por favor, entre em contato para ativar o serviço.`);
             return;
         }
+        console.log(`✅ [MULTI-TENANT] Cliente '${client.name}' (ID: ${client.id}) identificado.`);
 
         // Se o cliente foi encontrado, buscamos as credenciais de conexão do DB
+        console.log(`[MULTI-TENANT] Buscando configuração de DB para o cliente ${client.name} (ID: ${client.id}).`);
         const dbConnection = await tenantService.findClientConnection(client.id);
 
         if (!dbConnection) {
@@ -317,13 +327,23 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
              await enviarComFormatosCorretos(from, `⚠️ Não foi possível carregar a configuração de banco de dados para sua farmácia. Favor contatar o suporte.`);
              return;
         }
-
-        console.log(`✅ [MULTI-TENANT] Cliente '${client.name}' identificado. Cod. Rede: ${client.cod_rede}, Cod. Filial: ${client.cod_filial}.`);
+        console.log(`✅ [MULTI-TENANT] Configuração de DB encontrada para o cliente '${client.name}'. Cod. Rede: ${client.cod_rede}, Cod. Filial: ${client.cod_filial}.`);
         // Aqui, 'client' agora contém 'cod_rede' e 'cod_filial' que vêm do Supabase
         // Esses valores serão usados nas chamadas ao tenantService.getProductInfo
 
     } catch (multiTenantError) {
         console.error('❌ [MULTI-TENANT] Erro crítico na fase de identificação multi-tenant:', multiTenantError);
+        // Debug detalhado do erro
+        if (multiTenantError instanceof Error) {
+            console.error('❌ [MULTI-TENANT-ERROR] Nome:', multiTenantError.name);
+            console.error('❌ [MULTI-TENANT-ERROR] Mensagem:', multiTenantError.message);
+            if (multiTenantError.stack) {
+                console.error('❌ [MULTI-TENANT-ERROR] Stack Trace:', multiTenantError.stack);
+            }
+        } else {
+            console.error('❌ [MULTI-TENANT-ERROR] Erro desconhecido:', multiTenantError);
+        }
+
         await enviarComFormatosCorretos(from, `⚠️ Ocorreu um erro ao identificar sua farmácia. Favor contatar o suporte.`);
         return;
     }
@@ -332,7 +352,7 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
 
     try {
         if (type !== 'text' || !text?.body) {
-            console.log('⚠️ [AI PROCESS] Mensagem ignorada (não é texto)');
+            console.log('⚠️ [AI PROCESS] Mensagem ignorada (não é texto ou corpo vazio).');
             return;
         }
 
@@ -352,24 +372,29 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
             lowerMessage.startsWith('estoque ') ||
             lowerMessage.startsWith('código ')) { // Adicionado "código" para busca por código
 
-            console.log(`🛍️ [PRODUTO] Consultando produto: "${userMessage}" para cliente (ID: ${client.id})`);
+            console.log(`🛍️ [PRODUTO] Iniciando consulta de produto: "${userMessage}" para cliente (ID: ${client.id}).`);
 
             try {
                 let produtos: any[] | null = null;
                 let termoBusca = userMessage.replace(/^(buscar|produto|consulta|preço|preco|estoque|código)\s*/i, '').trim();
 
                 const buscaPorCodigo = lowerMessage.startsWith('código ');
+                console.log(`🛍️ [PRODUTO] Termo de busca: "${termoBusca}". Busca por código: ${buscaPorCodigo}.`);
+
 
                 if (buscaPorCodigo) {
-                    console.log(`🔍 [PRODUTO] Buscando por código: "${termoBusca}" no banco do cliente '${client.name}'...`);
+                    console.log(`🔍 [PRODUTO] Buscando por código: "${termoBusca}" no banco do cliente '${client.name}' (Rede: ${client.cod_rede}, Filial: ${client.cod_filial})...`);
                     const produtoUnico = await tenantService.getProductByCode(client.id, termoBusca, client.cod_rede, client.cod_filial);
                     if (produtoUnico) {
                         produtos = [produtoUnico]; // Coloca o produto em um array para reusar a lógica de formatação
+                        console.log(`✅ [PRODUTO] Produto encontrado por código: ${produtoUnico.nom_produto}.`);
                     } else {
                         produtos = [];
+                        console.log(`❌ [PRODUTO] Nenhum produto encontrado por código: ${termoBusca}.`);
                     }
                 } else {
                     if (termoBusca.length < 2) {
+                        console.log('⚠️ [PRODUTO] Termo de busca muito curto (< 2 caracteres). Informando o usuário.');
                         await enviarComFormatosCorretos(from,
                             `🔍 *BUSCA DE PRODUTOS*\n\n` +
                             `Por favor, digite o nome ou o código do produto que deseja buscar (mínimo 2 caracteres para nome).\n\n` +
@@ -381,8 +406,9 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
                         );
                         return;
                     }
-                    console.log(`🔍 [PRODUTO] Buscando por nome: "${termoBusca}" no banco do cliente '${client.name}'...`);
+                    console.log(`🔍 [PRODUTO] Buscando por nome: "${termoBusca}" no banco do cliente '${client.name}' (Rede: ${client.cod_rede}, Filial: ${client.cod_filial})...`);
                     produtos = await tenantService.getProductInfo(client.id, termoBusca, client.cod_rede, client.cod_filial);
+                    console.log(`✅ [PRODUTO] Encontrados ${produtos?.length || 0} produtos para o nome: ${termoBusca}.`);
                 }
 
                 if (!produtos || produtos.length === 0) {
@@ -390,6 +416,7 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
                         ? `❌ *PRODUTO NÃO ENCONTRADO*\n\nNão encontrei o produto com o código "*${termoBusca}*" em seu estoque.\n\n💡 *Sugestão:*\n• Verifique se o código está correto.`
                         : `❌ *PRODUTO NÃO ENCONTRADO*\n\nNão encontrei produtos para "*${termoBusca}*" em seu estoque.\n\n💡 *Sugestões:*\n• Verifique a ortografia\n• Tente um termo mais específico\n• Use apenas o nome principal`;
 
+                    console.log(`⚠️ [PRODUTO] Nenhum produto encontrado, enviando mensagem de "não encontrado".`);
                     await enviarComFormatosCorretos(from, mensagemNaoEncontrado);
                     return;
                 }
@@ -399,6 +426,7 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
                     : `🔍 *${produtos.length} PRODUTO(S) ENCONTRADO(S)*\n*Busca:* "${termoBusca}"\n\n`;
 
                 const produtosParaExibir = buscaPorCodigo ? produtos : produtos.slice(0, 5);
+                console.log(`🛍️ [PRODUTO] Exibindo ${produtosParaExibir.length} produtos.`);
 
                 produtosParaExibir.forEach((produto: any, index: number) => {
                     resposta += `*${buscaPorCodigo ? '' : `${index + 1}. `}${produto.nom_produto}*\n`;
@@ -428,12 +456,23 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
                     resposta += `💡 *Dica:* Use *"código 12345"* para detalhes de um produto específico.`;
                 }
 
-
+                console.log(`✅ [PRODUTO] Resposta de produtos formatada. Enviando para o usuário.`);
                 await enviarComFormatosCorretos(from, resposta);
                 return;
 
             } catch (error) {
                 console.error('❌ [PRODUTO] Erro na consulta de produtos do cliente via TenantService:', error);
+                // Debug detalhado do erro
+                if (error instanceof Error) {
+                    console.error('❌ [PRODUTO-ERROR] Nome:', error.name);
+                    console.error('❌ [PRODUTO-ERROR] Mensagem:', error.message);
+                    if (error.stack) {
+                        console.error('❌ [PRODUTO-ERROR] Stack Trace:', error.stack);
+                    }
+                } else {
+                    console.error('❌ [PRODUTO-ERROR] Erro desconhecido:', error);
+                }
+
                 await enviarComFormatosCorretos(from,
                     `⚠️ *ERRO NA CONSULTA*\n\n` +
                     `Não consegui buscar produtos em seu estoque no momento.\n` +
@@ -449,6 +488,7 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
         if (lowerMessage === '/test' || lowerMessage === 'test') {
             const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA ATIVA' : '⚠️ IA INATIVA';
             const statusMsg = `✅ *SISTEMA COMPLETO FUNCIONANDO!*\n\n🔗 WhatsApp: ✅ Conectado\n${statusIA}\n🛍️ Produtos: ✅ API Conectada\n📊 Formatos: ✅ Corretos\n🚀 Status: 100% Operacional\n\nTudo funcionando perfeitamente!`;
+            console.log('✅ [ADMIN] Comando /test executado. Enviando status.');
             await enviarComFormatosCorretos(from, statusMsg);
             return;
         }
@@ -456,7 +496,8 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
         if (lowerMessage === '/debug' || lowerMessage === 'debug') {
             const formatos = converterParaFormatoFuncional(from);
             const statusIA = process.env.GEMINI_API_KEY ? '✅ ATIVA' : '❌ INATIVA';
-            const debugInfo = `🔧 *DEBUG SISTEMA COMPLETO*\n\n📱 Seu número: ${from}\n🎯 Convertido para:\n• ${formatos[0]}\n• ${formatos[1]}\n\n🤖 IA Status: ${statusIA}\n🛍️ API Produtos: ✅ Conectada\n📊 Formatos: ${FORMATOS_COMPROVADOS.length} testados\n✅ Sistema: 100% Operacional\n\n🚀 *TUDO FUNCIONANDO!*\n[MULTI-TENANT] Phone ID: ${clientWhatsAppPhoneNumberId}\n[MULTI-TENANT] Cliente: ${client?.name || 'Não identificado'}\n[MULTI-TENANT] Cod. Rede: ${client?.cod_rede || 'N/A'}\n[MULTI-TENANT] Cod. Filial: ${client?.cod_filial || 'N/A'}`;
+            const debugInfo = `🔧 *DEBUG SISTEMA COMPLETO*\n\n📱 Seu número: ${from}\n🎯 Convertido para:\n• ${formatos[0]}\n• ${formatos[1]}\n\n🤖 IA Status: ${statusIA}\n🛍️ API Produtos: ✅ Conectada\n📊 Formatos: ${FORMATOS_COMPROVADOS.length} testados\n✅ Sistema: 100% Operacional\n\n🚀 *TUDO FUNCIONANDO!*\n[MULTI-TENANT] Phone ID: ${clientWhatsAppPhoneNumberId}\n[MULTI-TENANT] Cliente: ${client?.name || 'Não identificado'}\n[MULTI-TENANT] Cod. Rede: ${client?.cod_rede || 'N/A'}\n[MULTI-TENANT] Cod. Filial: ${client?.cod_filial || 'N/A'}\n[DEBUG] ENCRYPTION_KEY length: ${process.env.ENCRYPTION_KEY?.length || 'Não presente'}\n[DEBUG] ENCRYPTION_IV length: ${process.env.ENCRYPTION_IV?.length || 'Não presente'}`;
+            console.log('✅ [ADMIN] Comando /debug executado. Enviando informações de debug.');
             await enviarComFormatosCorretos(from, debugInfo);
             return;
         }
@@ -464,13 +505,15 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
         if (lowerMessage === '/limpar' || lowerMessage === 'limpar') {
             try {
                 if (process.env.GEMINI_API_KEY) {
+                    console.log('🗑️ [ADMIN] Comando /limpar executado. Limpando histórico da IA.');
                     geminiService.clearHistory(from);
                     await enviarComFormatosCorretos(from, '🗑️ *HISTÓRICO LIMPO!*\n\nMemória da IA resetada com sucesso.\nVamos começar uma nova conversa! 🚀');
                 } else {
+                    console.log('🗑️ [ADMIN] Comando /limpar executado, mas IA inativa. Confirmando.');
                     await enviarComFormatosCorretos(from, '🗑️ *COMANDO RECEBIDO!*\n\nIA será ativada em breve.\nSistema WhatsApp funcionando normalmente.');
                 }
             } catch (error) {
-                console.error('❌ [LIMPAR] Erro:', error);
+                console.error('❌ [LIMPAR] Erro ao limpar histórico:', error);
                 await enviarComFormatosCorretos(from, '❌ Erro ao limpar histórico.\nSistema continua funcionando normalmente.');
             }
             return;
@@ -490,13 +533,14 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
                 `Envie qualquer mensagem para conversar comigo!\n` +
                 `Sou um assistente inteligente pronto para ajudar.\n\n` +
                 `🚀 *STATUS: TOTALMENTE OPERACIONAL*`;
+            console.log('✅ [ADMIN] Comando /ajuda executado. Enviando mensagem de ajuda.');
             await enviarComFormatosCorretos(from, helpMsg);
             return;
         }
 
         // Processamento com Inteligência Artificial
         if (!process.env.GEMINI_API_KEY) {
-            console.log('⚠️ [AI PROCESS] GEMINI_API_KEY não encontrada');
+            console.log('⚠️ [AI PROCESS] GEMINI_API_KEY não encontrada. IA desativada.');
             await enviarComFormatosCorretos(from, '🤖 *ASSISTENTE QUASE PRONTO!*\n\nSistema WhatsApp: ✅ Funcionando perfeitamente\n🛍️ Produtos: ✅ API Conectada\nIA: ⚙️ Sendo configurada\n\nEm breve estarei conversando inteligentemente!\nUse */test* para verificar status.');
             return;
         }
@@ -505,7 +549,7 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
         try {
             console.log('🤖 [AI] Iniciando processamento com Gemini IA...');
             aiResponseText = await geminiService.generateResponse(userMessage, from);
-            console.log(`🤖 [AI] Resposta da IA gerada com sucesso (${aiResponseText.length} caracteres)`);
+            console.log(`🤖 [AI] Resposta da IA gerada com sucesso (${aiResponseText.length} caracteres).`);
         } catch (aiError: any) {
             console.error('❌ [AI] Erro na inteligência artificial:', aiError);
             if (aiError.response && aiError.response.promptFeedback && aiError.response.promptFeedback.blockReason) {
@@ -519,6 +563,7 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
                     `• Envie uma mensagem mais simples\n` +
                     `• Use */test* para verificar o status\n\n` +
                     `🔄 Tentarei novamente em alguns instantes...`;
+                console.error('❌ [AI] Erro da IA não mapeado, enviando mensagem de indisponibilidade.');
                 await enviarComFormatosCorretos(from, errorMsg);
                 return;
             }
@@ -533,27 +578,41 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
             const parsedInfo = parseUserMessageForDrugInfo(userMessage);
 
             if (parsedInfo.drugName && parsedInfo.infoType) {
-                console.log(`🔎 Informação extraída para fallback: Medicamento: '${parsedInfo.drugName}', Tipo: '${parsedInfo.infoType}'`);
+                console.log(`🔎 Informação extraída para fallback: Medicamento: '${parsedInfo.drugName}', Tipo: '${parsedInfo.infoType}'.`);
                 const libResult = getMedicamentoInfo(parsedInfo.drugName, parsedInfo.infoType);
 
                 if (libResult.includes("Não encontrei informações sobre o medicamento") || libResult.includes("Não tenho a informação específica sobre")) {
                     const finalResponse = `_Atenção (Política de Conteúdo da IA)_ - Para sua segurança, por favor, consulte diretamente um *farmacêutico* em nossa loja ou um *médico*. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas ${libResult.toLowerCase()}. Por favor, procure um profissional de saúde para obter orientação.`;
+                    console.log('⚠️ [FALLBACK] Resultado do fallback genérico, pois não encontrou medicamento específico. Enviando.');
                     await enviarComFormatosCorretos(from, finalResponse);
                 } else {
                     const finalResponse = `_De acordo com nossa base de dados interna:_\n\n${libResult}\n\n*_Importante:_ Esta informação é para fins educacionais e informativos e não substitui o conselho, diagnóstico ou tratamento de um profissional de saúde qualificado. Sempre consulte um *médico* ou *farmacêutico* para orientações específicas sobre sua saúde e para a interpretação correta das informações.`;
+                    console.log('✅ [FALLBACK] Resultado do fallback encontrado e formatado. Enviando.');
                     await enviarComFormatosCorretos(from, finalResponse);
                 }
             } else {
                 console.warn("⚠️ Não foi possível extrair nome do medicamento ou tipo de informação da mensagem do usuário para o fallback.");
                 const finalResponse = `_Atenção (Política de Conteúdo da IA)_ - Para sua segurança, por favor, consulte diretamente um *farmacêutico* em nossa loja ou um *médico*. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas não consegui entender qual medicamento ou informação específica você procura. Por favor, tente perguntar de forma mais direta (ex: _'Qual a posologia da losartana?'_ ou _'Indicações do paracetamol?'_).`;
+                console.log('⚠️ [FALLBACK] Não foi possível extrair info do medicamento, enviando fallback genérico.');
                 await enviarComFormatosCorretos(from, finalResponse);
             }
         } else {
+            console.log('✅ [AI] Resposta da IA (não médica) gerada e pronta para envio.');
             await enviarComFormatosCorretos(from, aiResponseText);
         }
 
     } catch (error) {
         console.error('❌ [AI PROCESS] Erro crítico no processamento:', error);
+        // Debug detalhado do erro
+        if (error instanceof Error) {
+            console.error('❌ [AI PROCESS-ERROR] Nome:', error.name);
+            console.error('❌ [AI PROCESS-ERROR] Mensagem:', error.message);
+            if (error.stack) {
+                console.error('❌ [AI PROCESS-ERROR] Stack Trace:', error.stack);
+            }
+        } else {
+            console.error('❌ [AI PROCESS-ERROR] Erro desconhecido:', error);
+        }
 
         const recoveryMsg = `⚠️ *ERRO TEMPORÁRIO DETECTADO*\n\n` +
             `O sistema detectou um problema momentâneo e está se recuperando automaticamente.\n\n` +
@@ -564,6 +623,7 @@ async function processarComIACompleta(message: any, rawPayload: any): Promise<vo
             `Use */test* para verificar o status de recuperação.`;
 
         try {
+            console.log('⚠️ [RECOVERY] Erro no processamento da IA, tentando enviar mensagem de recuperação.');
             await enviarComFormatosCorretos(from, recoveryMsg);
         } catch (recoveryError) {
             console.error('❌ [RECOVERY] Falha crítica na recuperação:', recoveryError);
