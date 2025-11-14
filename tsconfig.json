@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2017",
+    "target": "ES2020", // Sugeri ES2020 para recursos mais modernos, mas ES2017 também funciona.
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
@@ -18,9 +18,12 @@
         "name": "next"
       }
     ],
+    // 🚀 MUDANÇAS AQUI PARA RESOLVER CAMINHOS
+    "baseUrl": ".", // Diz ao TypeScript para resolver caminhos absolutos a partir da raiz do projeto
     "paths": {
-      "@/*": ["./src/*"]
-    }
+      "@/*": ["./*"] // Mapeia "@/" para a raiz do projeto (onde packages/multi-tenant está)
+    },
+    "forceConsistentCasingInFileNames": true // Boa prática adicionada
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
