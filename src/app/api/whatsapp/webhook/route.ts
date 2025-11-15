@@ -25,50 +25,44 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // --- Função para encontrar a API local da farmácia COM RETRY ---
 // --- Função para encontrar a API local da farmácia COM RETRY ---
+// --- Função para encontrar a API local da farmácia COM FETCH DIRETO ---
 async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: string, client_id: string} | null> {
-  const maxRetries = 3;
+  try {
+    console.log('🔍 [FETCH] Buscando farmácia via fetch direto:', whatsappPhoneId);
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`🔍 [DEBUG] Tentativa ${attempt}/${maxRetries} - Buscando farmácia:`, whatsappPhoneId);
+    const url = `${SUPABASE_URL}/rest/v1/client_connections?whatsapp_phone_id=eq.${whatsappPhoneId}&select=api_base_url,client_id`;
 
-      // Usar fetch com timeout manual
-      const queryPromise = supabase
-        .from('client_connections')
-        .select('api_base_url, client_id')
-        .eq('whatsapp_phone_id', whatsappPhoneId)
-        .single();
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
-      // Timeout manual
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout')), 5000)
-      );
-
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
-
-      if (error) {
-        console.error(`❌ [Tentativa ${attempt}] Erro Supabase:`, error.message);
-        if (attempt === maxRetries) return null;
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-        continue;
-      }
-
-      if (!data) {
-        console.log(`❌ [Tentativa ${attempt}] Farmácia não encontrada:`, whatsappPhoneId);
-        return null;
-      }
-
-      console.log('✅ [DEBUG] Farmácia encontrada:', data);
-      return { api_base_url: data.api_base_url, client_id: data.client_id };
-
-    } catch (error) {
-      console.error(`❌ [Tentativa ${attempt}] Erro de conexão:`, error);
-      if (attempt === maxRetries) return null;
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    if (!response.ok) {
+      throw new Error(`Supabase retornou status: ${response.status}`);
     }
-  }
 
-  return null;
+    const data = await response.json();
+    console.log('🔍 [FETCH] Resposta do Supabase:', data);
+
+    if (!data || data.length === 0) {
+      console.log('❌ Farmácia não encontrada:', whatsappPhoneId);
+      return null;
+    }
+
+    console.log('✅ Farmácia encontrada:', data[0]);
+    return {
+      api_base_url: data[0].api_base_url,
+      client_id: data[0].client_id
+    };
+
+  } catch (error) {
+    console.error('❌ Erro ao buscar farmácia no Supabase:', error);
+    return null;
+  }
 }
 // --- Função para consultar API local da farmácia ---
 async function consultarAPIFarmacia(apiBaseUrl: string, termo: string): Promise<any> {
