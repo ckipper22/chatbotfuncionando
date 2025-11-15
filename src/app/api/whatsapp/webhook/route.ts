@@ -26,19 +26,21 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // --- Função para encontrar a API local da farmácia COM RETRY ---
 // --- Função para encontrar a API local da farmácia COM RETRY ---
 // --- Função para encontrar a API local da farmácia COM FETCH DIRETO ---
+// --- Função para encontrar a API local da farmácia COM FETCH DIRETO ---
 async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: string, client_id: string} | null> {
   try {
     console.log('🔍 [FETCH] Buscando farmácia via fetch direto:', whatsappPhoneId);
 
     const url = `${SUPABASE_URL}/rest/v1/client_connections?whatsapp_phone_id=eq.${whatsappPhoneId}&select=api_base_url,client_id`;
 
+    const headers = new Headers();
+    headers.append('apikey', SUPABASE_ANON_KEY!);
+    headers.append('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
+    headers.append('Content-Type', 'application/json');
+
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: headers,
     });
 
     if (!response.ok) {
