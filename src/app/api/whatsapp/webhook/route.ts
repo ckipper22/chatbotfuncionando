@@ -67,13 +67,15 @@ async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: s
   }
 }
 // --- Função para consultar API local da farmácia ---
+// --- Função para consultar API local da farmácia COM SEU ENDPOINT REAL ---
 async function consultarAPIFarmacia(apiBaseUrl: string, termo: string): Promise<any> {
   try {
-    const url = `${apiBaseUrl}/api/products/search?q=${encodeURIComponent(termo)}`;
+    // Usar SEU endpoint real que funciona: /produto?ean_code=...
+    const url = `${apiBaseUrl}/produto?ean_code=${encodeURIComponent(termo)}`;
     console.log('🔍 Consultando API farmácia:', url);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     const response = await fetch(url, {
       method: 'GET',
@@ -91,7 +93,15 @@ async function consultarAPIFarmacia(apiBaseUrl: string, termo: string): Promise<
 
     const data = await response.json();
     console.log('✅ Resposta da API farmácia:', data);
-    return data;
+
+    // Adaptar para o formato esperado pelo webhook
+    // SUA API retorna dados de produtos diretamente
+    return {
+      success: true,
+      count: data.length || 1,
+      data: Array.isArray(data) ? data : [data]
+    };
+
   } catch (error) {
     console.error('❌ Erro ao consultar API da farmácia:', error);
     throw error;
