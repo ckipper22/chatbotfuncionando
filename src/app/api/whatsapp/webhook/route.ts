@@ -24,6 +24,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // --- Função para encontrar a API local da farmácia COM RETRY ---
+// --- Função para encontrar a API local da farmácia COM RETRY ---
 async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: string, client_id: string} | null> {
   const maxRetries = 3;
 
@@ -31,22 +32,24 @@ async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: s
     try {
       console.log(`🔍 [DEBUG] Tentativa ${attempt}/${maxRetries} - Buscando farmácia:`, whatsappPhoneId);
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 segundos timeout
-
-      const { data, error } = await supabase
+      // Usar fetch com timeout manual
+      const queryPromise = supabase
         .from('client_connections')
         .select('api_base_url, client_id')
         .eq('whatsapp_phone_id', whatsappPhoneId)
-        .single()
-        .abortSignal(controller.signal);
+        .single();
 
-      clearTimeout(timeoutId);
+      // Timeout manual
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout')), 5000)
+      );
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
 
       if (error) {
         console.error(`❌ [Tentativa ${attempt}] Erro Supabase:`, error.message);
         if (attempt === maxRetries) return null;
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
         continue;
       }
 
@@ -67,7 +70,6 @@ async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: s
 
   return null;
 }
-
 // --- Função para consultar API local da farmácia ---
 async function consultarAPIFarmacia(apiBaseUrl: string, termo: string): Promise<any> {
   try {
