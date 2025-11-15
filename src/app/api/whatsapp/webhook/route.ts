@@ -27,8 +27,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: string, client_id: string} | null> {
   try {
     const { data, error } = await supabase
-      .from('clients')
-      .select('api_base_url, id')
+      .from('client_connections')  // ← TABELA CORRETA
+      .select('api_base_url, client_id')
       .eq('whatsapp_phone_id', whatsappPhoneId)
       .single();
 
@@ -37,7 +37,7 @@ async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: s
       return null;
     }
 
-    return { api_base_url: data.api_base_url, client_id: data.id };
+    return { api_base_url: data.api_base_url, client_id: data.client_id };
   } catch (error) {
     console.error('❌ Erro ao buscar farmácia no Supabase:', error);
     return null;
