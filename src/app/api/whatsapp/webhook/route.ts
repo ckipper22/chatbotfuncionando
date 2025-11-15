@@ -26,17 +26,31 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // --- Função para encontrar a API local da farmácia ---
 async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: string, client_id: string} | null> {
   try {
+    console.log('🔍 [DEBUG] Buscando farmácia com WhatsApp ID:', whatsappPhoneId);
+    console.log('🔍 [DEBUG] Supabase config:', {
+      url: SUPABASE_URL,
+      hasKey: !!SUPABASE_ANON_KEY
+    });
+
     const { data, error } = await supabase
-      .from('client_connections')  // ← TABELA CORRETA
+      .from('client_connections')
       .select('api_base_url, client_id')
       .eq('whatsapp_phone_id', whatsappPhoneId)
       .single();
 
-    if (error || !data) {
+    console.log('🔍 [DEBUG] Resultado da consulta:', { data, error });
+
+    if (error) {
+      console.error('❌ Erro na consulta Supabase:', error);
+      return null;
+    }
+
+    if (!data) {
       console.error('❌ Farmácia não encontrada para WhatsApp ID:', whatsappPhoneId);
       return null;
     }
 
+    console.log('✅ [DEBUG] Farmácia encontrada:', data);
     return { api_base_url: data.api_base_url, client_id: data.client_id };
   } catch (error) {
     console.error('❌ Erro ao buscar farmácia no Supabase:', error);
