@@ -52,7 +52,7 @@ const medicamentosData = [
 ];
 
 // =========================================================================
-// GATILHOS E AUXILIARES DE INTENÇÃO (NOVA LÓGICA)
+// GATILHOS E AUXILIARES DE INTENÇÃO (LÓGICA CORRIGIDA)
 // =========================================================================
 
 // Lista expandida de palavras-chave para identificar a intenção de BUSCA DE PRODUTOS
@@ -62,29 +62,44 @@ const TRIGGERS_BUSCA = [
   'quero', 'tem', 'procurar'
 ];
 
+// Palavras de ruído que devem ser removidas para isolar o nome do produto
+const NOISE_WORDS = new Set([
+  ...TRIGGERS_BUSCA,
+  'qual', 'o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'por', 'um', 'uma',
+  'pra', 'eh', 'e', 'me', 'nele', 'dele', 'dela', 'em', 'para', 'na', 'no', 'favor', 'porfavor', 'por gentileza'
+]);
+
 /**
- * Encontra e remove o trigger da mensagem para extrair apenas o termo de busca.
- * @returns O termo de busca ou null se a mensagem for muito curta após a remoção.
+ * Encontra e remove o ruído da mensagem usando tokenização para extrair o termo de busca.
+ * (CORREÇÃO do bug de "Qual odo sorinan").
+ * @returns O termo de busca ou null se nenhum gatilho for encontrado ou o termo for muito curto.
  */
 function extrairTermoBusca(mensagem: string): string | null {
   const lowerMsg = mensagem.toLowerCase();
-  for (const trigger of TRIGGERS_BUSCA) {
-    // Regex para checar se o trigger está no começo ou com espaço (para cobrir "quero sorinan")
-    const regex = new RegExp(`^${trigger}\\s*|\\s+${trigger}\\s*`, 'i');
 
-    // Se o trigger estiver na mensagem, tentamos extrair
-    if (lowerMsg.includes(trigger)) {
-      // Remove o trigger e espaços extras
-      const termo = mensagem.replace(regex, '').trim();
+  // 1. Verifica se a mensagem tem pelo menos um gatilho de busca (para confirmar a intenção)
+  const isSearchIntent = TRIGGERS_BUSCA.some(trigger => lowerMsg.includes(trigger));
 
-      // Garante que o termo não é um comando vazio
-      if (termo.length >= 2) {
-        return termo;
-      }
-    }
+  if (!isSearchIntent) {
+    // Se não tiver um gatilho, a intenção não é claramente busca de produto.
+    return null;
   }
+
+  // 2. Tokeniza a mensagem e filtra as palavras de ruído
+  const tokens = lowerMsg.split(/\s+/).filter(Boolean); // Divide por espaços, remove strings vazias
+
+  const filteredTokens = tokens.filter(token => !NOISE_WORDS.has(token));
+
+  const termo = filteredTokens.join(' ').trim();
+
+  // 3. Garante que restou um termo de busca válido
+  if (termo.length >= 2) {
+    return termo;
+  }
+
   return null;
 }
+
 
 // =========================================================================
 // FUNÇÕES AUXILIARES
@@ -143,7 +158,7 @@ async function consultarAPIFarmacia(apiBaseUrl: string, termo: string): Promise<
     console.log('🔍 Consultando API farmácia:', url);
 
     const controller = new AbortController();
-    // Timeout ajustado para 15 segundos para dar tempo do Ngrok e Flask responderem
+    // Timeout ajustado para 15 segundos
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     const response = await fetch(url, {
@@ -202,7 +217,6 @@ function converterParaFormatoFuncional(numeroOriginal: string): string[] {
 
 // --- Envio WhatsApp com formatação correta ---
 async function enviarComFormatosCorretos(from: string, texto: string): Promise<boolean> {
-  // A função de envio permanece a mesma, pois é a mais segura para texto simples.
   try {
     console.log('🎯 [SEND] Enviando mensagem para:', from);
 
@@ -239,7 +253,6 @@ async function enviarComFormatosCorretos(from: string, texto: string): Promise<b
           console.log(`✅ Mensagem enviada com sucesso para: ${formato}`);
           return true;
         } else {
-          // Se a primeira tentativa falhar, loga o erro antes de tentar o próximo formato
           const errorResponse = await response.text();
           console.log(`❌ Falha para: ${formato} - Status: ${response.status} - Erro: ${errorResponse}`);
         }
@@ -489,7 +502,7 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
           return;
         }
 
-        // --- NOVO FORMATO DE RESPOSTA MAIS CLARO ---
+        // --- FORMATO DE RESPOSTA MAIS CLARO ---
         let resposta = `🔍 *${resultado.count} PRODUTO(S) ENCONTRADO(S)*\\n` +
                       `*Sua busca:* "${termoBusca}"\\n\\n`;
 
