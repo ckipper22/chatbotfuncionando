@@ -52,7 +52,7 @@ const medicamentosData = [
 ];
 
 // =========================================================================
-// GATILHOS E AUXILIARES DE INTENÇÃO (LÓGICA CORRIGIDA)
+// GATILHOS E AUXILIARES DE INTENÇÃO
 // =========================================================================
 
 // Lista expandida de palavras-chave para identificar a intenção de BUSCA DE PRODUTOS
@@ -66,13 +66,11 @@ const TRIGGERS_BUSCA = [
 const NOISE_WORDS = new Set([
   ...TRIGGERS_BUSCA,
   'qual', 'o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'por', 'um', 'uma',
-  'pra', 'eh', 'e', 'me', 'nele', 'dele', 'dela', 'em', 'para', 'na', 'no', 'favor', 'porfavor', 'por gentileza'
+  'pra', 'eh', 'e', 'me', 'nele', 'dele', 'dela', 'em', 'para', 'na', 'no', 'favor', 'porfavor', 'porgentileza'
 ]);
 
 /**
  * Encontra e remove o ruído da mensagem usando tokenização para extrair o termo de busca.
- * (CORREÇÃO do bug de "Qual odo sorinan").
- * @returns O termo de busca ou null se nenhum gatilho for encontrado ou o termo for muito curto.
  */
 function extrairTermoBusca(mensagem: string): string | null {
   const lowerMsg = mensagem.toLowerCase();
@@ -81,12 +79,11 @@ function extrairTermoBusca(mensagem: string): string | null {
   const isSearchIntent = TRIGGERS_BUSCA.some(trigger => lowerMsg.includes(trigger));
 
   if (!isSearchIntent) {
-    // Se não tiver um gatilho, a intenção não é claramente busca de produto.
     return null;
   }
 
   // 2. Tokeniza a mensagem e filtra as palavras de ruído
-  const tokens = lowerMsg.split(/\s+/).filter(Boolean); // Divide por espaços, remove strings vazias
+  const tokens = lowerMsg.split(/\s+/).filter(Boolean);
 
   const filteredTokens = tokens.filter(token => !NOISE_WORDS.has(token));
 
@@ -502,19 +499,24 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
           return;
         }
 
-        // --- FORMATO DE RESPOSTA MAIS CLARO ---
-        let resposta = `🔍 *${resultado.count} PRODUTO(S) ENCONTRADO(S)*\\n` +
-                      `*Sua busca:* "${termoBusca}"\\n\\n`;
+        // --- INÍCIO DA RESPOSTA COM FORMATO PROFISSIONAL (CORREÇÃO DE LAYOUT) ---
+        let resposta = `🔍 *RESULTADOS DA BUSCA (${resultado.count} ITENS)*\\n` +
+                      `*Termo:* "${termoBusca}"\\n\\n`;
 
         resultado.data.slice(0, 5).forEach((produto: any, index: number) => {
-          resposta += `*${index + 1}. ${produto.nome_produto}*\\n`;
-          resposta += `💊 ${produto.nom_laboratorio || 'Laboratório não informado'}\\n`;
-          resposta += `💰 ${produto.preco_final_venda || 'Preço não informado'}`;
-          if (produto.desconto_percentual > 0) {
-            resposta += ` (🔻${produto.desconto_percentual.toFixed(1)}% OFF)`;
+          const preco = produto.preco_final_venda || 'Preço não informado';
+          let descontoStr = '';
+          if (produto.desconto_percentual && produto.desconto_percentual > 0) {
+            descontoStr = ` (🔻${produto.desconto_percentual.toFixed(1)}% OFF)`;
           }
-          resposta += `\\n📦 Estoque: ${produto.qtd_estoque || 0} unidades\\n`;
-          resposta += `📋 Código: ${produto.cod_reduzido || 'N/A'}\\n\\n`;
+          // Simplificado: Exibe status, removendo contagem exata de estoque e Cod. Reduzido
+          const estoqueStatus = (produto.qtd_estoque && produto.qtd_estoque > 0) ? '✅ Disponível' : '❌ Esgotado';
+
+          // Formato Conciso e Profissional
+          resposta += `*${index + 1}. ${produto.nome_produto}*\\n`;
+          resposta += `💰 *${preco}*${descontoStr}\\n`;
+          resposta += `🏭 ${produto.nom_laboratorio || 'Laboratório não informado'} | ${estoqueStatus}\\n`;
+          resposta += `----------------------------------------\\n`; // Separador Visual
         });
 
         if (resultado.count > 5) {
@@ -522,7 +524,8 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
           resposta += `Use um termo mais específico para ver todos.\\n\\n`;
         }
 
-        resposta += `💡 *Próxima Ação:* Digite o número do item (ex: *1* ou *2*) para detalhes, ou *voltar* para o Menu.`;
+        resposta += `💡 *Ação:* Digite o número do item (*1, 2, 3...*) para mais detalhes, ou *voltar* para o Menu Principal.`;
+        // --- FIM DA CORREÇÃO DE FORMATO ---
 
         await enviarComFormatosCorretos(from, resposta);
         return;
