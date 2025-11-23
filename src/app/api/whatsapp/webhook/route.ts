@@ -52,8 +52,56 @@ const medicamentosData = [
 ];
 
 // =========================================================================
+// GATILHOS E AUXILIARES DE INTENÇÃO (NOVA LÓGICA)
+// =========================================================================
+
+// Lista expandida de palavras-chave para identificar a intenção de BUSCA DE PRODUTOS
+const TRIGGERS_BUSCA = [
+  'buscar', 'produto', 'consulta', 'preço', 'preco', 'estoque',
+  'achar', 'encontrar', 'ver se tem', 'quanto custa', 'me veja', 'me passe',
+  'quero', 'tem', 'procurar'
+];
+
+/**
+ * Encontra e remove o trigger da mensagem para extrair apenas o termo de busca.
+ * @returns O termo de busca ou null se a mensagem for muito curta após a remoção.
+ */
+function extrairTermoBusca(mensagem: string): string | null {
+  const lowerMsg = mensagem.toLowerCase();
+  for (const trigger of TRIGGERS_BUSCA) {
+    // Regex para checar se o trigger está no começo ou com espaço (para cobrir "quero sorinan")
+    const regex = new RegExp(`^${trigger}\\s*|\\s+${trigger}\\s*`, 'i');
+
+    // Se o trigger estiver na mensagem, tentamos extrair
+    if (lowerMsg.includes(trigger)) {
+      // Remove o trigger e espaços extras
+      const termo = mensagem.replace(regex, '').trim();
+
+      // Garante que o termo não é um comando vazio
+      if (termo.length >= 2) {
+        return termo;
+      }
+    }
+  }
+  return null;
+}
+
+// =========================================================================
 // FUNÇÕES AUXILIARES
 // =========================================================================
+
+// --- Envio de Mensagem de Menu (Simples) ---
+async function enviarMenuInicial(from: string): Promise<boolean> {
+  const texto = '*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\\n\\n' +
+                'Como posso te ajudar hoje?\\n\\n' +
+                'Digite o *número* da opção desejada, ou digite o nome do produto/medicamento:\\n' +
+                '*1.* 🔍 Buscar Preços e Estoque de Produtos\\n' +
+                '*2.* 💊 Consultar Informações de Medicamentos (Bula)\\n' +
+                '*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)\\n' +
+                '*4.* 🆘 Ver comandos administrativos (/test, /ajuda)';
+
+  return enviarComFormatosCorretos(from, texto);
+}
 
 // --- Buscar API da farmácia no Supabase ---
 async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: string, client_id: string} | null> {
@@ -95,7 +143,8 @@ async function consultarAPIFarmacia(apiBaseUrl: string, termo: string): Promise<
     console.log('🔍 Consultando API farmácia:', url);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    // Timeout ajustado para 15 segundos para dar tempo do Ngrok e Flask responderem
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     const response = await fetch(url, {
       method: 'GET',
@@ -153,6 +202,7 @@ function converterParaFormatoFuncional(numeroOriginal: string): string[] {
 
 // --- Envio WhatsApp com formatação correta ---
 async function enviarComFormatosCorretos(from: string, texto: string): Promise<boolean> {
+  // A função de envio permanece a mesma, pois é a mais segura para texto simples.
   try {
     console.log('🎯 [SEND] Enviando mensagem para:', from);
 
@@ -174,7 +224,6 @@ async function enviarComFormatosCorretos(from: string, texto: string): Promise<b
           }
         };
 
-        // ✅ CORREÇÃO: Usar NOSSO WhatsApp Phone Number ID fixo
         const url = `https://graph.facebook.com/v19.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
         const response = await fetch(url, {
@@ -186,13 +235,13 @@ async function enviarComFormatosCorretos(from: string, texto: string): Promise<b
           body: JSON.stringify(payload),
         });
 
-        const responseText = await response.text();
-
         if (response.ok) {
           console.log(`✅ Mensagem enviada com sucesso para: ${formato}`);
           return true;
         } else {
-          console.log(`❌ Falha para: ${formato} - Status: ${response.status}`);
+          // Se a primeira tentativa falhar, loga o erro antes de tentar o próximo formato
+          const errorResponse = await response.text();
+          console.log(`❌ Falha para: ${formato} - Status: ${response.status} - Erro: ${errorResponse}`);
         }
       } catch (error) {
         console.error(`💥 Erro para ${formato}:`, error);
@@ -340,11 +389,8 @@ export async function POST(req: NextRequest) {
               if (message.type === 'text' && messageText) {
                 await processarMensagemCompleta(from, whatsappPhoneId, messageText);
               } else {
-                // ✅ CORREÇÃO: Remover whatsappPhoneId do parâmetro
-                await enviarComFormatosCorretos(
-                  from,
-                  '👋 Olá! Sou o assistente virtual da farmácia.\\n\\n💊 *Buscar produtos:*\\n• produto dipirona\\n• buscar paracetamol\\n• estoque nimesulida\\n\\n💡 *Comandos:*\\n• /test - Status do sistema\\n• /debug - Informações técnicas\\n• /ajuda - Esta mensagem'
-                );
+                // Se não for texto ou for mídia, mostra o menu inicial.
+                await enviarMenuInicial(from);
               }
             }
           }
@@ -370,12 +416,41 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
   console.log(`🤖 Processando: "${userMessage}"`);
 
   try {
-    // COMANDOS ADMINISTRATIVOS
+    // --- OPÇÕES FIXAS (MENU) ---
+
+    if (lowerMessage === '1') {
+      await enviarComFormatosCorretos(from, '✅ *BUSCA DE PRODUTOS*\\n\\nDigite o nome do produto que deseja buscar. Exemplos:\\n• dipirona\\n• paracetamol 500mg\\n• sorinan\\n\\nOu *digite voltar* para o Menu Principal.');
+      return;
+    }
+
+    if (lowerMessage === '2') {
+      await enviarComFormatosCorretos(from, '✅ *INFORMAÇÕES DE MEDICAMENTOS*\\n\\nDigite o nome do medicamento e a informação desejada. Exemplos:\\n• losartana posologia\\n• sinvastatina tudo\\n• diclofenaco efeitos colaterais\\n\\nOu *digite voltar* para o Menu Principal.');
+      return;
+    }
+
+    if (lowerMessage === '3') {
+      // Aqui você pode adicionar lógica mais complexa de horário de atendimento
+      await enviarComFormatosCorretos(from, '👩‍💻 *FALAR COM ATENDENTE*\\n\\nNossos atendentes estão disponíveis de [INSERIR HORÁRIO AQUI].\\nPara ser transferido, aguarde um momento. Se for urgente, ligue para [INSERIR NÚMERO AQUI].\\n\\nOu *digite voltar* para o Menu Principal.');
+      return;
+    }
+
+    if (lowerMessage === '4' || lowerMessage === '/comandos' || lowerMessage === '/admin') {
+      const helpMsg = `🆘 *COMANDOS ADMINISTRATIVOS*\\n\\n• /test - Status de Conexão\\n• /debug - Informações Técnicas\\n• /ajuda - Menu Principal\\n\\n*Para sair:* Digite *voltar* ou *menu*.`;
+      await enviarComFormatosCorretos(from, helpMsg);
+      return;
+    }
+
+    if (lowerMessage === 'voltar' || lowerMessage === 'menu' || lowerMessage === '/ajuda' || lowerMessage === 'ajuda' || lowerMessage === '/help' || lowerMessage === 'oi' || lowerMessage === 'ola' || lowerMessage === 'olá') {
+      await enviarMenuInicial(from);
+      return;
+    }
+
+
+    // --- COMANDOS ADMINISTRATIVOS ---
     if (lowerMessage === '/test' || lowerMessage === 'test') {
       const farmacyData = await findFarmacyAPI(whatsappPhoneId);
       const statusAPI = farmacyData ? '✅ CONFIGURADA' : '❌ NÃO CONFIGURADA';
-      const statusMsg = `✅ *SISTEMA MULTI-TENANT FUNCIONANDO!*\\n\\n🏪 Farmácia: ${statusAPI}\\n📞 WhatsApp: ✅ Conectado\\n🛍️ Produtos: ✅ API Conectada\\n🤖 IA: ✅ Base de Medicamentos\\n🚀 Status: 100% Operacional\\n\\nTudo funcionando perfeitamente!`;
-      // ✅ CORREÇÃO: Remover whatsappPhoneId do parâmetro
+      const statusMsg = `✅ *SISTEMA MULTI-TENANT FUNCIONANDO!*\\n\\n🏪 Farmácia: ${statusAPI}\\n📞 WhatsApp: ✅ Conectado\\n🛍️ Produtos: ✅ API Conectada\\n🤖 IA: ✅ Base de Medicamentos\\n🚀 Status: 100% Operacional`;
       await enviarComFormatosCorretos(from, statusMsg);
       return;
     }
@@ -384,37 +459,24 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
       const farmacyData = await findFarmacyAPI(whatsappPhoneId);
       const formatos = converterParaFormatoFuncional(from);
       const debugInfo = `🔧 *DEBUG SISTEMA MULTI-TENANT*\\n\\n📱 Seu número: ${from}\\n🎯 Formatos: ${formatos.join(', ')}\\n🏪 Farmácia ID: ${whatsappPhoneId}\\n🔗 API: ${farmacyData?.api_base_url || 'NÃO CONFIGURADA'}\\n🤖 Medicamentos: ${medicamentosData.length} cadastrados\\n✅ Sistema: 100% Operacional`;
-      // ✅ CORREÇÃO: Remover whatsappPhoneId do parâmetro
       await enviarComFormatosCorretos(from, debugInfo);
       return;
     }
 
-    if (lowerMessage === '/ajuda' || lowerMessage === 'ajuda' || lowerMessage === '/help') {
-      const helpMsg = `🤖 *ASSISTENTE VIRTUAL DA FARMÁCIA*\\n\\n💊 *BUSCAR PRODUTOS:*\\n• produto [nome]\\n• buscar [termo]\\n• estoque [produto]\\n\\n💡 *COMANDOS:*\\n• /test - Status do sistema\\n• /debug - Informações técnicas\\n• /ajuda - Esta mensagem\\n\\n🔍 *CONSULTAR MEDICAMENTOS:*\\n• losartana posologia\\n• sinvastatina efeitos colaterais\\n• diclofenaco tudo\\n\\n🚀 *SISTEMA MULTI-TENANT ATIVO*`;
-      // ✅ CORREÇÃO: Remover whatsappPhoneId do parâmetro
-      await enviarComFormatosCorretos(from, helpMsg);
-      return;
-    }
+    // --- CONSULTA DE PRODUTOS (COM LÓGICA DE CONTEXTO APRIMORADA) ---
+    const termoBusca = extrairTermoBusca(userMessage);
 
-    // CONSULTA DE PRODUTOS
-    if (lowerMessage.startsWith('buscar ') || lowerMessage.startsWith('produto ') ||
-        lowerMessage.startsWith('consulta ') || lowerMessage.startsWith('preço ') ||
-        lowerMessage.startsWith('preco ') || lowerMessage.startsWith('estoque ')) {
-
-      console.log(`🛍️ [PRODUTO] Consultando: "${userMessage}"`);
+    if (termoBusca) {
+      console.log(`🛍️ [PRODUTO] Consultando: "${termoBusca}" (Termo extraído)`);
 
       const farmacyData = await findFarmacyAPI(whatsappPhoneId);
 
       if (!farmacyData?.api_base_url) {
-        // ✅ CORREÇÃO: Remover whatsappPhoneId do parâmetro
         await enviarComFormatosCorretos(from, '❌ *FARMÁCIA NÃO CONFIGURADA*\\n\\nEsta farmácia ainda não está configurada no sistema. Contate o suporte técnico.');
         return;
       }
 
-      const termoBusca = userMessage.replace(/^(buscar|produto|consulta|preço|preco|estoque)\s*/i, '').trim();
-
       if (termoBusca.length < 2) {
-        // ✅ CORREÇÃO: Remover whatsappPhoneId do parâmetro
         await enviarComFormatosCorretos(from, '🔍 *BUSCA DE PRODUTOS*\\n\\nPor favor, digite pelo menos 2 caracteres para buscar.\\n\\n💡 *Exemplos:*\\n• produto paracetamol\\n• buscar dipirona\\n• estoque nimesulida');
         return;
       }
@@ -423,13 +485,13 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
         const resultado = await consultarAPIFarmacia(farmacyData.api_base_url, termoBusca);
 
         if (!resultado.success || resultado.count === 0) {
-          // ✅ CORREÇÃO: Remover whatsappPhoneId do parâmetro
           await enviarComFormatosCorretos(from, `❌ *PRODUTO NÃO ENCONTRADO*\\n\\nNão encontrei produtos para "*${termoBusca}*".\\n\\n💡 *Sugestões:*\\n• Verifique a ortografia\\n• Tente um termo mais específico\\n• Use apenas o nome principal`);
           return;
         }
 
+        // --- NOVO FORMATO DE RESPOSTA MAIS CLARO ---
         let resposta = `🔍 *${resultado.count} PRODUTO(S) ENCONTRADO(S)*\\n` +
-                      `*Busca:* "${termoBusca}"\\n\\n`;
+                      `*Sua busca:* "${termoBusca}"\\n\\n`;
 
         resultado.data.slice(0, 5).forEach((produto: any, index: number) => {
           resposta += `*${index + 1}. ${produto.nome_produto}*\\n`;
@@ -447,45 +509,37 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
           resposta += `Use um termo mais específico para ver todos.\\n\\n`;
         }
 
-        resposta += `💡 *Dica:* Use *"código 12345"* para detalhes de um produto específico.`;
+        resposta += `💡 *Próxima Ação:* Digite o número do item (ex: *1* ou *2*) para detalhes, ou *voltar* para o Menu.`;
 
-        // ✅ CORREÇÃO: Remover whatsappPhoneId do parâmetro
         await enviarComFormatosCorretos(from, resposta);
         return;
 
       } catch (error) {
         console.error('❌ [PRODUTO] Erro na consulta:', error);
-        // ✅ CORREÇÃO: Remover whatsappPhoneId do parâmetro
-        await enviarComFormatosCorretos(from, '⚠️ *ERRO NA CONSULTA*\\n\\nNão consegui buscar produtos no momento.\\nNossa equipe foi notificada.\\n\\nTente novamente em alguns instantes.');
+        await enviarComFormatosCorretos(from, '⚠️ *ERRO NA CONSULTA*\\n\\nNão consegui buscar produtos no momento.\\nNossa equipe foi notificada.\\n\\nTente novamente em alguns instantes, ou *digite /test*.');
         return;
       }
     }
 
-    // CONSULTA DE MEDICAMENTOS (FALLBACK)
+    // --- CONSULTA DE MEDICAMENTOS (FALLBACK) ---
     const parsedInfo = parseUserMessageForDrugInfo(userMessage);
 
     if (parsedInfo.drugName) {
       console.log(`💊 [MEDICAMENTO] Consultando: ${parsedInfo.drugName} - ${parsedInfo.infoType}`);
 
       const infoMedicamento = getMedicamentoInfo(parsedInfo.drugName, parsedInfo.infoType || 'tudo');
-      // ✅ CORREÇÃO: Remover whatsappPhoneId do parâmetro
       await enviarComFormatosCorretos(from, infoMedicamento);
       return;
     }
 
-    // MENSAGEM GENÉRICA
-    // ✅ CORREÇÃO: Remover whatsappPhoneId do parâmetro
-    await enviarComFormatosCorretos(
-      from,
-      '👋 *OLÁ! SOU SEU ASSISTENTE VIRTUAL*\\n\\n💊 *Para buscar produtos:*\\n• produto dipirona\\n• buscar paracetamol\\n• estoque nimesulida\\n\\n🔍 *Para informações de medicamentos:*\\n• losartana posologia\\n• sinvastatina efeitos colaterais\\n• diclofenaco tudo\\n\\n⚡ *Comandos rápidos:*\\n• /test - Status do sistema\\n• /debug - Informações técnicas\\n• /ajuda - Ver esta mensagem'
-    );
+    // --- MENSAGEM GENÉRICA (QUANDO NENHUM COMANDO É RECONHECIDO) ---
+    await enviarMenuInicial(from);
 
   } catch (error) {
     console.error('❌ [PROCESS] Erro crítico:', error);
-    // ✅ CORREÇÃO: Remover whatsappPhoneId do parâmetro
     await enviarComFormatosCorretos(
       from,
-      '⚠️ *ERRO TEMPORÁRIO*\\n\\nEstou com dificuldades momentâneas.\\nTente novamente em alguns instantes.\\n\\nUse /test para verificar o status.'
+      '⚠️ *ERRO TEMPORÁRIO*\\n\\nEstou com dificuldades momentâneas.\\nTente novamente em alguns instantes.\\n\\nUse /test para verificar o status, ou *digite voltar*.'
     );
   }
 }
