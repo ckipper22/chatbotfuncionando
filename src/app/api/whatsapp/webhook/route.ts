@@ -499,9 +499,8 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
           return;
         }
 
-        // --- INÍCIO DA RESPOSTA COM FORMATO ULTRA-COMPACTO ---
-        // 1. Removida a linha *Termo:*
-        let resposta = `🔍 *RESULTADOS DA BUSCA (${resultado.count} ITENS)*\\n\\n`;
+        // --- CORREÇÃO: Removido um \n para evitar o \n\n* ---
+        let resposta = `🔍 *RESULTADOS DA BUSCA (${resultado.count} ITENS)*\\n`;
 
         resultado.data.slice(0, 5).forEach((produto: any, index: number) => {
           const preco = produto.preco_final_venda || 'Preço não informado';
@@ -513,18 +512,18 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
 
           // Formato Ultra-Conciso (2 linhas por item)
           // Linha 1: [Índice. Nome do Produto] | [Laboratório]
-          resposta += `*${index + 1}. ${produto.nome_produto}* (${produto.nom_laboratorio || 'N/A'})\\n`;
+          resposta += `\\n*${index + 1}. ${produto.nome_produto}* (${produto.nom_laboratorio || 'N/A'})\\n`;
           // Linha 2: [Preço] [Desconto] | [Status]
           resposta += `💰 *${preco}*${descontoStr} | ${estoqueStatus}\\n`;
-          resposta += `----------------------------------------\\n`; // Separador Visual
+          resposta += `----------------------------------------`; // Separador Visual SEM \n para ser colado com o \n da proxima linha
         });
 
         if (resultado.count > 5) {
-          resposta += `📊 *E mais ${resultado.count - 5} produtos...*\\n`;
-          resposta += `Use um termo mais específico para ver todos.\\n\\n`;
+          resposta += `\\n📊 *E mais ${resultado.count - 5} produtos...*\\n`;
+          resposta += `Use um termo mais específico para ver todos.\\n`;
         }
 
-        resposta += `💡 *Ação:* Digite o número do item (*1, 2, 3...*) para mais detalhes, ou *voltar* para o Menu Principal.`;
+        resposta += `\\n💡 *Ação:* Digite o número do item (*1, 2, 3...*) para mais detalhes, ou *voltar* para o Menu Principal.`;
         // --- FIM DA CORREÇÃO DE FORMATO ---
 
         await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
