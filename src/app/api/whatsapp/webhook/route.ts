@@ -103,7 +103,7 @@ function extrairTermoBusca(mensagem: string): string | null {
 // =========================================================================
 
 // --- Envio de Mensagem de Menu (Simples) ---
-async function enviarMenuInicial(from: string): Promise<boolean> {
+async function enviarMenuInicial(from: string, whatsappPhoneId: string): Promise<boolean> {
   const texto = '*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\\n\\n' +
                 'Como posso te ajudar hoje?\\n\\n' +
                 'Digite o *número* da opção desejada, ou digite o nome do produto/medicamento:\\n' +
@@ -112,7 +112,7 @@ async function enviarMenuInicial(from: string): Promise<boolean> {
                 '*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)\\n' +
                 '*4.* 🆘 Ver comandos administrativos (/test, /ajuda)';
 
-  return enviarComFormatosCorretos(from, texto);
+  return enviarComFormatosCorretos(from, texto, whatsappPhoneId);
 }
 
 // --- Buscar API da farmácia no Supabase ---
@@ -213,7 +213,7 @@ function converterParaFormatoFuncional(numeroOriginal: string): string[] {
 }
 
 // --- Envio WhatsApp com formatação correta ---
-async function enviarComFormatosCorretos(from: string, texto: string): Promise<boolean> {
+async function enviarComFormatosCorretos(from: string, texto: string, whatsappPhoneId: string): Promise<boolean> {
   try {
     console.log('🎯 [SEND] Enviando mensagem para:', from);
 
@@ -235,7 +235,7 @@ async function enviarComFormatosCorretos(from: string, texto: string): Promise<b
           }
         };
 
-        const url = `https://graph.facebook.com/v19.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
+        const url = `https://graph.facebook.com/v19.0/${whatsappPhoneId}/messages`;
 
         const response = await fetch(url, {
           method: 'POST',
@@ -400,7 +400,7 @@ export async function POST(req: NextRequest) {
                 await processarMensagemCompleta(from, whatsappPhoneId, messageText);
               } else {
                 // Se não for texto ou for mídia, mostra o menu inicial.
-                await enviarMenuInicial(from);
+                await enviarMenuInicial(from, whatsappPhoneId);
               }
             }
           }
@@ -429,29 +429,29 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
     // --- OPÇÕES FIXAS (MENU) ---
 
     if (lowerMessage === '1') {
-      await enviarComFormatosCorretos(from, '✅ *BUSCA DE PRODUTOS*\\n\\nDigite o nome do produto que deseja buscar. Exemplos:\\n• dipirona\\n• paracetamol 500mg\\n• sorinan\\n\\nOu *digite voltar* para o Menu Principal.');
+      await enviarComFormatosCorretos(from, '✅ *BUSCA DE PRODUTOS*\\n\\nDigite o nome do produto que deseja buscar. Exemplos:\\n• dipirona\\n• paracetamol 500mg\\n• sorinan\\n\\nOu *digite voltar* para o Menu Principal.', whatsappPhoneId);
       return;
     }
 
     if (lowerMessage === '2') {
-      await enviarComFormatosCorretos(from, '✅ *INFORMAÇÕES DE MEDICAMENTOS*\\n\\nDigite o nome do medicamento e a informação desejada. Exemplos:\\n• losartana posologia\\n• sinvastatina tudo\\n• diclofenaco efeitos colaterais\\n\\nOu *digite voltar* para o Menu Principal.');
+      await enviarComFormatosCorretos(from, '✅ *INFORMAÇÕES DE MEDICAMENTOS*\\n\\nDigite o nome do medicamento e a informação desejada. Exemplos:\\n• losartana posologia\\n• sinvastatina tudo\\n• diclofenaco efeitos colaterais\\n\\nOu *digite voltar* para o Menu Principal.', whatsappPhoneId);
       return;
     }
 
     if (lowerMessage === '3') {
       // Aqui você pode adicionar lógica mais complexa de horário de atendimento
-      await enviarComFormatosCorretos(from, '👩‍💻 *FALAR COM ATENDENTE*\\n\\nNossos atendentes estão disponíveis de [INSERIR HORÁRIO AQUI].\\nPara ser transferido, aguarde um momento. Se for urgente, ligue para [INSERIR NÚMERO AQUI].\\n\\nOu *digite voltar* para o Menu Principal.');
+      await enviarComFormatosCorretos(from, '👩‍💻 *FALAR COM ATENDENTE*\\n\\nNossos atendentes estão disponíveis de [INSERIR HORÁRIO AQUI].\\nPara ser transferido, aguarde um momento. Se for urgente, ligue para [INSERIR NÚMERO AQUI].\\n\\nOu *digite voltar* para o Menu Principal.', whatsappPhoneId);
       return;
     }
 
     if (lowerMessage === '4' || lowerMessage === '/comandos' || lowerMessage === '/admin') {
       const helpMsg = `🆘 *COMANDOS ADMINISTRATIVOS*\\n\\n• /test - Status de Conexão\\n• /debug - Informações Técnicas\\n• /ajuda - Menu Principal\\n\\n*Para sair:* Digite *voltar* ou *menu*.`;
-      await enviarComFormatosCorretos(from, helpMsg);
+      await enviarComFormatosCorretos(from, helpMsg, whatsappPhoneId);
       return;
     }
 
     if (lowerMessage === 'voltar' || lowerMessage === 'menu' || lowerMessage === '/ajuda' || lowerMessage === 'ajuda' || lowerMessage === '/help' || lowerMessage === 'oi' || lowerMessage === 'ola' || lowerMessage === 'olá') {
-      await enviarMenuInicial(from);
+      await enviarMenuInicial(from, whatsappPhoneId);
       return;
     }
 
@@ -461,7 +461,7 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
       const farmacyData = await findFarmacyAPI(whatsappPhoneId);
       const statusAPI = farmacyData ? '✅ CONFIGURADA' : '❌ NÃO CONFIGURADA';
       const statusMsg = `✅ *SISTEMA MULTI-TENANT FUNCIONANDO!*\\n\\n🏪 Farmácia: ${statusAPI}\\n📞 WhatsApp: ✅ Conectado\\n🛍️ Produtos: ✅ API Conectada\\n🤖 IA: ✅ Base de Medicamentos\\n🚀 Status: 100% Operacional`;
-      await enviarComFormatosCorretos(from, statusMsg);
+      await enviarComFormatosCorretos(from, statusMsg, whatsappPhoneId);
       return;
     }
 
@@ -469,7 +469,7 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
       const farmacyData = await findFarmacyAPI(whatsappPhoneId);
       const formatos = converterParaFormatoFuncional(from);
       const debugInfo = `🔧 *DEBUG SISTEMA MULTI-TENANT*\\n\\n📱 Seu número: ${from}\\n🎯 Formatos: ${formatos.join(', ')}\\n🏪 Farmácia ID: ${whatsappPhoneId}\\n🔗 API: ${farmacyData?.api_base_url || 'NÃO CONFIGURADA'}\\n🤖 Medicamentos: ${medicamentosData.length} cadastrados\\n✅ Sistema: 100% Operacional`;
-      await enviarComFormatosCorretos(from, debugInfo);
+      await enviarComFormatosCorretos(from, debugInfo, whatsappPhoneId);
       return;
     }
 
@@ -482,12 +482,12 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
       const farmacyData = await findFarmacyAPI(whatsappPhoneId);
 
       if (!farmacyData?.api_base_url) {
-        await enviarComFormatosCorretos(from, '❌ *FARMÁCIA NÃO CONFIGURADA*\\n\\nEsta farmácia ainda não está configurada no sistema. Contate o suporte técnico.');
+        await enviarComFormatosCorretos(from, '❌ *FARMÁCIA NÃO CONFIGURADA*\\n\\nEsta farmácia ainda não está configurada no sistema. Contate o suporte técnico.', whatsappPhoneId);
         return;
       }
 
       if (termoBusca.length < 2) {
-        await enviarComFormatosCorretos(from, '🔍 *BUSCA DE PRODUTOS*\\n\\nPor favor, digite pelo menos 2 caracteres para buscar.\\n\\n💡 *Exemplos:*\\n• produto paracetamol\\n• buscar dipirona\\n• estoque nimesulida');
+        await enviarComFormatosCorretos(from, '🔍 *BUSCA DE PRODUTOS*\\n\\nPor favor, digite pelo menos 2 caracteres para buscar.\\n\\n💡 *Exemplos:*\\n• produto paracetamol\\n• buscar dipirona\\n• estoque nimesulida', whatsappPhoneId);
         return;
       }
 
@@ -495,13 +495,13 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
         const resultado = await consultarAPIFarmacia(farmacyData.api_base_url, termoBusca);
 
         if (!resultado.success || resultado.count === 0) {
-          await enviarComFormatosCorretos(from, `❌ *PRODUTO NÃO ENCONTRADO*\\n\\nNão encontrei produtos para "*${termoBusca}*".\\n\\n💡 *Sugestões:*\\n• Verifique a ortografia\\n• Tente um termo mais específico\\n• Use apenas o nome principal`);
+          await enviarComFormatosCorretos(from, `❌ *PRODUTO NÃO ENCONTRADO*\\n\\nNão encontrei produtos para "*${termoBusca}*".\\n\\n💡 *Sugestões:*\\n• Verifique a ortografia\\n• Tente um termo mais específico\\n• Use apenas o nome principal`, whatsappPhoneId);
           return;
         }
 
-        // --- INÍCIO DA RESPOSTA COM FORMATO PROFISSIONAL (CORREÇÃO DE LAYOUT) ---
-        let resposta = `🔍 *RESULTADOS DA BUSCA (${resultado.count} ITENS)*\\n` +
-                      `*Termo:* "${termoBusca}"\\n\\n`;
+        // --- INÍCIO DA RESPOSTA COM FORMATO ULTRA-COMPACTO ---
+        // 1. Removida a linha *Termo:*
+        let resposta = `🔍 *RESULTADOS DA BUSCA (${resultado.count} ITENS)*\\n\\n`;
 
         resultado.data.slice(0, 5).forEach((produto: any, index: number) => {
           const preco = produto.preco_final_venda || 'Preço não informado';
@@ -509,13 +509,13 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
           if (produto.desconto_percentual && produto.desconto_percentual > 0) {
             descontoStr = ` (🔻${produto.desconto_percentual.toFixed(1)}% OFF)`;
           }
-          // Simplificado: Exibe status, removendo contagem exata de estoque e Cod. Reduzido
           const estoqueStatus = (produto.qtd_estoque && produto.qtd_estoque > 0) ? '✅ Disponível' : '❌ Esgotado';
 
-          // Formato Conciso e Profissional
-          resposta += `*${index + 1}. ${produto.nome_produto}*\\n`;
-          resposta += `💰 *${preco}*${descontoStr}\\n`;
-          resposta += `🏭 ${produto.nom_laboratorio || 'Laboratório não informado'} | ${estoqueStatus}\\n`;
+          // Formato Ultra-Conciso (2 linhas por item)
+          // Linha 1: [Índice. Nome do Produto] | [Laboratório]
+          resposta += `*${index + 1}. ${produto.nome_produto}* (${produto.nom_laboratorio || 'N/A'})\\n`;
+          // Linha 2: [Preço] [Desconto] | [Status]
+          resposta += `💰 *${preco}*${descontoStr} | ${estoqueStatus}\\n`;
           resposta += `----------------------------------------\\n`; // Separador Visual
         });
 
@@ -527,12 +527,12 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
         resposta += `💡 *Ação:* Digite o número do item (*1, 2, 3...*) para mais detalhes, ou *voltar* para o Menu Principal.`;
         // --- FIM DA CORREÇÃO DE FORMATO ---
 
-        await enviarComFormatosCorretos(from, resposta);
+        await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
         return;
 
       } catch (error) {
         console.error('❌ [PRODUTO] Erro na consulta:', error);
-        await enviarComFormatosCorretos(from, '⚠️ *ERRO NA CONSULTA*\\n\\nNão consegui buscar produtos no momento.\\nNossa equipe foi notificada.\\n\\nTente novamente em alguns instantes, ou *digite /test*.');
+        await enviarComFormatosCorretos(from, '⚠️ *ERRO NA CONSULTA*\\n\\nNão consegui buscar produtos no momento.\\nNossa equipe foi notificada.\\n\\nTente novamente em alguns instantes, ou *digite /test*.', whatsappPhoneId);
         return;
       }
     }
@@ -544,18 +544,19 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
       console.log(`💊 [MEDICAMENTO] Consultando: ${parsedInfo.drugName} - ${parsedInfo.infoType}`);
 
       const infoMedicamento = getMedicamentoInfo(parsedInfo.drugName, parsedInfo.infoType || 'tudo');
-      await enviarComFormatosCorretos(from, infoMedicamento);
+      await enviarComFormatosCorretos(from, infoMedicamento, whatsappPhoneId);
       return;
     }
 
     // --- MENSAGEM GENÉRICA (QUANDO NENHUM COMANDO É RECONHECIDO) ---
-    await enviarMenuInicial(from);
+    await enviarMenuInicial(from, whatsappPhoneId);
 
   } catch (error) {
     console.error('❌ [PROCESS] Erro crítico:', error);
     await enviarComFormatosCorretos(
       from,
-      '⚠️ *ERRO TEMPORÁRIO*\\n\\nEstou com dificuldades momentâneas.\\nTente novamente em alguns instantes.\\n\\nUse /test para verificar o status, ou *digite voltar*.'
+      '⚠️ *ERRO TEMPORÁRIO*\\n\\nEstou com dificuldades momentâneas.\\nTente novamente em alguns instantes.\\n\\nUse /test para verificar o status, ou *digite voltar*.',
+      whatsappPhoneId
     );
   }
 }
