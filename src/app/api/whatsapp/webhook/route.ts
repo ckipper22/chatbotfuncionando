@@ -499,31 +499,47 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
           return;
         }
 
-        // --- CORREÇÃO: Removido um \n para evitar o \n\n* ---
-        let resposta = `🔍 *RESULTADOS DA BUSCA (${resultado.count} ITENS)*\\n`;
+        // --- INÍCIO DA RESPOSTA COM FORMATO ULTRA-COMPACTO V6 ---
+        // Apenas uma quebra de linha após o cabeçalho.
+        let resposta = `🔍 *RESULTADOS DA BUSCA (${resultado.count} ITENS)*\n`;
 
-        resultado.data.slice(0, 5).forEach((produto: any, index: number) => {
+        const produtosParaExibir = resultado.data.slice(0, 5);
+
+        produtosParaExibir.forEach((produto: any, index: number) => {
           const preco = produto.preco_final_venda || 'Preço não informado';
           let descontoStr = '';
           if (produto.desconto_percentual && produto.desconto_percentual > 0) {
             descontoStr = ` (🔻${produto.desconto_percentual.toFixed(1)}% OFF)`;
           }
-          const estoqueStatus = (produto.qtd_estoque && produto.qtd_estoque > 0) ? '✅ Disponível' : '❌ Esgotado';
+          const estoqueStatus = (produto.qtd_estoque && produto.qtd_estoque > 0) ? '✅ DISPONÍVEL' : '❌ ESGOTADO';
 
-          // Formato Ultra-Conciso (2 linhas por item)
-          // Linha 1: [Índice. Nome do Produto] | [Laboratório]
-          resposta += `\\n*${index + 1}. ${produto.nome_produto}* (${produto.nom_laboratorio || 'N/A'})\\n`;
-          // Linha 2: [Preço] [Desconto] | [Status]
+          // Adiciona quebra de linha (separador) antes de cada item.
+          // O primeiro item será separado do header por esta quebra de linha.
+          resposta += `\n`;
+
+          // Formato Limpo e Compacto (Linha 1 + Linha 2)
+          resposta += `*${index + 1}. ${produto.nome_produto}* (${produto.nom_laboratorio || 'N/A'})\\n`;
           resposta += `💰 *${preco}*${descontoStr} | ${estoqueStatus}\\n`;
-          resposta += `----------------------------------------`; // Separador Visual SEM \n para ser colado com o \n da proxima linha
+
+          // Adiciona separador APENAS se houver um próximo item no array fatiado.
+          if (index < produtosParaExibir.length - 1) {
+              resposta += `----------------------------------------`;
+          }
         });
 
-        if (resultado.count > 5) {
-          resposta += `\\n📊 *E mais ${resultado.count - 5} produtos...*\\n`;
-          resposta += `Use um termo mais específico para ver todos.\\n`;
+        // Adiciona quebra de linha se a lista não estiver vazia
+        if (produtosParaExibir.length > 0) {
+             resposta += `\n`;
         }
 
-        resposta += `\\n💡 *Ação:* Digite o número do item (*1, 2, 3...*) para mais detalhes, ou *voltar* para o Menu Principal.`;
+        if (resultado.count > 5) {
+          // Garante a separação do bloco "E mais..."
+          resposta += `\n📊 *E mais ${resultado.count - 5} produtos...*\\n`;
+          resposta += `Use um termo mais específico para ver todos.`;
+        }
+
+        // Rodapé com duas quebras de linha para separação visual
+        resposta += `\n\n💡 *Ação:* Digite o número do item (*1, 2, 3...*) para mais detalhes, ou *voltar* para o Menu Principal.`;
         // --- FIM DA CORREÇÃO DE FORMATO ---
 
         await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
