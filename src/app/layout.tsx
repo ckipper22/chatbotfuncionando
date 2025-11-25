@@ -1,3 +1,4 @@
+// src/app/layout.tsx (CÓDIGO CORRIGIDO)
 
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -39,6 +40,8 @@ export default function RootLayout({
     <html lang="pt-BR" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased `}
+        // 🛠️ CORREÇÃO FINAL: Ignora as incompatibilidades causadas por extensões ou temas globais
+        suppressHydrationWarning={true}
       >
         <ThemeProvider
           attribute="class"
