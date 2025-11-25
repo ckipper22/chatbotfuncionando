@@ -102,6 +102,47 @@ function extrairTermoBusca(mensagem: string): string | null {
 // FUNÇÕES AUXILIARES
 // =========================================================================
 
+// --- FUNÇÃO AUXILIAR: SALVAR MENSAGEM NO SUPABASE (DO PASSO 2) ---
+async function salvarMensagemNoSupabase(
+  whatsappPhoneId: string,
+  from: string,
+  body: string,
+  direction: 'IN' | 'OUT'
+): Promise<void> {
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/whatsapp_messages`;
+
+    const headers = new Headers({
+      'apikey': SUPABASE_ANON_KEY!,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    });
+
+    const payload = {
+      whatsapp_phone_id: whatsappPhoneId,
+      from_number: from,
+      message_body: body,
+      direction: direction,
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      console.error(`❌ ERRO [${direction}] ao salvar mensagem no Supabase:`, await response.text());
+    } else {
+      console.log(`✅ Mensagem de direção ${direction} salva no Supabase.`);
+    }
+
+  } catch (error) {
+    console.error(`❌ Erro crítico ao salvar mensagem [${direction}]:`, error);
+  }
+}
+
 // --- Envio de Mensagem de Menu (Simples) ---
 async function enviarMenuInicial(from: string, whatsappPhoneId: string): Promise<boolean> {
   const texto = '*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\\n\\n' +
@@ -112,7 +153,12 @@ async function enviarMenuInicial(from: string, whatsappPhoneId: string): Promise
                 '*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)\\n' +
                 '*4.* 🆘 Ver comandos administrativos (/test, /ajuda)';
 
-  return enviarComFormatosCorretos(from, texto, whatsappPhoneId);
+  const result = await enviarComFormatosCorretos(from, texto, whatsappPhoneId);
+  // Integração: Grava a resposta do Menu
+  if (result) {
+    await salvarMensagemNoSupabase(whatsappPhoneId, from, texto, 'OUT');
+  }
+  return result;
 }
 
 // --- Buscar API da farmácia no Supabase ---
@@ -425,32 +471,46 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
 
   console.log(`🤖 Processando: "${userMessage}"`);
 
+  // --- 1. INTEGRAÇÃO: SALVAR A MENSAGEM RECEBIDA (IN) ---
+  if (userMessage.length > 0) {
+    await salvarMensagemNoSupabase(whatsappPhoneId, from, userMessage, 'IN');
+  }
+  // ----------------------------------------------------------------------
+
   try {
     // --- OPÇÕES FIXAS (MENU) ---
 
     if (lowerMessage === '1') {
-      await enviarComFormatosCorretos(from, '✅ *BUSCA DE PRODUTOS*\\n\\nDigite o nome do produto que deseja buscar. Exemplos:\\n• dipirona\\n• paracetamol 500mg\\n• sorinan\\n\\nOu *digite voltar* para o Menu Principal.', whatsappPhoneId);
+      const resposta = '✅ *BUSCA DE PRODUTOS*\\n\\nDigite o nome do produto que deseja buscar. Exemplos:\\n• dipirona\\n• paracetamol 500mg\\n• sorinan\\n\\nOu *digite voltar* para o Menu Principal.';
+      await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
+      await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT'); // Gravar resposta
       return;
     }
 
     if (lowerMessage === '2') {
-      await enviarComFormatosCorretos(from, '✅ *INFORMAÇÕES DE MEDICAMENTOS*\\n\\nDigite o nome do medicamento e a informação desejada. Exemplos:\\n• losartana posologia\\n• sinvastatina tudo\\n• diclofenaco efeitos colaterais\\n\\nOu *digite voltar* para o Menu Principal.', whatsappPhoneId);
+      const resposta = '✅ *INFORMAÇÕES DE MEDICAMENTOS*\\n\\nDigite o nome do medicamento e a informação desejada. Exemplos:\\n• losartana posologia\\n• sinvastatina tudo\\n• diclofenaco efeitos colaterais\\n\\nOu *digite voltar* para o Menu Principal.';
+      await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
+      await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT'); // Gravar resposta
       return;
     }
 
     if (lowerMessage === '3') {
       // Aqui você pode adicionar lógica mais complexa de horário de atendimento
-      await enviarComFormatosCorretos(from, '👩‍💻 *FALAR COM ATENDENTE*\\n\\nNossos atendentes estão disponíveis de [INSERIR HORÁRIO AQUI].\\nPara ser transferido, aguarde um momento. Se for urgente, ligue para [INSERIR NÚMERO AQUI].\\n\\nOu *digite voltar* para o Menu Principal.', whatsappPhoneId);
+      const resposta = '👩‍💻 *FALAR COM ATENDENTE*\\n\\nNossos atendentes estão disponíveis de [INSERIR HORÁRIO AQUI].\\nPara ser transferido, aguarde um momento. Se for urgente, ligue para [INSERIR NÚMERO AQUI].\\n\\nOu *digite voltar* para o Menu Principal.';
+      await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
+      await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT'); // Gravar resposta
       return;
     }
 
     if (lowerMessage === '4' || lowerMessage === '/comandos' || lowerMessage === '/admin') {
-      const helpMsg = `🆘 *COMANDOS ADMINISTRATIVOS*\\n\\n• /test - Status de Conexão\\n• /debug - Informações Técnicas\\n• /ajuda - Menu Principal\\n\\n*Para sair:* Digite *voltar* ou *menu*.`;
-      await enviarComFormatosCorretos(from, helpMsg, whatsappPhoneId);
+      const resposta = `🆘 *COMANDOS ADMINISTRATIVOS*\\n\\n• /test - Status de Conexão\\n• /debug - Informações Técnicas\\n• /ajuda - Menu Principal\\n\\n*Para sair:* Digite *voltar* ou *menu*.`;
+      await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
+      await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT'); // Gravar resposta
       return;
     }
 
     if (lowerMessage === 'voltar' || lowerMessage === 'menu' || lowerMessage === '/ajuda' || lowerMessage === 'ajuda' || lowerMessage === '/help' || lowerMessage === 'oi' || lowerMessage === 'ola' || lowerMessage === 'olá') {
+      // A função 'enviarMenuInicial' já faz a gravação do 'OUT' internamente.
       await enviarMenuInicial(from, whatsappPhoneId);
       return;
     }
@@ -460,16 +520,18 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
     if (lowerMessage === '/test' || lowerMessage === 'test') {
       const farmacyData = await findFarmacyAPI(whatsappPhoneId);
       const statusAPI = farmacyData ? '✅ CONFIGURADA' : '❌ NÃO CONFIGURADA';
-      const statusMsg = `✅ *SISTEMA MULTI-TENANT FUNCIONANDO!*\\n\\n🏪 Farmácia: ${statusAPI}\\n📞 WhatsApp: ✅ Conectado\\n🛍️ Produtos: ✅ API Conectada\\n🤖 IA: ✅ Base de Medicamentos\\n🚀 Status: 100% Operacional`;
-      await enviarComFormatosCorretos(from, statusMsg, whatsappPhoneId);
+      const resposta = `✅ *SISTEMA MULTI-TENANT FUNCIONANDO!*\\n\\n🏪 Farmácia: ${statusAPI}\\n📞 WhatsApp: ✅ Conectado\\n🛍️ Produtos: ✅ API Conectada\\n🤖 IA: ✅ Base de Medicamentos\\n🚀 Status: 100% Operacional`;
+      await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
+      await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT'); // Gravar resposta
       return;
     }
 
     if (lowerMessage === '/debug' || lowerMessage === 'debug') {
       const farmacyData = await findFarmacyAPI(whatsappPhoneId);
       const formatos = converterParaFormatoFuncional(from);
-      const debugInfo = `🔧 *DEBUG SISTEMA MULTI-TENANT*\\n\\n📱 Seu número: ${from}\\n🎯 Formatos: ${formatos.join(', ')}\\n🏪 Farmácia ID: ${whatsappPhoneId}\\n🔗 API: ${farmacyData?.api_base_url || 'NÃO CONFIGURADA'}\\n🤖 Medicamentos: ${medicamentosData.length} cadastrados\\n✅ Sistema: 100% Operacional`;
-      await enviarComFormatosCorretos(from, debugInfo, whatsappPhoneId);
+      const resposta = `🔧 *DEBUG SISTEMA MULTI-TENANT*\\n\\n📱 Seu número: ${from}\\n🎯 Formatos: ${formatos.join(', ')}\\n🏪 Farmácia ID: ${whatsappPhoneId}\\n🔗 API: ${farmacyData?.api_base_url || 'NÃO CONFIGURADA'}\\n🤖 Medicamentos: ${medicamentosData.length} cadastrados\\n✅ Sistema: 100% Operacional`;
+      await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
+      await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT'); // Gravar resposta
       return;
     }
 
@@ -482,12 +544,16 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
       const farmacyData = await findFarmacyAPI(whatsappPhoneId);
 
       if (!farmacyData?.api_base_url) {
-        await enviarComFormatosCorretos(from, '❌ *FARMÁCIA NÃO CONFIGURADA*\\n\\nEsta farmácia ainda não está configurada no sistema. Contate o suporte técnico.', whatsappPhoneId);
+        const resposta = '❌ *FARMÁCIA NÃO CONFIGURADA*\\n\\nEsta farmácia ainda não está configurada no sistema. Contate o suporte técnico.';
+        await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
+        await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT'); // Gravar resposta
         return;
       }
 
       if (termoBusca.length < 2) {
-        await enviarComFormatosCorretos(from, '🔍 *BUSCA DE PRODUTOS*\\n\\nPor favor, digite pelo menos 2 caracteres para buscar.\\n\\n💡 *Exemplos:*\\n• produto paracetamol\\n• buscar dipirona\\n• estoque nimesulida', whatsappPhoneId);
+        const resposta = '🔍 *BUSCA DE PRODUTOS*\\n\\nPor favor, digite pelo menos 2 caracteres para buscar.\\n\\n💡 *Exemplos:*\\n• produto paracetamol\\n• buscar dipirona\\n• estoque nimesulida';
+        await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
+        await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT'); // Gravar resposta
         return;
       }
 
@@ -495,12 +561,14 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
         const resultado = await consultarAPIFarmacia(farmacyData.api_base_url, termoBusca);
 
         if (!resultado.success || resultado.count === 0) {
-          await enviarComFormatosCorretos(from, `❌ *PRODUTO NÃO ENCONTRADO*\\n\\nNão encontrei produtos para "*${termoBusca}*".\\n\\n💡 *Sugestões:*\\n• Verifique a ortografia\\n• Tente um termo mais específico\\n• Use apenas o nome principal`, whatsappPhoneId);
+          const resposta = `❌ *PRODUTO NÃO ENCONTRADO*\\n\\nNão encontrei produtos para "*${termoBusca}*".\\n\\n💡 *Sugestões:*\\n• Verifique a ortografia\\n• Tente um termo mais específico\\n• Use apenas o nome principal`;
+          await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
+          await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT'); // Gravar resposta
           return;
         }
 
         // --- INÍCIO DA RESPOSTA COM FORMATO ULTRA-COMPACTO V6 ---
-        // Apenas uma quebra de linha após o cabeçalho.
+        // (A lógica de formatação da resposta permanece a mesma)
         let resposta = `🔍 *RESULTADOS DA BUSCA (${resultado.count} ITENS)*\n`;
 
         const produtosParaExibir = resultado.data.slice(0, 5);
@@ -513,41 +581,36 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
           }
           const estoqueStatus = (produto.qtd_estoque && produto.qtd_estoque > 0) ? '✅ DISPONÍVEL' : '❌ ESGOTADO';
 
-          // Adiciona quebra de linha (separador) antes de cada item.
-          // O primeiro item será separado do header por esta quebra de linha.
           resposta += `\n`;
-
-          // Formato Limpo e Compacto (Linha 1 + Linha 2)
           resposta += `*${index + 1}. ${produto.nome_produto}* (${produto.nom_laboratorio || 'N/A'})\\n`;
           resposta += `💰 *${preco}*${descontoStr} | ${estoqueStatus}\\n`;
 
-          // Adiciona separador APENAS se houver um próximo item no array fatiado.
           if (index < produtosParaExibir.length - 1) {
               resposta += `----------------------------------------`;
           }
         });
 
-        // Adiciona quebra de linha se a lista não estiver vazia
         if (produtosParaExibir.length > 0) {
              resposta += `\n`;
         }
 
         if (resultado.count > 5) {
-          // Garante a separação do bloco "E mais..."
           resposta += `\n📊 *E mais ${resultado.count - 5} produtos...*\\n`;
           resposta += `Use um termo mais específico para ver todos.`;
         }
 
-        // Rodapé com duas quebras de linha para separação visual
         resposta += `\n\n💡 *Ação:* Digite o número do item (*1, 2, 3...*) para mais detalhes, ou *voltar* para o Menu Principal.`;
-        // --- FIM DA CORREÇÃO DE FORMATO ---
+        // --- FIM DA RESPOSTA ---
 
         await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
+        await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT'); // Gravar resposta
         return;
 
       } catch (error) {
         console.error('❌ [PRODUTO] Erro na consulta:', error);
-        await enviarComFormatosCorretos(from, '⚠️ *ERRO NA CONSULTA*\\n\\nNão consegui buscar produtos no momento.\\nNossa equipe foi notificada.\\n\\nTente novamente em alguns instantes, ou *digite /test*.', whatsappPhoneId);
+        const resposta = '⚠️ *ERRO NA CONSULTA*\\n\\nNão consegui buscar produtos no momento.\\nNossa equipe foi notificada.\\n\\nTente novamente em alguns instantes, ou *digite /test*.';
+        await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
+        await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT'); // Gravar resposta
         return;
       }
     }
@@ -560,18 +623,18 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
 
       const infoMedicamento = getMedicamentoInfo(parsedInfo.drugName, parsedInfo.infoType || 'tudo');
       await enviarComFormatosCorretos(from, infoMedicamento, whatsappPhoneId);
+      await salvarMensagemNoSupabase(whatsappPhoneId, from, infoMedicamento, 'OUT'); // Gravar resposta
       return;
     }
 
     // --- MENSAGEM GENÉRICA (QUANDO NENHUM COMANDO É RECONHECIDO) ---
+    // A função 'enviarMenuInicial' já faz a gravação do 'OUT' internamente.
     await enviarMenuInicial(from, whatsappPhoneId);
 
   } catch (error) {
     console.error('❌ [PROCESS] Erro crítico:', error);
-    await enviarComFormatosCorretos(
-      from,
-      '⚠️ *ERRO TEMPORÁRIO*\\n\\nEstou com dificuldades momentâneas.\\nTente novamente em alguns instantes.\\n\\nUse /test para verificar o status, ou *digite voltar*.',
-      whatsappPhoneId
-    );
+    const resposta = '⚠️ *ERRO TEMPORÁRIO*\\n\\nEstou com dificuldades momentâneas.\\nTente novamente em alguns instantes.\\n\\nUse /test para verificar o status, ou *digite voltar*.';
+    await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
+    await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT'); // Gravar resposta
   }
 }
