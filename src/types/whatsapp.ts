@@ -12,6 +12,7 @@ export interface WhatsAppConfig {
   webhook_url: string;
   created_at?: string;
   updated_at?: string;
+  apiVersion?: string;
 }
 
 export interface WhatsAppWebhookPayload {
@@ -65,6 +66,7 @@ export interface WhatsAppMessage {
     text?: string;
     mediaUrl?: string;
     caption?: string;
+    filename?: string;
   };
   text?: {
     body: string;

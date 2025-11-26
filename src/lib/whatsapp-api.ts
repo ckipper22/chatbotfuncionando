@@ -5,16 +5,15 @@ const API_VERSION = 'v21.0';
 
 export class WhatsAppAPI {
   private config: WhatsAppConfig;
+  private apiVersion: string;
 
   constructor(config: WhatsAppConfig) {
-    this.config = {
-      ...config,
-      apiVersion: config.apiVersion || API_VERSION,
-    };
+    this.config = config;
+    this.apiVersion = config.apiVersion || API_VERSION;
   }
 
   private getBaseUrl(): string {
-    return `https://graph.facebook.com/${this.config.apiVersion}/${this.config.phone_number_id}`;
+    return `https://graph.facebook.com/${this.apiVersion}/${this.config.phone_number_id}`;
   }
 
   private getHeaders(): HeadersInit {
@@ -194,7 +193,7 @@ export class WhatsAppAPI {
   }
 
   async getMediaUrl(mediaId: string): Promise<string> {
-    const url = `https://graph.facebook.com/${this.config.apiVersion}/${mediaId}`;
+    const url = `https://graph.facebook.com/${this.apiVersion}/${mediaId}`;
 
     const response = await fetch(url, {
       method: 'GET',
