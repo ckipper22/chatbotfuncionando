@@ -42,23 +42,7 @@ export default function AdminLoginPage() {
         return;
       }
 
-      // Verificar se é um usuário autorizado (admin)
-      // Verificar na tabela admin_users se necessário
-      const { data: adminData, error: adminError } = await supabase
-        .from('admin_users')
-        .select('*')
-        .eq('user_id', data.user.id)
-        .single();
-
-      if (adminError && adminError.code !== 'PGRST116') {
-        // PGRST116 = not found, que é esperado
-        console.error('Erro ao verificar admin:', adminError);
-        setError('❌ Erro ao verificar permissões');
-        setLoading(false);
-        return;
-      }
-
-      // Se chegou aqui, autenticação foi bem-sucedida
+      // Autenticação bem-sucedida - salvar sessão
       sessionStorage.setItem('admin_authenticated', 'true');
       sessionStorage.setItem('admin_user_id', data.user.id);
       sessionStorage.setItem('admin_email', data.user.email || '');
