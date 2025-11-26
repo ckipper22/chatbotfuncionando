@@ -174,6 +174,62 @@ function deveFazerBuscaDireta(mensagem: string): boolean {
 }
 
 // =========================================================================
+// FUNÇÕES DE CACHE DE PRODUTOS
+// =========================================================================
+
+async function saveProductToCache(productCode: string, productName: string, unitPrice: number): Promise<void> {
+  try {
+    const insertUrl = `${SUPABASE_URL}/rest/v1/product_cache?on_conflict=product_code`;
+    const headers = new Headers({
+      'apikey': SUPABASE_ANON_KEY!,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates'
+    });
+
+    const payload = {
+      product_code: productCode,
+      product_name: productName,
+      unit_price: unitPrice,
+      updated_at: new Date().toISOString()
+    };
+
+    await fetch(insertUrl, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    console.log(`⚠️ Erro ao salvar produto no cache:`, error);
+  }
+}
+
+async function getProductFromCache(productCode: string): Promise<{name: string; price: number} | null> {
+  try {
+    const selectUrl = `${SUPABASE_URL}/rest/v1/product_cache?product_code=eq.${productCode}`;
+    const headers = new Headers({
+      'apikey': SUPABASE_ANON_KEY!,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+    });
+
+    const response = await fetch(selectUrl, { method: 'GET', headers });
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (data && data.length > 0) {
+      return {
+        name: data[0].product_name,
+        price: data[0].unit_price
+      };
+    }
+    return null;
+  } catch (error) {
+    console.log(`⚠️ Erro ao buscar produto do cache:`, error);
+    return null;
+  }
+}
+
+// =========================================================================
 // FUNÇÕES AUXILIARES DE SUPABASE
 // =========================================================================
 
@@ -356,37 +412,49 @@ async function addItemToCart(
     let productName = `Produto ${productCode}`;
     let unitPrice = 0;
 
-    // 🔍 Tentar buscar produto pela API (opcional, com fallback)
-    if (FLASK_API_URL) {
-      try {
-        const searchUrl = `${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(productCode)}`;
-        console.log(`📡 Buscando dados do produto em: ${searchUrl}`);
-        
-        const searchResponse = await fetch(searchUrl, {
-          headers: {
-            'Content-Type': 'application/json',
-            'ngrok-skip-browser-warning': 'true',
-            'User-Agent': 'WhatsAppWebhook/1.0'
-          }
-        });
-
-        if (searchResponse.ok) {
-          const searchData = await searchResponse.json();
-          const product = searchData.data?.find((p: any) => String(p.cod_reduzido) === productCode);
+    // 💾 PRIMEIRO: Tentar buscar do CACHE
+    console.log(`📦 Procurando no cache...`);
+    const cachedProduct = await getProductFromCache(productCode);
+    
+    if (cachedProduct) {
+      productName = cachedProduct.name;
+      unitPrice = cachedProduct.price;
+      console.log(`✅ ENCONTRADO NO CACHE: ${productName} - R$ ${unitPrice}`);
+    } else {
+      // 🔍 SE NÃO ESTIVER NO CACHE: Tentar buscar produto pela API (opcional)
+      if (FLASK_API_URL) {
+        try {
+          const searchUrl = `${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(productCode)}`;
+          console.log(`📡 Não em cache, buscando na API: ${searchUrl}`);
           
-          if (product) {
-            productName = product.nome_produto;
-            const priceStr = product.preco_final_venda.replace(/[^\d,]/g, '').replace(',', '.');
-            unitPrice = parseFloat(priceStr) || 0;
-            console.log(`✅ Produto encontrado: ${productName} - R$ ${unitPrice}`);
+          const searchResponse = await fetch(searchUrl, {
+            headers: {
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
+              'User-Agent': 'WhatsAppWebhook/1.0'
+            }
+          });
+
+          if (searchResponse.ok) {
+            const searchData = await searchResponse.json();
+            const product = searchData.data?.find((p: any) => String(p.cod_reduzido) === productCode);
+            
+            if (product) {
+              productName = product.nome_produto;
+              const priceStr = product.preco_final_venda.replace(/[^\d,]/g, '').replace(',', '.');
+              unitPrice = parseFloat(priceStr) || 0;
+              console.log(`✅ Encontrado na API: ${productName} - R$ ${unitPrice}`);
+              // Salvar no cache para próxima vez
+              await saveProductToCache(productCode, productName, unitPrice);
+            } else {
+              console.log(`⚠️ Produto não encontrado na API, continuando com valores padrão`);
+            }
           } else {
-            console.log(`⚠️ Produto não encontrado na API, usando valores padrão`);
+            console.log(`⚠️ API retornou erro ${searchResponse.status}, continuando com valores padrão`);
           }
-        } else {
-          console.log(`⚠️ API retornou erro ${searchResponse.status}, continuando com valores padrão`);
+        } catch (apiError) {
+          console.log(`⚠️ Erro ao consultar API Flask: ${apiError}`);
         }
-      } catch (apiError) {
-        console.log(`⚠️ Erro ao consultar API Flask (continuando): ${apiError}`);
       }
     }
 
@@ -804,6 +872,13 @@ async function buscarEOferecerProdutos(from: string, whatsappPhoneId: string, te
 
       if (searchResults.data && searchResults.data.length > 0) {
         searchResults.data.slice(0, 5).forEach((product: any) => {
+          // 💾 SALVAR NO CACHE
+          const priceStr = product.preco_final_venda.replace(/[^\d,]/g, '').replace(',', '.');
+          const unitPrice = parseFloat(priceStr) || 0;
+          saveProductToCache(product.cod_reduzido, product.nome_produto, unitPrice).catch(e => 
+            console.log(`⚠️ Erro ao salvar cache:`, e)
+          );
+
           resposta += `▪️ *${product.nome_produto}*\\n`;
           resposta += `   💊 ${product.nom_laboratorio}\\n`;
           
