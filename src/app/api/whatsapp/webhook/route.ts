@@ -27,7 +27,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error('Configuração do Supabase ausente');
 }
 
-if (!FLASK_API_BASE_URL) {
+if (!FLASK_API_URL) {
     console.warn('⚠️ AVISO: Variável FLASK_API_URL não configurada.');
 }
 
@@ -419,9 +419,9 @@ async function enviarMenuInicial(from: string, whatsappPhoneId: string): Promise
   return result;
 }
 
-async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: string, client_id: string} | null> {
+async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_url: string, client_id: string} | null> {
     try {
-        const url = `${SUPABASE_URL}/rest/v1/client_connections?whatsapp_phone_id=eq.${whatsappPhoneId}&select=api_base_url,client_id`;
+        const url = `${SUPABASE_URL}/rest/v1/client_connections?whatsapp_phone_id=eq.${whatsappPhoneId}&select=api_url,client_id`;
 
         const headers = new Headers({
           'apikey': SUPABASE_ANON_KEY!,
@@ -437,7 +437,7 @@ async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: s
 
         const data = await response.json();
         return data && data.length > 0 ? {
-          api_base_url: data[0].api_base_url,
+          api_url: data[0].api_url,
           client_id: data[0].client_id
         } : null;
 
@@ -447,9 +447,9 @@ async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: s
       }
 }
 
-async function consultarAPIFarmacia(apiBaseUrl: string, termo: string): Promise<any> {
+async function consultarAPIFarmacia(apiUrl: string, termo: string): Promise<any> {
     try {
-        const url = `${apiBaseUrl}/api/products/search?q=${encodeURIComponent(termo)}`;
+        const url = `${apiUrl}/api/products/search?q=${encodeURIComponent(termo)}`;
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -698,11 +698,11 @@ async function buscarEOferecerProdutos(from: string, whatsappPhoneId: string, te
     try {
         const farmacia = await findFarmacyAPI(whatsappPhoneId);
 
-        if (!farmacia || !farmacia.api_base_url) {
+        if (!farmacia || !farmacia.api_url) {
             throw new Error('Farmácia não configurada no sistema');
         }
 
-        const searchResults = await consultarAPIFarmacia(farmacia.api_base_url, termoBusca);
+        const searchResults = await consultarAPIFarmacia(farmacia.api_url, termoBusca);
 
         if (searchResults.products && searchResults.products.length > 0) {
             searchResults.products.slice(0, 5).forEach((product: any) => {
