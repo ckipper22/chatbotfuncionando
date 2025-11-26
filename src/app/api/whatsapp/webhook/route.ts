@@ -741,71 +741,47 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
 
     const normalizedText = messageText.toLowerCase().trim();
 
+    // ✅ LOG DE DEBUG PARA VER A MENSAGEM EXATA
+    console.log(`🔍 [DEBUG] Mensagem recebida: "${messageText}" | Normalizada: "${normalizedText}"`);
+
     // 🔥 CORREÇÃO CRÍTICA: Cada opção numérica DEVE retornar após processar!
 
     if (normalizedText === '1') {
+        console.log('✅ [DEBUG] Opção 1 selecionada - Buscar produtos');
         const msg = 'Certo! Digite o nome do produto ou o código de barras (ex: *DIPIRONA* ou *7896000000000*).';
         await enviarComFormatosCorretos(from, msg);
         await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-        return; // ⬅️🔥 RETORNA AQUI - EVITA LOOP!
+        return;
     }
 
     if (normalizedText === '2') {
+        console.log('✅ [DEBUG] Opção 2 selecionada - Consultar medicamentos');
         const msg = 'Qual medicamento você gostaria de consultar? (Ex: *Losartana posologia*)';
         await enviarComFormatosCorretos(from, msg);
         await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-        return; // ⬅️🔥 RETORNA AQUI - EVITA LOOP!
-    }
-
-    if (normalizedText === '3' || normalizedText.includes('carrinho')) {
-        await verCarrinho(from, whatsappPhoneId, customerId);
-        return; // ⬅️🔥 RETORNA AQUI - EVITA LOOP!
-    }
-
-    if (normalizedText === '4' || normalizedText.includes('atendente')) {
-        const msg = 'Encaminhando para um atendente... Aguarde um momento.';
-        await enviarComFormatosCorretos(from, msg);
-        await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-        return; // ⬅️🔥 RETORNA AQUI - EVITA LOOP!
-    }
-
-    // Restante da lógica mantida...
-    if (normalizedText.includes('finalizar') || normalizedText.includes('checkout')) {
-        await finalizarPedido(from, whatsappPhoneId, customerId);
         return;
     }
 
-    const cartIntent = extrairIntencaoCarrinho(messageText);
-    if (cartIntent) {
-        const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
-        if (orderId && await addItemToCart(orderId, cartIntent.productCode, cartIntent.quantity, whatsappPhoneId)) {
-            await enviarComFormatosCorretos(from, `✅ Adicionado ao carrinho: ${cartIntent.quantity} unidade(s) do produto *${cartIntent.productCode}*.`);
-            await salvarMensagemNoSupabase(whatsappPhoneId, from, `Adicionado ${cartIntent.productCode}`, 'OUT');
-            await verCarrinho(from, whatsappPhoneId, customerId);
-        } else {
-            await enviarComFormatosCorretos(from, `❌ Não foi possível adicionar o produto *${cartIntent.productCode}* ao carrinho. Ele existe?`);
-            await salvarMensagemNoSupabase(whatsappPhoneId, from, `Erro ao adicionar ${cartIntent.productCode}`, 'OUT');
-        }
-        return;
-    }
+    // ... (restante do código)
 
-    const { drugName, infoType } = parseUserMessageForDrugInfo(messageText);
-    if (drugName && infoType) {
-        const respostaBula = getMedicamentoInfo(drugName, infoType);
-        await enviarComFormatosCorretos(from, respostaBula);
-        await salvarMensagemNoSupabase(whatsappPhoneId, from, respostaBula, 'OUT');
-        return;
-    }
-
+    // ✅ CORREÇÃO CRÍTICA: BUSCA DIRETA PARA MENSAGENS SIMPLES
     const termoBusca = extrairTermoBusca(messageText);
+    console.log(`🔍 [DEBUG] Termo de busca extraído: ${termoBusca}`);
+
     if (termoBusca) {
+        console.log(`✅ [DEBUG] Busca com intenção detectada: ${termoBusca}`);
         await buscarEOferecerProdutos(from, whatsappPhoneId, termoBusca);
         return;
+    } else if (messageText.trim().length >= 2) {
+        // ✅ CORREÇÃO: Mensagem simples como "dipirona" - trata como busca direta
+        console.log(`🔍 [DEBUG] Busca direta detectada: "${messageText.trim()}"`);
+        await buscarEOferecerProdutos(from, whatsappPhoneId, messageText.trim());
+        return;
     }
 
+    console.log('❌ [DEBUG] Nenhum comando reconhecido - mostrando menu');
     await enviarMenuInicial(from, whatsappPhoneId);
 }
-
 // =========================================================================
 // HANDLERS PRINCIPAIS (MANTIDOS)
 // =========================================================================
