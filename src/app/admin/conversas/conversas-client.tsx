@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import DateDisplay from '@/components/DateDisplay';
 
 interface Message {
@@ -18,13 +19,59 @@ interface Conversation {
   count: number;
 }
 
-export default function ClientConversationsPage({ initialMessages }: { initialMessages: Message[] }) {
+export default function ConversationsClient({ initialMessages }: { initialMessages: Message[] }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [replyText, setReplyText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastTimestamp, setLastTimestamp] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+
+  // Verificar autenticação ao montar
+  useEffect(() => {
+    const authenticated = sessionStorage.getItem('admin_authenticated');
+    if (!authenticated) {
+      router.push('/admin/login');
+    }
+  }, [router]);
+
+  // Função para buscar mensagens atualizadas
+  const fetchUpdatedMessages = async () => {
+    try {
+      setRefreshing(true);
+      const response = await fetch(
+        `/api/admin/messages?timestamp=${lastTimestamp || 0}`,
+        {
+          method: 'GET',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        }
+      );
+
+      if (response.ok) {
+        const newMessages = await response.json();
+        if (newMessages && newMessages.length > 0) {
+          setMessages(prev => {
+            const existing = new Set(prev.map(m => m.id));
+            const filtered = newMessages.filter((m: Message) => !existing.has(m.id));
+            return [...prev, ...filtered];
+          });
+          
+          const latestTimestamp = new Date(newMessages[newMessages.length - 1].created_at).getTime();
+          setLastTimestamp(latestTimestamp);
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao buscar mensagens:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // Agrupar mensagens por cliente
   useEffect(() => {
@@ -55,20 +102,31 @@ export default function ClientConversationsPage({ initialMessages }: { initialMe
     }
   }, [messages, selectedConversation]);
 
-  // Auto-scroll para a mensagem mais recente
+  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [selectedConversation?.messages]);
 
-  // Recarregar mensagens a cada 5 segundos
+  // Polling automático
   useEffect(() => {
     const interval = setInterval(() => {
-      // Em produção, isso seria uma chamada à API
-      // Por enquanto, apenas usar as mensagens iniciais
+      fetchUpdatedMessages();
     }, 5000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [lastTimestamp]);
+
+  const handleManualRefresh = () => {
+    fetchUpdatedMessages();
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('admin_authenticated');
+    sessionStorage.removeItem('admin_user_id');
+    sessionStorage.removeItem('admin_email');
+    sessionStorage.removeItem('admin_login_time');
+    router.push('/admin/login');
+  };
 
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +134,6 @@ export default function ClientConversationsPage({ initialMessages }: { initialMe
 
     setLoading(true);
     try {
-      // Aqui você pode adicionar a lógica para enviar a mensagem via API
       const response = await fetch('/api/admin/send-reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -88,7 +145,6 @@ export default function ClientConversationsPage({ initialMessages }: { initialMe
 
       if (response.ok) {
         setReplyText('');
-        // Adicionar mensagem à lista local
         const newMessage: Message = {
           id: Date.now().toString(),
           created_at: new Date().toISOString(),
@@ -100,6 +156,7 @@ export default function ClientConversationsPage({ initialMessages }: { initialMe
       }
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
+      alert('❌ Erro ao enviar mensagem. Tente novamente.');
     }
     setLoading(false);
   };
@@ -108,20 +165,25 @@ export default function ClientConversationsPage({ initialMessages }: { initialMe
     return (
       <div className="flex h-screen bg-gray-100 items-center justify-center">
         <div className="text-center">
-          <p className="text-xl text-gray-600">Nenhuma conversa encontrada</p>
+          <p className="text-xl text-gray-600">Aguardando mensagens...</p>
+          <button
+            onClick={handleManualRefresh}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            🔄 Atualizar Agora
+          </button>
         </div>
       </div>
     );
   }
 
-  // Ordenar mensagens da conversa selecionada por data (mais recentes no final)
   const sortedMessages = selectedConversation?.messages.sort((a, b) =>
     new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   ) || [];
 
   return (
     <div className="flex h-screen bg-white">
-      {/* Sidebar - Lista de Conversas */}
+      {/* Sidebar */}
       <div className="w-80 border-r border-gray-200 flex flex-col bg-white">
         <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
           <h2 className="text-xl font-bold">💬 Conversas</h2>
@@ -156,46 +218,71 @@ export default function ClientConversationsPage({ initialMessages }: { initialMe
       {/* Chat Area */}
       <div className="flex-1 flex flex-col bg-gray-50">
         {/* Header */}
-        <div className="p-4 border-b border-gray-200 bg-white shadow-sm">
-          <h3 className="text-lg font-bold text-gray-800">
-            💬 {selectedConversation?.number}
-          </h3>
-          <p className="text-sm text-gray-500">
-            {selectedConversation?.count} mensagens
-          </p>
+        <div className="p-4 border-b border-gray-200 bg-white shadow-sm flex justify-between items-start">
+          <div>
+            <h3 className="text-lg font-bold text-gray-800">
+              💬 {selectedConversation?.number}
+            </h3>
+            <p className="text-sm text-gray-500">
+              {selectedConversation?.count} mensagens
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleManualRefresh}
+              disabled={refreshing}
+              className="px-3 py-2 text-sm bg-gray-200 hover:bg-gray-300 rounded transition-colors disabled:opacity-50"
+              title="Atualizar mensagens"
+            >
+              {refreshing ? '⏳' : '🔄'}
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-3 py-2 text-sm bg-red-500 text-white hover:bg-red-600 rounded transition-colors"
+              title="Sair"
+            >
+              🚪
+            </button>
+          </div>
         </div>
 
-        {/* Messages Area */}
+        {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {sortedMessages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.direction === 'IN' ? 'justify-start' : 'justify-end'}`}
-            >
+          {sortedMessages.length === 0 ? (
+            <div className="text-center text-gray-500 py-8">
+              Nenhuma mensagem nesta conversa
+            </div>
+          ) : (
+            sortedMessages.map((msg) => (
               <div
-                className={`max-w-lg p-3 rounded-2xl ${
-                  msg.direction === 'IN'
-                    ? 'bg-white text-gray-800 border border-gray-200'
-                    : 'bg-blue-600 text-white'
-                }`}
+                key={msg.id}
+                className={`flex ${msg.direction === 'IN' ? 'justify-start' : 'justify-end'}`}
               >
-                <p className="text-sm whitespace-pre-wrap break-words">
-                  {msg.message_body.replace(/\\n/g, '\n')}
-                </p>
                 <div
-                  className={`text-xs mt-2 ${
-                    msg.direction === 'IN' ? 'text-gray-500' : 'text-blue-200'
+                  className={`max-w-lg p-3 rounded-2xl ${
+                    msg.direction === 'IN'
+                      ? 'bg-white text-gray-800 border border-gray-200'
+                      : 'bg-blue-600 text-white'
                   }`}
                 >
-                  <DateDisplay dateString={msg.created_at} />
+                  <p className="text-sm whitespace-pre-wrap break-words">
+                    {msg.message_body.replace(/\\n/g, '\n')}
+                  </p>
+                  <div
+                    className={`text-xs mt-2 ${
+                      msg.direction === 'IN' ? 'text-gray-500' : 'text-blue-200'
+                    }`}
+                  >
+                    <DateDisplay dateString={msg.created_at} />
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area */}
+        {/* Input */}
         <div className="p-4 border-t border-gray-200 bg-white">
           <form onSubmit={handleSendReply} className="flex gap-3">
             <input

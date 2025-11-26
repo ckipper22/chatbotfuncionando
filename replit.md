@@ -6,7 +6,7 @@ This is a WhatsApp Bot Backend system built with Next.js 15, TypeScript, and Tai
 
 ## Current State
 
-**Status**: Fully configured and running on Replit
+**Status**: Fully configured and running on Replit with admin authentication
 **Last Updated**: November 26, 2025
 
 The application is now set up and running with:
@@ -16,15 +16,30 @@ The application is now set up and running with:
 - shadcn/ui components for the UI
 - WhatsApp Business API integration
 - Supabase integration for authentication and storage
+- Admin panel with real-time messaging and authentication
 
 ## Recent Changes
 
-### November 26, 2025 - Initial Replit Setup
+### November 26, 2025 - Admin Panel with Authentication & Real-time Updates
+- Created admin login page with Supabase authentication (`/admin/login`)
+- Built interactive admin conversations panel with WhatsApp-style UI (`/admin/conversas`)
+- Implemented real-time message polling (every 5 seconds) to see new messages
+- Added `/api/admin/messages` endpoint for incremental message fetching
+- Added `/api/admin/send-reply` endpoint for admins to respond to customers
+- Admin panel requires authentication - redirects unauthorized users to login
+- Messages display in chronological order with auto-scroll to latest
+- Admin can respond to customer messages directly from the panel
+- All responses are saved to Supabase and sent via WhatsApp API
+
+### Earlier - Product Cache & Cart System
 - Installed all npm dependencies with `--legacy-peer-deps` flag to resolve React 19 peer dependency conflicts
 - Configured Next.js to run on port 5000 (required for Replit)
 - Updated dev server to bind to 0.0.0.0 for external access
 - Added Cache-Control headers to prevent caching issues in Replit's iframe preview
-- Set up workflow for Next.js Dev Server
+- System of cache de produtos implementado com tabela `product_cache` no Supabase
+- Função `addItemToCart` aprimorada com fallback: busca no cache primeiro, depois na API Flask
+- Painel administrativo reformulado com interface estilo WhatsApp
+- Carrinho funcionando completamente: adiciona produtos, exibe total formatado, permite finalização
 
 ## Project Architecture
 
@@ -38,18 +53,23 @@ The application is now set up and running with:
 - **Notifications**: Sonner (toast notifications)
 - **Database**: Supabase (PostgreSQL)
 - **AI Integration**: Google Gemini API
+- **Authentication**: Supabase Auth
 
 ### Project Structure
 ```
 src/
 ├── app/                          # Next.js App Router
 │   ├── api/                     # API routes
-│   │   └── whatsapp/           # WhatsApp API endpoints
-│   │       ├── webhook/        # Receives messages from WhatsApp
-│   │       ├── send/           # Sends messages
-│   │       └── test/           # Tests connection
+│   │   ├── whatsapp/           # WhatsApp API endpoints
+│   │   │   ├── webhook/        # Receives messages from WhatsApp
+│   │   │   ├── send/           # Sends messages
+│   │   │   └── test/           # Tests connection
+│   │   └── admin/              # Admin API endpoints
+│   │       ├── messages/       # Fetch messages for polling
+│   │       └── send-reply/     # Send admin replies
 │   ├── admin/                   # Admin pages
-│   ├── login/                   # Login page
+│   │   ├── login/              # Admin login page
+│   │   └── conversas/          # Conversations dashboard
 │   ├── page.tsx                # Main chatbot page
 │   └── layout.tsx              # Root layout
 ├── components/                  # React components
@@ -66,10 +86,12 @@ src/
 - **Webhook Integration**: Receives messages from WhatsApp Business API
 - **Send Messages**: Support for text, images, videos, audio, and documents
 - **Real-time Dashboard**: Statistics and message history
+- **Admin Panel**: Manage conversations and respond to customers
 - **Contact Management**: List of contacts with unread message counts
 - **Configuration Panel**: Manage API credentials
 - **Dark/Light Mode**: Theme toggle support
 - **Responsive Design**: Works on desktop and mobile
+- **Admin Authentication**: Secure login for support team
 
 ## Environment Configuration
 
@@ -98,6 +120,28 @@ ENCRYPTION_KEY=your_encryption_key
 
 See `.env.example` for a complete list of available environment variables.
 
+## Admin Panel Usage
+
+### Accessing the Admin Panel
+```
+https://chatbotfuncionando.vercel.app/admin/conversas
+```
+
+### Authentication
+- Admin panel requires Supabase authentication
+- UID: `7bd09d46-158d-4fd3-85ac-5267d4c05abe`
+- Redirects to `/admin/login` if not authenticated
+- Session stored in `sessionStorage` with automatic expiration on browser close
+
+### How It Works
+1. Navigate to `/admin/login` and sign in with Supabase credentials
+2. After successful authentication, you're redirected to `/admin/conversas`
+3. View all customer conversations in the left sidebar (sorted by most recent)
+4. Click on a conversation to view message history
+5. Type in the message field and click 📤 to respond
+6. Messages update automatically every 5 seconds (no manual refresh needed)
+7. Click 🔄 to manually refresh or 🚪 to logout
+
 ## Development Workflow
 
 ### Running the Application
@@ -113,23 +157,16 @@ The application is configured to run automatically via the "Next.js Dev Server" 
 3. Check the workflow logs for any errors
 
 ### Dependencies Installation
-Dependencies were successfully installed on November 26, 2025 using:
+Dependencies were successfully installed with:
 ```bash
 npm install --legacy-peer-deps
 ```
-
-The `--legacy-peer-deps` flag was required due to React 19 compatibility issues with `react-day-picker@8.10.1`. All 894 packages are installed and functional.
 
 ### Deployment Configuration
 The application is configured for autoscale deployment with:
 - **Build command**: `npm run build`
 - **Start command**: `npm run start` (runs on 0.0.0.0:5000)
 - **Deployment target**: Autoscale (stateless, scales with traffic)
-
-This configuration is suitable for the WhatsApp Bot Backend as it:
-- Can scale up/down based on webhook traffic
-- Doesn't maintain critical state in server memory (uses localStorage on client)
-- Works well with the stateless nature of the API endpoints
 
 ### API Endpoints
 
@@ -139,6 +176,8 @@ All API routes are in `src/app/api/`:
 - `POST /api/whatsapp/webhook` - Receive messages
 - `POST /api/whatsapp/send` - Send messages
 - `POST /api/whatsapp/test` - Test connection
+- `GET /api/admin/messages` - Fetch messages with polling support
+- `POST /api/admin/send-reply` - Send admin reply to customer
 
 ## User Preferences
 
@@ -170,7 +209,8 @@ To fully configure the application:
 1. Add your environment variables in the Secrets tab
 2. Configure WhatsApp Business API webhook URL to point to your Replit URL
 3. Test the webhook connection
-4. Send test messages through the dashboard
+4. Use the admin panel to manage customer conversations
+5. Deploy to production when ready
 
 ## Documentation
 
