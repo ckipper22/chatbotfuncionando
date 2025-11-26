@@ -457,6 +457,12 @@ async function enviarMenuInicial(from: string, whatsappPhoneId: string): Promise
 
 async function findFarmacyAPI(whatsappPhoneId: string): Promise<{ api_url: string, client_id: string } | null> {
   try {
+    // Se Supabase não está configurado, retorna null graciosamente
+    if (!hasSupabaseConfig) {
+      console.warn('⚠️ Supabase não configurado - usando fallback local para busca de produtos');
+      return null;
+    }
+
     const url = `${SUPABASE_URL}/rest/v1/client_connections?whatsapp_phone_id=eq.${whatsappPhoneId}&select=api_url,client_id`;
 
     const headers = new Headers({
@@ -736,31 +742,47 @@ async function buscarEOferecerProdutos(from: string, whatsappPhoneId: string, te
   try {
     const farmacia = await findFarmacyAPI(whatsappPhoneId);
 
-    if (!farmacia || !farmacia.api_url) {
-      throw new Error('Farmácia não configurada no sistema');
-    }
+    if (farmacia && farmacia.api_url) {
+      // Tenta buscar via API da farmácia
+      const searchResults = await consultarAPIFarmacia(farmacia.api_url, termoBusca);
 
-    const searchResults = await consultarAPIFarmacia(farmacia.api_url, termoBusca);
+      if (searchResults.products && searchResults.products.length > 0) {
+        searchResults.products.slice(0, 5).forEach((product: any) => {
+          const precoFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.unit_price);
 
-    if (searchResults.products && searchResults.products.length > 0) {
-      searchResults.products.slice(0, 5).forEach((product: any) => {
-        const precoFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.unit_price);
+          resposta += `▪️ *${product.product_name}*\\n`;
+          resposta += `   *Cód:* ${product.product_code} | *Preço:* ${precoFormatado}\\n`;
+          resposta += `   Para adicionar, digite: *'COMPRAR ${product.product_code}'*\\n\\n`;
+        });
 
-        resposta += `▪️ *${product.product_name}*\\n`;
-        resposta += `   *Cód:* ${product.product_code} | *Preço:* ${precoFormatado}\\n`;
-        resposta += `   Para adicionar, digite: *'COMPRAR ${product.product_code}'*\\n\\n`;
-      });
-
-      if (searchResults.products.length > 5) {
-        resposta += `\\n_Encontramos mais resultados, refina a sua busca ou digite o código do produto para comprar._`;
+        if (searchResults.products.length > 5) {
+          resposta += `\\n_Encontramos mais resultados, refina a sua busca ou digite o código do produto para comprar._`;
+        }
+      } else {
+        resposta += 'Não encontramos nenhum produto que corresponda à sua busca. Tente um nome diferente ou digite *MENU*.';
       }
-
     } else {
-      resposta += 'Não encontramos nenhum produto que corresponda à sua busca. Tente um nome diferente ou digite *MENU*.';
+      // Fallback: usa banco de dados local de medicamentos
+      console.warn('⚠️ Usando base local de medicamentos como fallback');
+      const termoBuscaLower = termoBusca.toLowerCase();
+      const resultados = medicamentosData.filter(med => 
+        med['Nome do Medicamento'].toLowerCase().includes(termoBuscaLower) ||
+        med['Princípio(s) Ativo(s)'].some(p => p.toLowerCase().includes(termoBuscaLower))
+      );
+
+      if (resultados.length > 0) {
+        resultados.slice(0, 3).forEach(med => {
+          resposta += `▪️ *${med['Nome do Medicamento']}*\\n`;
+          resposta += `   *Princípio ativo:* ${med['Princípio(s) Ativo(s)'].join(', ')}\\n`;
+          resposta += `   Para mais info, digite: "INFO ${med['Nome do Medicamento']}"\\n\\n`;
+        });
+      } else {
+        resposta += 'Não encontramos nenhum produto que corresponda à sua busca. Tente um nome diferente ou digite *MENU*.';
+      }
     }
   } catch (error) {
     console.error('❌ Erro na busca de produtos:', error);
-    resposta += '⚠️ Não foi possível comunicar com a API da farmácia. Por favor, tente novamente mais tarde ou digite *ATENDENTE*.';
+    resposta += '⚠️ Não foi possível buscar produtos neste momento. Por favor, tente novamente mais tarde ou digite *ATENDENTE*.';
   }
 
   await enviarComFormatosCorretos(from, resposta);
