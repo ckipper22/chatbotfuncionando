@@ -47,7 +47,7 @@ export default function ContactList() {
             <div className="space-y-3">
               {contacts.map((contact) => (
                 <div
-                  key={contact.phoneNumber}
+                  key={contact.wa_id}
                   className="p-3 rounded-lg border hover:bg-accent transition-colors"
                 >
                   <div className="flex items-start justify-between mb-2">
@@ -57,30 +57,13 @@ export default function ContactList() {
                       </div>
                       <div>
                         <p className="font-semibold">
-                          {contact.name || contact.phoneNumber}
+                          {contact.profile.name || contact.wa_id}
                         </p>
-                        {contact.name && (
-                          <p className="text-xs text-muted-foreground">
-                            {contact.phoneNumber}
-                          </p>
-                        )}
+                        <p className="text-xs text-muted-foreground">
+                          {contact.wa_id}
+                        </p>
                       </div>
                     </div>
-                    {contact.unreadCount > 0 && (
-                      <Badge variant="destructive" className="text-xs">
-                        {contact.unreadCount} nova{contact.unreadCount > 1 ? 's' : ''}
-                      </Badge>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <MessageCircle className="h-3 w-3" />
-                      <span>{contact.messageCount} mensagens</span>
-                    </div>
-                    <span>
-                      {new Date(contact.lastMessageAt).toLocaleString('pt-BR')}
-                    </span>
                   </div>
                 </div>
               ))}
