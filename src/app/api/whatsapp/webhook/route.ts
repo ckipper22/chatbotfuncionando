@@ -772,13 +772,12 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
         console.log(`✅ [DEBUG] Busca com intenção detectada: ${termoBusca}`);
         await buscarEOferecerProdutos(from, whatsappPhoneId, termoBusca);
         return;
-    } else if (messageText.trim().length >= 2) {
-        // ✅ CORREÇÃO: Mensagem simples como "dipirona" - trata como busca direta
-        console.log(`🔍 [DEBUG] Busca direta detectada: "${messageText.trim()}"`);
-        await buscarEOferecerProdutos(from, whatsappPhoneId, messageText.trim());
-        return;
-    }
-
+    } else if (deveFazerBuscaDireta(messageText)) {
+    // ✅ CORREÇÃO: Só faz busca direta se for provavelmente um produto
+    console.log(`🔍 [DEBUG] Busca direta detectada: "${messageText.trim()}"`);
+    await buscarEOferecerProdutos(from, whatsappPhoneId, messageText.trim());
+    return;
+}
     console.log('❌ [DEBUG] Nenhum comando reconhecido - mostrando menu');
     await enviarMenuInicial(from, whatsappPhoneId);
 }
