@@ -137,3 +137,11 @@ export interface WhatsAppConnectionStatus {
     usage: number;
   };
 }
+
+export interface MessageStats {
+  totalSent: number;
+  totalReceived: number;
+  delivered: number;
+  read: number;
+  failed: number;
+}
