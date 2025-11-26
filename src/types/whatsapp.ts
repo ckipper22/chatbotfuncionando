@@ -41,17 +41,31 @@ export interface WhatsAppValue {
 }
 
 export interface WhatsAppContact {
-  profile: {
+  profile?: {
     name: string;
   };
-  wa_id: string;
+  wa_id?: string;
+  phoneNumber?: string;
+  name?: string;
+  lastMessageAt?: string;
+  messageCount?: number;
+  unreadCount?: number;
 }
 
 export interface WhatsAppMessage {
   from: string;
+  to?: string;
   id: string;
   timestamp: string;
   type: string;
+  direction?: 'inbound' | 'outbound';
+  status?: 'sent' | 'delivered' | 'read' | 'failed';
+  error?: string;
+  content?: {
+    text?: string;
+    mediaUrl?: string;
+    caption?: string;
+  };
   text?: {
     body: string;
   };
