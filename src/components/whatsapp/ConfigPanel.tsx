@@ -1,194 +1,293 @@
-
+// src/components/whatsapp/ConfigPanel.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { WhatsAppStorage } from '@/lib/whatsapp-storage';
-import { WhatsAppConfig } from '@/types/whatsapp';
 import { api, ApiError } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { CheckCircle2, XCircle, Loader2, Save, TestTube } from 'lucide-react';
 
-export default function ConfigPanel() {
+// Interface local se ainda houver problemas com a importação
+interface WhatsAppConfig {
+  id?: string;
+  phone_number_id: string;
+  access_token: string;
+  webhook_verify_token: string;
+  business_account_id?: string;
+  waba_id?: string;
+  app_id?: string;
+  is_active: boolean;
+  webhook_url: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface ConfigPanelProps {
+  onConfigUpdate?: () => void;
+}
+
+export function ConfigPanel({ onConfigUpdate }: ConfigPanelProps) {
   const [config, setConfig] = useState<WhatsAppConfig>({
-    phoneNumberId: '',
-    accessToken: '',
-    webhookVerifyToken: '',
-    businessAccountId: '',
-    apiVersion: 'v21.0',
+    phone_number_id: '',
+    access_token: '',
+    webhook_verify_token: '',
+    is_active: true,
+    webhook_url: `${typeof window !== 'undefined' ? window.location.origin : ''}/api/whatsapp/webhook`
   });
 
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [webhookUrl, setWebhookUrl] = useState('/next_api/whatsapp/webhook');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{success: boolean; message: string} | null>(null);
 
   useEffect(() => {
-    const savedConfig = WhatsAppStorage.getConfig();
-    if (savedConfig) {
-      setConfig(savedConfig);
-    }
-
-    // Define a URL completa apenas no cliente
-    if (typeof window !== 'undefined') {
-      setWebhookUrl(`${window.location.origin}/next_api/whatsapp/webhook`);
-    }
+    loadStoredConfig();
   }, []);
 
-  const handleSave = () => {
-    if (!config.phoneNumberId || !config.accessToken) {
-      toast.error('Phone Number ID e Access Token são obrigatórios');
-      return;
+  const loadStoredConfig = () => {
+    const storedConfig = WhatsAppStorage.getConfig();
+    if (storedConfig) {
+      setConfig(storedConfig);
     }
-
-    WhatsAppStorage.saveConfig(config);
-    toast.success('Configuração salva com sucesso!');
   };
 
-  const handleTest = async () => {
-    if (!config.phoneNumberId || !config.accessToken) {
-      toast.error('Phone Number ID e Access Token são obrigatórios');
-      return;
-    }
+  const handleInputChange = (field: keyof WhatsAppConfig, value: string | boolean) => {
+    setConfig(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
 
-    setTesting(true);
+  const handleSave = async () => {
+    setIsLoading(true);
+    try {
+      // Validação básica
+      if (!config.phone_number_id || !config.access_token || !config.webhook_verify_token) {
+        toast.error('Preencha todos os campos obrigatórios');
+        return;
+      }
+
+      WhatsAppStorage.saveConfig(config);
+      toast.success('Configuração salva com sucesso!');
+      onConfigUpdate?.();
+    } catch (error) {
+      console.error('Erro ao salvar configuração:', error);
+      toast.error('Erro ao salvar configuração');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setIsTesting(true);
     setTestResult(null);
 
     try {
-      const result = await api.post('/whatsapp/test', {
-        phoneNumberId: config.phoneNumberId,
-        accessToken: config.accessToken,
-        apiVersion: config.apiVersion,
+      const result = await api.post<{success: boolean; message: string}>('/whatsapp/test-connection', config);
+
+      setTestResult(result);
+      if (result.success) {
+        toast.success('Conexão testada com sucesso!');
+      } else {
+        toast.error('Falha no teste de conexão');
+      }
+    } catch (error) {
+      console.error('Erro ao testar conexão:', error);
+      const message = error instanceof ApiError
+        ? error.message
+        : 'Erro ao testar conexão com WhatsApp';
+
+      setTestResult({ success: false, message });
+      toast.error('Erro ao testar conexão');
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleWebhookVerification = async () => {
+    setIsTesting(true);
+    setTestResult(null);
+
+    try {
+      const result = await api.post<{success: boolean; message: string}>('/whatsapp/verify-webhook', {
+        verify_token: config.webhook_verify_token
       });
 
-      setTestResult({
-        success: true,
-        message: `Conexão OK! Número: ${result.phoneNumber || 'N/A'}`,
-      });
-      toast.success('Teste de conexão bem-sucedido!');
-    } catch (error) {
-      if (error instanceof ApiError) {
-        setTestResult({
-          success: false,
-          message: error.errorMessage,
-        });
-        toast.error(`Falha no teste: ${error.errorMessage}`);
+      setTestResult(result);
+      if (result.success) {
+        toast.success('Webhook verificado com sucesso!');
       } else {
-        setTestResult({
-          success: false,
-          message: 'Erro desconhecido',
-        });
-        toast.error('Erro ao testar conexão');
+        toast.error('Falha na verificação do webhook');
       }
+    } catch (error) {
+      console.error('Erro ao verificar webhook:', error);
+      const message = error instanceof ApiError
+        ? error.message
+        : 'Erro ao verificar webhook';
+
+      setTestResult({ success: false, message });
+      toast.error('Erro ao verificar webhook');
     } finally {
-      setTesting(false);
+      setIsTesting(false);
     }
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Configuração da API do WhatsApp</CardTitle>
-        <CardDescription>
-          Configure suas credenciais da API do WhatsApp Business
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="phoneNumberId">Phone Number ID *</Label>
-          <Input
-            id="phoneNumberId"
-            placeholder="123456789012345"
-            value={config.phoneNumberId}
-            onChange={(e) => setConfig({ ...config, phoneNumberId: e.target.value })}
-          />
-        </div>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Configuração do WhatsApp Business API</CardTitle>
+          <CardDescription>
+            Configure as credenciais para integração com a Meta WhatsApp Business API
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Phone Number ID */}
+          <div className="space-y-2">
+            <Label htmlFor="phone_number_id">Phone Number ID *</Label>
+            <Input
+              id="phone_number_id"
+              value={config.phone_number_id}
+              onChange={(e) => handleInputChange('phone_number_id', e.target.value)}
+              placeholder="Ex: 123456789012345"
+            />
+            <p className="text-sm text-muted-foreground">
+              ID do número de telefone da Meta
+            </p>
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="accessToken">Access Token *</Label>
-          <Input
-            id="accessToken"
-            type="password"
-            placeholder="EAAxxxxxxxxxx..."
-            value={config.accessToken}
-            onChange={(e) => setConfig({ ...config, accessToken: e.target.value })}
-          />
-        </div>
+          {/* Access Token */}
+          <div className="space-y-2">
+            <Label htmlFor="access_token">Access Token *</Label>
+            <Input
+              id="access_token"
+              type="password"
+              value={config.access_token}
+              onChange={(e) => handleInputChange('access_token', e.target.value)}
+              placeholder="Ex: EAAG... (Token de acesso permanente)"
+            />
+            <p className="text-sm text-muted-foreground">
+              Token de acesso permanente da Meta
+            </p>
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="webhookVerifyToken">Webhook Verify Token</Label>
-          <Input
-            id="webhookVerifyToken"
-            placeholder="my_verify_token_123"
-            value={config.webhookVerifyToken}
-            onChange={(e) => setConfig({ ...config, webhookVerifyToken: e.target.value })}
-          />
-          <p className="text-xs text-muted-foreground">
-            Use este token ao configurar o webhook no Meta for Developers
-          </p>
-        </div>
+          {/* Webhook Verify Token */}
+          <div className="space-y-2">
+            <Label htmlFor="webhook_verify_token">Webhook Verify Token *</Label>
+            <Input
+              id="webhook_verify_token"
+              value={config.webhook_verify_token}
+              onChange={(e) => handleInputChange('webhook_verify_token', e.target.value)}
+              placeholder="Ex: meu_token_secreto_123"
+            />
+            <p className="text-sm text-muted-foreground">
+              Token para verificação do webhook
+            </p>
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="businessAccountId">Business Account ID (opcional)</Label>
-          <Input
-            id="businessAccountId"
-            placeholder="123456789012345"
-            value={config.businessAccountId}
-            onChange={(e) => setConfig({ ...config, businessAccountId: e.target.value })}
-          />
-        </div>
+          {/* Webhook URL */}
+          <div className="space-y-2">
+            <Label htmlFor="webhook_url">Webhook URL</Label>
+            <Input
+              id="webhook_url"
+              value={config.webhook_url}
+              onChange={(e) => handleInputChange('webhook_url', e.target.value)}
+              placeholder="URL do webhook"
+            />
+            <p className="text-sm text-muted-foreground">
+              URL para receber mensagens do WhatsApp
+            </p>
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="apiVersion">Versão da API</Label>
-          <Input
-            id="apiVersion"
-            placeholder="v21.0"
-            value={config.apiVersion}
-            onChange={(e) => setConfig({ ...config, apiVersion: e.target.value })}
-          />
-        </div>
+          {/* Status */}
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="is_active"
+              checked={config.is_active}
+              onCheckedChange={(checked) => handleInputChange('is_active', checked)}
+            />
+            <Label htmlFor="is_active">Integração ativa</Label>
+          </div>
 
-        {testResult && (
-          <Alert variant={testResult.success ? 'default' : 'destructive'}>
-            <div className="flex items-center gap-2">
-              {testResult.success ? (
-                <CheckCircle2 className="h-4 w-4" />
+          {/* Test Results */}
+          {testResult && (
+            <Alert variant={testResult.success ? "default" : "destructive"}>
+              <div className="flex items-center">
+                {testResult.success ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                ) : (
+                  <XCircle className="h-4 w-4 text-red-500" />
+                )}
+                <AlertDescription className="ml-2">
+                  {testResult.message}
+                </AlertDescription>
+              </div>
+            </Alert>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-2 pt-4">
+            <Button
+              onClick={handleSave}
+              disabled={isLoading}
+              className="flex items-center gap-2"
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <XCircle className="h-4 w-4" />
+                <Save className="h-4 w-4" />
               )}
-              <AlertDescription>{testResult.message}</AlertDescription>
-            </div>
-          </Alert>
-        )}
+              Salvar Configuração
+            </Button>
 
-        <div className="flex gap-2">
-          <Button onClick={handleSave} className="flex-1">
-            <Save className="mr-2 h-4 w-4" />
-            Salvar Configuração
-          </Button>
-          <Button onClick={handleTest} variant="outline" disabled={testing}>
-            {testing ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <TestTube className="mr-2 h-4 w-4" />
-            )}
-            Testar Conexão
-          </Button>
-        </div>
+            <Button
+              variant="outline"
+              onClick={handleTestConnection}
+              disabled={isTesting || isLoading}
+              className="flex items-center gap-2"
+            >
+              {isTesting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <TestTube className="h-4 w-4" />
+              )}
+              Testar Conexão
+            </Button>
 
-        <div className="pt-4 border-t">
-          <h4 className="text-sm font-semibold mb-2">Webhook URL</h4>
-          <code className="text-xs bg-muted p-2 rounded block break-all">
-            {webhookUrl}
-          </code>
-          <p className="text-xs text-muted-foreground mt-2">
-            Configure esta URL no Meta for Developers para receber mensagens
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+            <Button
+              variant="outline"
+              onClick={handleWebhookVerification}
+              disabled={isTesting || isLoading}
+              className="flex items-center gap-2"
+            >
+              {isTesting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <TestTube className="h-4 w-4" />
+              )}
+              Verificar Webhook
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Information Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Informações Importantes</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground space-y-2">
+          <p>• Certifique-se de que o webhook está configurado na Meta com a URL acima</p>
+          <p>• O Verify Token deve ser exatamente o mesmo configurado no painel da Meta</p>
+          <p>• Mantenha o Access Token seguro e nunca o compartilhe</p>
+          <p>• Teste a conexão após salvar as configurações</p>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
