@@ -463,7 +463,7 @@ async function findFarmacyAPI(whatsappPhoneId: string): Promise<{ api_url: strin
       return null;
     }
 
-    const url = `${SUPABASE_URL}/rest/v1/client_connections?whatsapp_phone_id=eq.${whatsappPhoneId}&select=api_url,client_id`;
+    const url = `${SUPABASE_URL}/rest/v1/client_connections?whatsapp_phone_id=eq.${whatsappPhoneId}&select=api_base_url,client_id`;
 
     const headers = new Headers({
       'apikey': SUPABASE_ANON_KEY!,
@@ -471,15 +471,24 @@ async function findFarmacyAPI(whatsappPhoneId: string): Promise<{ api_url: strin
       'Content-Type': 'application/json'
     });
 
+    console.log('🔍 Buscando farmácia com whatsapp_phone_id:', whatsappPhoneId);
+    console.log('📍 URL de busca:', url);
+
     const response = await fetch(url, { method: 'GET', headers });
 
+    console.log('📨 Resposta Supabase:', response.status);
+
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Erro na resposta Supabase:', errorText);
       throw new Error(`Supabase status: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log('✅ Dados recebidos:', data);
+    
     return data && data.length > 0 ? {
-      api_url: data[0].api_url,
+      api_url: data[0].api_base_url,
       client_id: data[0].client_id
     } : null;
 
