@@ -852,3 +852,98 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+// ... (continuação do código anterior)
+
+    return new NextResponse('EVENT_RECEIVED', { status: 200 });
+  } catch (error) {
+    console.error('❌ Erro no webhook:', error);
+    return new NextResponse('Internal Server Error but OK to Meta', { status: 200 });
+  }
+}
+
+// =========================================================================
+// FUNÇÕES AUXILIARES (MANTIDAS)
+// =========================================================================
+
+async function handleInteractiveReply(from: string, whatsappPhoneId: string, replyId: string) {
+    const customerId = await getOrCreateCustomer(from, whatsappPhoneId);
+    if (!customerId) return;
+
+    await salvarMensagemNoSupabase(whatsappPhoneId, from, `Interactive Reply ID: ${replyId}`, 'IN');
+
+    const normalizedReplyId = replyId.toLowerCase().trim();
+
+    if (normalizedReplyId === "ver_carrinho") {
+        await verCarrinho(from, whatsappPhoneId, customerId);
+        return;
+    }
+
+    const productCodeMatch = normalizedReplyId.match(/(\d{6,})/);
+    if (productCodeMatch) {
+        const productCode = productCodeMatch[1];
+        const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
+
+        if (orderId && await addItemToCart(orderId, productCode, 1, whatsappPhoneId)) {
+            await enviarComFormatosCorretos(from, `✅ Produto *${productCode}* adicionado ao carrinho.`);
+            await salvarMensagemNoSupabase(whatsappPhoneId, from, `Adicionado ${productCode} (Interactive)`, 'OUT');
+            await verCarrinho(from, whatsappPhoneId, customerId);
+        } else {
+            await enviarComFormatosCorretos(from, `❌ Não foi possível adicionar o produto *${productCode}* ao carrinho.`);
+            await salvarMensagemNoSupabase(whatsappPhoneId, from, `Erro ao adicionar ${productCode} (Interactive)`, 'OUT');
+        }
+        return;
+    }
+
+    await enviarComFormatosCorretos(from, `Obrigado pelo seu clique! Não entendi essa ação. Digite *MENU*.`);
+    await salvarMensagemNoSupabase(whatsappPhoneId, from, `Resposta padrão Interactive`, 'OUT');
+}
+
+async function verCarrinho(from: string, whatsappPhoneId: string, customerId: string): Promise<void> {
+    const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
+
+    if (!orderId) {
+        const erroMsg = '⚠️ Não foi possível carregar seu carrinho. Tente novamente mais tarde.';
+        await enviarComFormatosCorretos(from, erroMsg);
+        await salvarMensagemNoSupabase(whatsappPhoneId, from, erroMsg, 'OUT');
+        return;
+    }
+
+    const items = await getOrderItems(orderId);
+
+    let totalGeral = 0;
+    let resposta = `🛒 *SEU CARRINHO DE COMPRAS* (ID: ${orderId.substring(0, 8)})\\n\\n`;
+
+    if (items.length === 0) {
+        resposta += 'Seu carrinho está vazio! Comece a adicionar produtos digitando o nome ou o código (ex: "quero losartana" ou "adicionar 123456").';
+    } else {
+        resposta += '*Itens Atuais:*\\n';
+        items.forEach(item => {
+            const unitPrice = parseFloat(item.unit_price);
+            const subtotal = item.quantity * unitPrice;
+            totalGeral += subtotal;
+
+            const precoUnitarioFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(unitPrice);
+            const subtotalFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal);
+
+            resposta += `▪️ *${item.product_name}* (${item.product_api_id})\\n`;
+            resposta += `   *Qtd:* ${item.quantity} x ${precoUnitarioFormatado} = ${subtotalFormatado}\\n`;
+        });
+
+        const totalFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalGeral);
+
+        resposta += `\\n-------------------------------\\n`;
+        resposta += `💰 *TOTAL GERAL: ${totalFormatado}*`;
+        resposta += `\\n-------------------------------\\n\\n`;
+        resposta += `*Para finalizar:* Digite 'FINALIZAR' para iniciar a confirmação de endereço e pagamento.\\n`;
+        resposta += `*Para remover:* Digite 'REMOVER [CÓDIGO]' (ainda não implementado).`;
+    }
+
+    resposta += '\\n\\nOu *digite menu* para voltar ao Menu Principal.';
+
+    await enviarComFormatosCorretos(from, resposta);
+    await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT');
+
+    if (items.length > 0) {
+        await updateOrderTotal(orderId, totalGeral);
+    }
+}
