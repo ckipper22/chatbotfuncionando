@@ -1,0 +1,162 @@
+[
+  {
+    "id": "4a39f3ce-7f49-403d-a33a-4c0a243df8f3",
+    "created_at": "2025-11-26 17:26:13.216007+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "❌ Não foi possível adicionar o produto ao carrinho.\\n\\nVerifique se o código *393* está correto e tente novamente.",
+    "direction": "OUT"
+  },
+  {
+    "id": "ea9e9249-98be-4967-bb89-5d56e039796a",
+    "created_at": "2025-11-26 17:26:11.8253+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "comprar 393",
+    "direction": "IN"
+  },
+  {
+    "id": "8d5e9581-3c29-4115-bd41-5b6c9d9b4d15",
+    "created_at": "2025-11-26 17:25:59.783597+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "🔍 *Resultados da busca por \"expec\":*\\n\\n▪️ *EMSEXPECTOR XPE 120ML*\\n   💊 EMS \\n   💰 ~~R$ 31,39~~ *R$ 29,80* (🔻5.1% OFF)\\n   📦 Estoque: 2 unidades\\n   📋 Código: 1373\\n   Para adicionar ao carrinho, digite: *COMPRAR 1373*\\n\\n▪️ *EXPEC XPE 120ML*\\n   💊 LEGRAND\\n   💰 ~~R$ 51,16~~ *R$ 34,80* (🔻32.0% OFF)\\n   📦 Estoque: 9 unidades\\n   📋 Código: 393\\n   Para adicionar ao carrinho, digite: *COMPRAR 393*\\n\\n▪️ *EXPECMUNE EDULITO XPE 150ML*\\n   💊 MERCOFARMA\\n   💰 *R$ 31,32*\\n   📦 Estoque: 1 unidades\\n   📋 Código: 19245\\n   Para adicionar ao carrinho, digite: *COMPRAR 19245*\\n\\n▪️ *EXPECTOFLUI XPE CER 120ML*\\n   💊 NATULAB \\n   💰 *R$ 8,99*\\n   📦 Estoque: 0 unidades\\n   📋 Código: 8613\\n   Para adicionar ao carrinho, digite: *COMPRAR 8613*\\n\\n▪️ *EXPECTOVIC XPE MOR 120ML*\\n   💊 AIRELA\\n   💰 *R$ 23,90*\\n   📦 Estoque: 0 unidades\\n   📋 Código: 13585\\n   Para adicionar ao carrinho, digite: *COMPRAR 13585*\\n\\n\\n_Encontramos 8 produtos! Mostrando os 5 primeiros. Refina a busca ou digite o código do produto para comprar._",
+    "direction": "OUT"
+  },
+  {
+    "id": "d666453d-2d41-4785-a210-fc0fea5c7e14",
+    "created_at": "2025-11-26 17:25:57.425387+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "qual o preço do expec",
+    "direction": "IN"
+  },
+  {
+    "id": "8b59e996-79c1-4e08-948d-2963e5dbe1cc",
+    "created_at": "2025-11-26 17:25:42.20721+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "Olá! Bem-vindo(a) à nossa farmácia virtual. Em que posso ajudar hoje?",
+    "direction": "OUT"
+  },
+  {
+    "id": "5e434c6f-3cda-4a09-a22a-4c432ca3ce69",
+    "created_at": "2025-11-26 17:25:39.710471+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "ola",
+    "direction": "IN"
+  },
+  {
+    "id": "8851abac-db16-4c86-984d-d09facb818aa",
+    "created_at": "2025-11-26 17:14:40.068603+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "❌ Não foi possível adicionar o produto ao carrinho.\\n\\nVerifique se o código *829* está correto e tente novamente.",
+    "direction": "OUT"
+  },
+  {
+    "id": "7ddeb805-6c71-4327-8493-3053504e7e68",
+    "created_at": "2025-11-26 17:14:38.829614+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "comprar 829",
+    "direction": "IN"
+  },
+  {
+    "id": "4084509e-c5af-4291-9db8-c27b1657f7f1",
+    "created_at": "2025-11-26 17:14:21.206634+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "🔍 *Resultados da busca por \"sorinan\":*\\n\\n▪️ *SORINAN 0,5MG/ML GTS AD 30ML*\\n   💊 PHARMASCIENCE \\n   💰 ~~R$ 11,90~~ *R$ 5,90* (🔻50.4% OFF)\\n   📦 Estoque: 51 unidades\\n   📋 Código: 829\\n   Para adicionar ao carrinho, digite: *COMPRAR 829*\\n\\n▪️ *SORINAN 0,9% GTS INF 30ML*\\n   💊 PHARMASCIENCE \\n   💰 *R$ 9,36*\\n   📦 Estoque: 0 unidades\\n   📋 Código: 5762\\n   Para adicionar ao carrinho, digite: *COMPRAR 5762*\\n\\n",
+    "direction": "OUT"
+  },
+  {
+    "id": "21c5a720-8919-45ef-8eb7-44b1d74142d7",
+    "created_at": "2025-11-26 17:14:16.673885+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "qual o preco do sorinan",
+    "direction": "IN"
+  },
+  {
+    "id": "b66d5bfd-b4d5-4f08-8184-90a2af99e452",
+    "created_at": "2025-11-26 17:14:07.842405+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "Olá! Bem-vindo(a) à nossa farmácia virtual. Como posso ajudar você hoje?",
+    "direction": "OUT"
+  },
+  {
+    "id": "2d19156c-1c45-476e-ab8c-9027b68e28e8",
+    "created_at": "2025-11-26 17:14:05.453096+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "ola",
+    "direction": "IN"
+  },
+  {
+    "id": "cf43653e-1231-4792-87e7-5634dbad9eba",
+    "created_at": "2025-11-26 17:07:30.858642+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "🔍 *Resultados da busca por \"5762\":*\\n\\n⚠️ Não foi possível buscar produtos neste momento. Por favor, tente novamente mais tarde ou digite *ATENDENTE*.",
+    "direction": "OUT"
+  },
+  {
+    "id": "7463acf8-d8eb-4f3f-9185-a3fa1051fcf4",
+    "created_at": "2025-11-26 17:07:27.672636+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "5762",
+    "direction": "IN"
+  },
+  {
+    "id": "3a6dba90-3fd3-43ec-94b6-18c07be9e7bb",
+    "created_at": "2025-11-26 17:06:48.380497+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "🔍 *Resultados da busca por \"sorinan\":*\\n\\n▪️ *SORINAN 0,5MG/ML GTS AD 30ML*\\n   💊 PHARMASCIENCE \\n   💰 R$ 5,90 (🔻50.4% OFF)\\n   📦 Estoque: 51 unidades\\n   📋 Código: 829\\n   Para adicionar ao carrinho, digite: *COMPRAR 829*\\n\\n▪️ *SORINAN 0,9% GTS INF 30ML*\\n   💊 PHARMASCIENCE \\n   💰 R$ 9,36\\n   📦 Estoque: 0 unidades\\n   📋 Código: 5762\\n   Para adicionar ao carrinho, digite: *COMPRAR 5762*\\n\\n",
+    "direction": "OUT"
+  },
+  {
+    "id": "8ba5a068-703d-4496-a89b-91450f583c5e",
+    "created_at": "2025-11-26 17:06:45.037474+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "Qual o preço do sorinan?",
+    "direction": "IN"
+  },
+  {
+    "id": "20a959b0-1429-4390-b18a-f07e45908276",
+    "created_at": "2025-11-26 17:06:26.233521+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "Olá! Estou bem, obrigado por perguntar. Em que posso ajudar hoje?",
+    "direction": "OUT"
+  },
+  {
+    "id": "63886f90-fc57-4f43-a9e5-bfca894b3a78",
+    "created_at": "2025-11-26 17:06:23.213399+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "Tudo bem com vc?",
+    "direction": "IN"
+  },
+  {
+    "id": "51d851f3-679a-4e31-bc81-6be2dd16e2e5",
+    "created_at": "2025-11-26 17:06:05.766256+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "Olá! Estou aqui para ajudar. Em que posso auxiliá-lo(a) hoje?",
+    "direction": "OUT"
+  },
+  {
+    "id": "8164a527-9282-43a8-a28a-08c6cb614a5a",
+    "created_at": "2025-11-26 17:06:02.641989+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "Tudo bem?",
+    "direction": "IN"
+  }
+]
