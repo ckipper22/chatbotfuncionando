@@ -120,13 +120,13 @@ export default function MessageHistory() {
                   </div>
 
                   <div className="text-sm mb-2">
-                    {msg.content.text && <p>{msg.content.text}</p>}
-                    {msg.content.mediaUrl && (
+                    {msg.content?.text && <p>{msg.content.text}</p>}
+                    {msg.content?.mediaUrl && (
                       <p className="text-muted-foreground">
                         Mídia: {msg.content.mediaUrl.substring(0, 50)}...
                       </p>
                     )}
-                    {msg.content.caption && (
+                    {msg.content?.caption && (
                       <p className="text-muted-foreground italic">{msg.content.caption}</p>
                     )}
                   </div>

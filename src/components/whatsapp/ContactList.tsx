@@ -57,10 +57,10 @@ export default function ContactList() {
                       </div>
                       <div>
                         <p className="font-semibold">
-                          {contact.profile.name || contact.wa_id}
+                          {contact.profile?.name || contact.wa_id || contact.phoneNumber}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {contact.wa_id}
+                          {contact.wa_id || contact.phoneNumber}
                         </p>
                       </div>
                     </div>

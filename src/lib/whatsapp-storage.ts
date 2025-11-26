@@ -90,14 +90,14 @@ export class WhatsAppStorage {
       contacts.push(contact);
     } else {
       contact.lastMessageAt = message.timestamp;
-      contact.messageCount += 1;
+      contact.messageCount = (contact.messageCount || 0) + 1;
       if (message.direction === 'inbound') {
-        contact.unreadCount += 1;
+        contact.unreadCount = (contact.unreadCount || 0) + 1;
       }
     }
 
     contacts.sort((a, b) => 
-      new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+      new Date(b.lastMessageAt || '').getTime() - new Date(a.lastMessageAt || '').getTime()
     );
 
     localStorage.setItem(STORAGE_KEYS.CONTACTS, JSON.stringify(contacts));
