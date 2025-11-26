@@ -412,7 +412,7 @@ async function enviarMenuInicial(from: string, whatsappPhoneId: string): Promise
                 '*3.* 🛒 Ver/Finalizar Carrinho\\n' +
                 '*4.* 👩‍💻 Falar com um Atendente (Horário Comercial)\\n';
 
-  const result = await enviarComFormatosCorretos(from, texto, whatsappPhoneId);
+  const result = await enviarComFormatosCorretos(from, texto);
   if (result) {
     await salvarMensagemNoSupabase(whatsappPhoneId, from, texto, 'OUT');
   }
@@ -493,62 +493,60 @@ function converterParaFormatoFuncional(numeroOriginal: string): string[] {
     return ['+' + numeroConvertido, numeroConvertido];
 }
 
-// CORREÇÃO CRÍTICA: Restaurar função de envio da versão funcional
+// =========================================================================
+// 🔥 CORREÇÃO CRÍTICA: FUNÇÃO DE ENVIO CORRIGIDA
+// =========================================================================
+
 async function enviarComFormatosCorretos(from: string, texto: string): Promise<boolean> {
-  try {
-    console.log('🎯 [SEND] Enviando mensagem para:', from);
+    try {
+        const formatos = converterParaFormatoFuncional(from);
 
-    const formatos = converterParaFormatoFuncional(from);
+        for (let i = 0; i < formatos.length; i++) {
+          const formato = formatos[i];
 
-    for (let i = 0; i < formatos.length; i++) {
-      const formato = formatos[i];
-      console.log(`📤 Tentativa ${i + 1}/${formatos.length}: ${formato}`);
+          try {
+            const payload = {
+              messaging_product: 'whatsapp',
+              recipient_type: 'individual',
+              to: formato,
+              type: 'text',
+              text: {
+                preview_url: false,
+                body: texto.substring(0, 4096).replace(/\\n/g, '\n')
+              }
+            };
 
-      try {
-        const payload = {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: formato,
-          type: 'text',
-          text: {
-            preview_url: false,
-            body: texto.substring(0, 4096).replace(/\\n/g, '\n')
+            // ✅ CORREÇÃO: Usar variável de ambiente, não parâmetro
+            const url = `https://graph.facebook.com/v19.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
+
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(payload),
+            });
+
+            if (response.ok) {
+              return true;
+            } else {
+              const errorResponse = await response.text();
+              console.log(`❌ Falha para: ${formato} - Status: ${response.status} - Erro: ${errorResponse}`);
+            }
+          } catch (error) {
+            console.error(`💥 Erro para ${formato}:`, error);
           }
-        };
 
-        // ✅ CORREÇÃO: Usar NOSSO WhatsApp Phone Number ID fixo das variáveis de ambiente
-        const url = `https://graph.facebook.com/v19.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
-
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (response.ok) {
-          console.log(`✅ Mensagem enviada com sucesso para: ${formato}`);
-          return true;
-        } else {
-          const errorResponse = await response.text();
-          console.log(`❌ Falha para: ${formato} - Status: ${response.status} - Erro: ${errorResponse}`);
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
+
+        return false;
+
       } catch (error) {
-        console.error(`💥 Erro para ${formato}:`, error);
+        console.error('❌ Erro crítico no envio:', error);
+        return false;
       }
-
-      await new Promise(resolve => setTimeout(resolve, 300));
-    }
-
-    console.log('❌ Todos os formatos falharam para:', from);
-    return false;
-
-  } catch (error) {
-    console.error('❌ Erro crítico no envio:', error);
-    return false;
-  }
 }
 
 function parseUserMessageForDrugInfo(message: string): { drugName?: string; infoType?: string } {
@@ -649,7 +647,7 @@ async function finalizarPedido(from: string, whatsappPhoneId: string, customerId
 
     if (!orderId) {
         const erroMsg = '⚠️ Não foi possível finalizar o pedido. O carrinho está vazio ou ocorreu um erro.';
-        await enviarComFormatosCorretos(from, erroMsg, whatsappPhoneId);
+        await enviarComFormatosCorretos(from, erroMsg);
         await salvarMensagemNoSupabase(whatsappPhoneId, from, erroMsg, 'OUT');
         return;
     }
@@ -684,12 +682,12 @@ async function finalizarPedido(from: string, whatsappPhoneId: string, customerId
                             `Seu pedido (ID: ${orderId.substring(0, 8)}) foi enviado para nossa equipe.\\n` +
                             'Em breve, um de nossos atendentes irá te contatar para confirmar endereço, pagamento e tempo de entrega.';
 
-        await enviarComFormatosCorretos(from, sucessoMsg, whatsappPhoneId);
+        await enviarComFormatosCorretos(from, sucessoMsg);
         await salvarMensagemNoSupabase(whatsappPhoneId, from, sucessoMsg, 'OUT');
 
     } catch (error) {
         const erroMsg = '⚠️ Ocorreu um erro ao processar o seu pedido. Por favor, tente novamente ou digite *ATENDENTE*.';
-        await enviarComFormatosCorretos(from, erroMsg, whatsappPhoneId);
+        await enviarComFormatosCorretos(from, erroMsg);
         await salvarMensagemNoSupabase(whatsappPhoneId, from, erroMsg, 'OUT');
     }
 }
@@ -727,7 +725,7 @@ async function buscarEOferecerProdutos(from: string, whatsappPhoneId: string, te
         resposta += '⚠️ Não foi possível comunicar com a API da farmácia. Por favor, tente novamente mais tarde ou digite *ATENDENTE*.';
     }
 
-    await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
+    await enviarComFormatosCorretos(from, resposta);
     await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT');
 }
 
@@ -747,14 +745,14 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
 
     if (normalizedText === '1') {
         const msg = 'Certo! Digite o nome do produto ou o código de barras (ex: *DIPIRONA* ou *7896000000000*).';
-        await enviarComFormatosCorretos(from, msg, whatsappPhoneId);
+        await enviarComFormatosCorretos(from, msg);
         await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
         return; // ⬅️🔥 RETORNA AQUI - EVITA LOOP!
     }
 
     if (normalizedText === '2') {
         const msg = 'Qual medicamento você gostaria de consultar? (Ex: *Losartana posologia*)';
-        await enviarComFormatosCorretos(from, msg, whatsappPhoneId);
+        await enviarComFormatosCorretos(from, msg);
         await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
         return; // ⬅️🔥 RETORNA AQUI - EVITA LOOP!
     }
@@ -766,7 +764,7 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
 
     if (normalizedText === '4' || normalizedText.includes('atendente')) {
         const msg = 'Encaminhando para um atendente... Aguarde um momento.';
-        await enviarComFormatosCorretos(from, msg, whatsappPhoneId);
+        await enviarComFormatosCorretos(from, msg);
         await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
         return; // ⬅️🔥 RETORNA AQUI - EVITA LOOP!
     }
@@ -781,11 +779,11 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
     if (cartIntent) {
         const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
         if (orderId && await addItemToCart(orderId, cartIntent.productCode, cartIntent.quantity, whatsappPhoneId)) {
-            await enviarComFormatosCorretos(from, `✅ Adicionado ao carrinho: ${cartIntent.quantity} unidade(s) do produto *${cartIntent.productCode}*.`, whatsappPhoneId);
+            await enviarComFormatosCorretos(from, `✅ Adicionado ao carrinho: ${cartIntent.quantity} unidade(s) do produto *${cartIntent.productCode}*.`);
             await salvarMensagemNoSupabase(whatsappPhoneId, from, `Adicionado ${cartIntent.productCode}`, 'OUT');
             await verCarrinho(from, whatsappPhoneId, customerId);
         } else {
-            await enviarComFormatosCorretos(from, `❌ Não foi possível adicionar o produto *${cartIntent.productCode}* ao carrinho. Ele existe?`, whatsappPhoneId);
+            await enviarComFormatosCorretos(from, `❌ Não foi possível adicionar o produto *${cartIntent.productCode}* ao carrinho. Ele existe?`);
             await salvarMensagemNoSupabase(whatsappPhoneId, from, `Erro ao adicionar ${cartIntent.productCode}`, 'OUT');
         }
         return;
@@ -794,7 +792,7 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
     const { drugName, infoType } = parseUserMessageForDrugInfo(messageText);
     if (drugName && infoType) {
         const respostaBula = getMedicamentoInfo(drugName, infoType);
-        await enviarComFormatosCorretos(from, respostaBula, whatsappPhoneId);
+        await enviarComFormatosCorretos(from, respostaBula);
         await salvarMensagemNoSupabase(whatsappPhoneId, from, respostaBula, 'OUT');
         return;
     }
@@ -854,97 +852,3 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-
-    return new NextResponse('EVENT_RECEIVED', { status: 200 });
-  } catch (error) {
-    console.error('❌ Erro no webhook:', error);
-    return new NextResponse('Internal Server Error but OK to Meta', { status: 200 });
-  }
-}
-
-// =========================================================================
-// FUNÇÕES AUXILIARES (MANTIDAS)
-// =========================================================================
-
-async function handleInteractiveReply(from: string, whatsappPhoneId: string, replyId: string) {
-    const customerId = await getOrCreateCustomer(from, whatsappPhoneId);
-    if (!customerId) return;
-
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, `Interactive Reply ID: ${replyId}`, 'IN');
-
-    const normalizedReplyId = replyId.toLowerCase().trim();
-
-    if (normalizedReplyId === "ver_carrinho") {
-        await verCarrinho(from, whatsappPhoneId, customerId);
-        return;
-    }
-
-    const productCodeMatch = normalizedReplyId.match(/(\d{6,})/);
-    if (productCodeMatch) {
-        const productCode = productCodeMatch[1];
-        const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
-
-        if (orderId && await addItemToCart(orderId, productCode, 1, whatsappPhoneId)) {
-            await enviarComFormatosCorretos(from, `✅ Produto *${productCode}* adicionado ao carrinho.`, whatsappPhoneId);
-            await salvarMensagemNoSupabase(whatsappPhoneId, from, `Adicionado ${productCode} (Interactive)`, 'OUT');
-            await verCarrinho(from, whatsappPhoneId, customerId);
-        } else {
-            await enviarComFormatosCorretos(from, `❌ Não foi possível adicionar o produto *${productCode}* ao carrinho.`, whatsappPhoneId);
-            await salvarMensagemNoSupabase(whatsappPhoneId, from, `Erro ao adicionar ${productCode} (Interactive)`, 'OUT');
-        }
-        return;
-    }
-
-    await enviarComFormatosCorretos(from, `Obrigado pelo seu clique! Não entendi essa ação. Digite *MENU*.`, whatsappPhoneId);
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, `Resposta padrão Interactive`, 'OUT');
-}
-
-async function verCarrinho(from: string, whatsappPhoneId: string, customerId: string): Promise<void> {
-    const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
-
-    if (!orderId) {
-        const erroMsg = '⚠️ Não foi possível carregar seu carrinho. Tente novamente mais tarde.';
-        await enviarComFormatosCorretos(from, erroMsg, whatsappPhoneId);
-        await salvarMensagemNoSupabase(whatsappPhoneId, from, erroMsg, 'OUT');
-        return;
-    }
-
-    const items = await getOrderItems(orderId);
-
-    let totalGeral = 0;
-    let resposta = `🛒 *SEU CARRINHO DE COMPRAS* (ID: ${orderId.substring(0, 8)})\\n\\n`;
-
-    if (items.length === 0) {
-        resposta += 'Seu carrinho está vazio! Comece a adicionar produtos digitando o nome ou o código (ex: "quero losartana" ou "adicionar 123456").';
-    } else {
-        resposta += '*Itens Atuais:*\\n';
-        items.forEach(item => {
-            const unitPrice = parseFloat(item.unit_price);
-            const subtotal = item.quantity * unitPrice;
-            totalGeral += subtotal;
-
-            const precoUnitarioFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(unitPrice);
-            const subtotalFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal);
-
-            resposta += `▪️ *${item.product_name}* (${item.product_api_id})\\n`;
-            resposta += `   *Qtd:* ${item.quantity} x ${precoUnitarioFormatado} = ${subtotalFormatado}\\n`;
-        });
-
-        const totalFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalGeral);
-
-        resposta += `\\n-------------------------------\\n`;
-        resposta += `💰 *TOTAL GERAL: ${totalFormatado}*`;
-        resposta += `\\n-------------------------------\\n\\n`;
-        resposta += `*Para finalizar:* Digite 'FINALIZAR' para iniciar a confirmação de endereço e pagamento.\\n`;
-        resposta += `*Para remover:* Digite 'REMOVER [CÓDIGO]' (ainda não implementado).`;
-    }
-
-    resposta += '\\n\\nOu *digite menu* para voltar ao Menu Principal.';
-
-    await enviarComFormatosCorretos(from, resposta, whatsappPhoneId);
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT');
-
-    if (items.length > 0) {
-        await updateOrderTotal(orderId, totalGeral);
-    }
-}
