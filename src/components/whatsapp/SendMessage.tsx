@@ -72,7 +72,7 @@ export default function SendMessage() {
 
       const message = {
         id: result.messageId,
-        from: config.phoneNumberId,
+        from: config.phone_number_id,
         to: to.replace(/\D/g, ''),
         timestamp: result.timestamp,
         type: messageType,

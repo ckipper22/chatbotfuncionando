@@ -14,12 +14,12 @@ export class WhatsAppAPI {
   }
 
   private getBaseUrl(): string {
-    return `https://graph.facebook.com/${this.config.apiVersion}/${this.config.phoneNumberId}`;
+    return `https://graph.facebook.com/${this.config.apiVersion}/${this.config.phone_number_id}`;
   }
 
   private getHeaders(): HeadersInit {
     return {
-      'Authorization': `Bearer ${this.config.accessToken}`,
+      'Authorization': `Bearer ${this.config.access_token}`,
       'Content-Type': 'application/json',
     };
   }
@@ -53,7 +53,7 @@ export class WhatsAppAPI {
 
     return {
       id: result.messages[0].id,
-      from: this.config.phoneNumberId,
+      from: this.config.phone_number_id,
       to: to.replace(/\D/g, ''),
       timestamp: new Date().toISOString(),
       type: 'text',
@@ -109,7 +109,7 @@ export class WhatsAppAPI {
 
     return {
       id: result.messages[0].id,
-      from: this.config.phoneNumberId,
+      from: this.config.phone_number_id,
       to: to.replace(/\D/g, ''),
       timestamp: new Date().toISOString(),
       type: mediaType,
@@ -160,7 +160,7 @@ export class WhatsAppAPI {
 
     return {
       id: result.messages[0].id,
-      from: this.config.phoneNumberId,
+      from: this.config.phone_number_id,
       to: to.replace(/\D/g, ''),
       timestamp: new Date().toISOString(),
       type: 'template',
@@ -199,7 +199,7 @@ export class WhatsAppAPI {
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${this.config.accessToken}`,
+        'Authorization': `Bearer ${this.config.access_token}`,
       },
     });
 
@@ -218,7 +218,7 @@ export class WhatsAppAPI {
       const response = await fetch(url, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${this.config.accessToken}`,
+          'Authorization': `Bearer ${this.config.access_token}`,
         },
       });
 
