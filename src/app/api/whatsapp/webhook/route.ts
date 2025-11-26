@@ -1,6 +1,6 @@
 // src/app/api/whatsapp/webhook/route.ts
 // ====================================================================================
-// WEBHOOK PRINCIPAL - COM LÓGICA DE E-COMMERCE INTEGRADA
+// WEBHOOK CORRIGIDO - COM CARRINHO E BUSCA FUNCIONAL
 // ====================================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -28,7 +28,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 }
 
 if (!FLASK_API_BASE_URL) {
-    console.warn('⚠️ AVISO: Variável FLASK_API_BASE_URL não configurada. A busca de produtos não funcionará.');
+    console.warn('⚠️ AVISO: Variável FLASK_API_BASE_URL não configurada.');
 }
 
 // =========================================================================
@@ -82,9 +82,6 @@ const NOISE_WORDS = new Set([
   'o produto', 'o item'
 ]);
 
-/**
- * Encontra e remove o ruído da mensagem usando tokenização para extrair o termo de busca.
- */
 function extrairTermoBusca(mensagem: string): string | null {
   const lowerMsg = mensagem.toLowerCase();
   const isSearchIntent = TRIGGERS_BUSCA.some(trigger => lowerMsg.includes(trigger));
@@ -104,9 +101,6 @@ function extrairTermoBusca(mensagem: string): string | null {
   return null;
 }
 
-/**
- * Tenta extrair a intenção de adicionar ao carrinho (quantidade e código do produto).
- */
 function extrairIntencaoCarrinho(mensagem: string): { quantity: number; productCode: string } | null {
     const lowerMsg = mensagem.toLowerCase();
     const isCartIntent = TRIGGERS_CARRINHO.some(trigger => lowerMsg.includes(trigger));
@@ -136,7 +130,7 @@ function extrairIntencaoCarrinho(mensagem: string): { quantity: number; productC
 }
 
 // =========================================================================
-// FUNÇÕES AUXILIARES DE SUPABASE
+// FUNÇÕES AUXILIARES DE SUPABASE (MANTIDAS)
 // =========================================================================
 
 async function getOrCreateCustomer(from: string, whatsappPhoneId: string): Promise<string | null> {
@@ -159,7 +153,6 @@ async function getOrCreateCustomer(from: string, whatsappPhoneId: string): Promi
 
         if (data && data.length > 0) {
           const customerId = data[0].id;
-          console.log('👤 Cliente encontrado no CRM. ID:', customerId);
           return customerId;
         }
 
@@ -185,14 +178,13 @@ async function getOrCreateCustomer(from: string, whatsappPhoneId: string): Promi
 
         if (data && data.length > 0) {
             const newCustomerId = data[0].id;
-            console.log('➕ Novo cliente CRM criado com sucesso. ID:', newCustomerId);
             return newCustomerId;
         }
 
         return null;
 
       } catch (error) {
-        console.error('❌ Erro crítico no CRM (getOrCreateCustomer):', error);
+        console.error('❌ Erro crítico no CRM:', error);
         return null;
       }
 }
@@ -217,7 +209,6 @@ async function getOrCreateCartOrder(customerId: string, whatsappPhoneId: string)
 
         if (data && data.length > 0) {
             const orderId = data[0].id;
-            console.log('🛒 Carrinho ativo encontrado. ID:', orderId);
             return orderId;
         }
 
@@ -236,7 +227,7 @@ async function getOrCreateCartOrder(customerId: string, whatsappPhoneId: string)
         });
 
         if (!insertResponse.ok) {
-            console.error('❌ ERRO ao criar novo pedido (carrinho):', await insertResponse.text());
+            console.error('❌ ERRO ao criar novo pedido:', await insertResponse.text());
             return null;
         }
 
@@ -245,14 +236,13 @@ async function getOrCreateCartOrder(customerId: string, whatsappPhoneId: string)
 
         if (data && data.length > 0) {
             const newOrderId = data[0].id;
-            console.log('➕ Novo carrinho criado com sucesso. ID:', newOrderId);
             return newOrderId;
         }
 
         return null;
 
     } catch (error) {
-        console.error('❌ Erro crítico no Carrinho (getOrCreateCartOrder):', error);
+        console.error('❌ Erro crítico no Carrinho:', error);
         return null;
     }
 }
@@ -305,8 +295,6 @@ async function updateOrderTotal(orderId: string, newTotal: number): Promise<void
 
         if (!response.ok) {
             console.error('❌ ERRO ao atualizar total do pedido:', await response.text());
-        } else {
-            console.log(`✅ Total do pedido ${orderId} atualizado para ${newTotal.toFixed(2)}.`);
         }
     } catch (error) {
         console.error('❌ Erro crítico ao atualizar total do pedido:', error);
@@ -320,14 +308,12 @@ async function addItemToCart(
     whatsappPhoneId: string
 ): Promise<boolean> {
     if (!FLASK_API_BASE_URL) {
-        console.error("❌ FLASK_API_BASE_URL não está definida. Não é possível buscar detalhes do produto.");
+        console.error("❌ FLASK_API_BASE_URL não está definida.");
         return false;
     }
 
     try {
         const productApiUrl = `${FLASK_API_BASE_URL}/api/products/get_details/${productCode}`;
-        console.log('🔍 Buscando detalhes do produto na API Flask:', productApiUrl);
-
         const apiResponse = await fetch(productApiUrl);
         const productData = await apiResponse.json();
 
@@ -367,7 +353,6 @@ async function addItemToCart(
             return false;
         }
 
-        console.log(`✅ Item ${productCode} adicionado ao carrinho ${orderId} com sucesso.`);
         return true;
 
     } catch (error) {
@@ -406,13 +391,11 @@ async function salvarMensagemNoSupabase(
         });
 
         if (!response.ok) {
-          console.error(`❌ ERRO [${direction}] ao salvar mensagem no Supabase:`, await response.text());
-        } else {
-          console.log(`✅ Mensagem de direção ${direction} salva no Supabase.`);
+          console.error(`❌ ERRO ao salvar mensagem no Supabase:`, await response.text());
         }
 
       } catch (error) {
-        console.error(`❌ Erro crítico ao salvar mensagem [${direction}]:`, error);
+        console.error(`❌ Erro crítico ao salvar mensagem:`, error);
       }
 }
 
@@ -438,8 +421,6 @@ async function enviarMenuInicial(from: string, whatsappPhoneId: string): Promise
 
 async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: string, client_id: string} | null> {
     try {
-        console.log('🔍 Buscando farmácia:', whatsappPhoneId);
-
         const url = `${SUPABASE_URL}/rest/v1/client_connections?whatsapp_phone_id=eq.${whatsappPhoneId}&select=api_base_url,client_id`;
 
         const headers = new Headers({
@@ -455,8 +436,6 @@ async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: s
         }
 
         const data = await response.json();
-        console.log('✅ Farmácia encontrada:', data[0] || 'Nenhuma');
-
         return data && data.length > 0 ? {
           api_base_url: data[0].api_base_url,
           client_id: data[0].client_id
@@ -471,7 +450,6 @@ async function findFarmacyAPI(whatsappPhoneId: string): Promise<{api_base_url: s
 async function consultarAPIFarmacia(apiBaseUrl: string, termo: string): Promise<any> {
     try {
         const url = `${apiBaseUrl}/api/products/search?q=${encodeURIComponent(termo)}`;
-        console.log('🔍 Consultando API farmácia:', url);
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -558,7 +536,6 @@ async function enviarComFormatosCorretos(from: string, texto: string, whatsappPh
           await new Promise(resolve => setTimeout(resolve, 300));
         }
 
-        console.log('❌ Todos os formatos falharam para:', from);
         return false;
 
       } catch (error) {
@@ -657,7 +634,7 @@ function getMedicamentoInfo(drugName: string, infoType: string): string {
 }
 
 // =========================================================================
-// FUNÇÕES DE E-COMMERCE E ROTAS
+// FUNÇÕES DE E-COMMERCE
 // =========================================================================
 
 async function finalizarPedido(from: string, whatsappPhoneId: string, customerId: string): Promise<void> {
@@ -710,21 +687,16 @@ async function finalizarPedido(from: string, whatsappPhoneId: string, customerId
     }
 }
 
-/**
- * CORREÇÃO CRÍTICA: Busca produtos na API Flask corretamente
- */
 async function buscarEOferecerProdutos(from: string, whatsappPhoneId: string, termoBusca: string): Promise<void> {
     let resposta = `🔍 *Resultados da busca por "${termoBusca}":*\\n\\n`;
 
     try {
-        // ✅ CORREÇÃO: Buscar a API da farmácia configurada no Supabase primeiro
         const farmacia = await findFarmacyAPI(whatsappPhoneId);
 
         if (!farmacia || !farmacia.api_base_url) {
             throw new Error('Farmácia não configurada no sistema');
         }
 
-        // ✅ CORREÇÃO: Usar a API da farmácia do Supabase (que aponta para sua Flask)
         const searchResults = await consultarAPIFarmacia(farmacia.api_base_url, termoBusca);
 
         if (searchResults.products && searchResults.products.length > 0) {
@@ -752,6 +724,10 @@ async function buscarEOferecerProdutos(from: string, whatsappPhoneId: string, te
     await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT');
 }
 
+// =========================================================================
+// FUNÇÃO PRINCIPAL CORRIGIDA - SEM LOOP!
+// =========================================================================
+
 async function processarMensagemCompleta(from: string, whatsappPhoneId: string, messageText: string) {
     const customerId = await getOrCreateCustomer(from, whatsappPhoneId);
     if (!customerId) return;
@@ -760,29 +736,35 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
 
     const normalizedText = messageText.toLowerCase().trim();
 
+    // 🔥 CORREÇÃO CRÍTICA: Cada opção numérica DEVE retornar após processar!
+
     if (normalizedText === '1') {
         const msg = 'Certo! Digite o nome do produto ou o código de barras (ex: *DIPIRONA* ou *7896000000000*).';
         await enviarComFormatosCorretos(from, msg, whatsappPhoneId);
         await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-        return;
+        return; // ⬅️🔥 RETORNA AQUI - EVITA LOOP!
     }
+
     if (normalizedText === '2') {
         const msg = 'Qual medicamento você gostaria de consultar? (Ex: *Losartana posologia*)';
         await enviarComFormatosCorretos(from, msg, whatsappPhoneId);
         await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-        return;
+        return; // ⬅️🔥 RETORNA AQUI - EVITA LOOP!
     }
+
     if (normalizedText === '3' || normalizedText.includes('carrinho')) {
         await verCarrinho(from, whatsappPhoneId, customerId);
-        return;
+        return; // ⬅️🔥 RETORNA AQUI - EVITA LOOP!
     }
+
     if (normalizedText === '4' || normalizedText.includes('atendente')) {
         const msg = 'Encaminhando para um atendente... Aguarde um momento.';
         await enviarComFormatosCorretos(from, msg, whatsappPhoneId);
         await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-        return;
+        return; // ⬅️🔥 RETORNA AQUI - EVITA LOOP!
     }
 
+    // Restante da lógica mantida...
     if (normalizedText.includes('finalizar') || normalizedText.includes('checkout')) {
         await finalizarPedido(from, whatsappPhoneId, customerId);
         return;
@@ -819,41 +801,8 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
     await enviarMenuInicial(from, whatsappPhoneId);
 }
 
-async function handleInteractiveReply(from: string, whatsappPhoneId: string, replyId: string) {
-    const customerId = await getOrCreateCustomer(from, whatsappPhoneId);
-    if (!customerId) return;
-
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, `Interactive Reply ID: ${replyId}`, 'IN');
-
-    const normalizedReplyId = replyId.toLowerCase().trim();
-
-    if (normalizedReplyId === "ver_carrinho") {
-        await verCarrinho(from, whatsappPhoneId, customerId);
-        return;
-    }
-
-    const productCodeMatch = normalizedReplyId.match(/(\d{6,})/);
-    if (productCodeMatch) {
-        const productCode = productCodeMatch[1];
-        const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
-
-        if (orderId && await addItemToCart(orderId, productCode, 1, whatsappPhoneId)) {
-            await enviarComFormatosCorretos(from, `✅ Produto *${productCode}* adicionado ao carrinho.`, whatsappPhoneId);
-            await salvarMensagemNoSupabase(whatsappPhoneId, from, `Adicionado ${productCode} (Interactive)`, 'OUT');
-            await verCarrinho(from, whatsappPhoneId, customerId);
-        } else {
-            await enviarComFormatosCorretos(from, `❌ Não foi possível adicionar o produto *${productCode}* ao carrinho.`, whatsappPhoneId);
-            await salvarMensagemNoSupabase(whatsappPhoneId, from, `Erro ao adicionar ${productCode} (Interactive)`, 'OUT');
-        }
-        return;
-    }
-
-    await enviarComFormatosCorretos(from, `Obrigado pelo seu clique! Não entendi essa ação. Digite *MENU*.`, whatsappPhoneId);
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, `Resposta padrão Interactive`, 'OUT');
-}
-
 // =========================================================================
-// HANDLERS PRINCIPAIS
+// HANDLERS PRINCIPAIS (MANTIDOS)
 // =========================================================================
 
 export async function GET(req: NextRequest) {
@@ -907,8 +856,41 @@ export async function POST(req: NextRequest) {
 }
 
 // =========================================================================
-// FUNÇÃO PRINCIPAL: VISUALIZAR CARRINHO
+// FUNÇÕES AUXILIARES (MANTIDAS)
 // =========================================================================
+
+async function handleInteractiveReply(from: string, whatsappPhoneId: string, replyId: string) {
+    const customerId = await getOrCreateCustomer(from, whatsappPhoneId);
+    if (!customerId) return;
+
+    await salvarMensagemNoSupabase(whatsappPhoneId, from, `Interactive Reply ID: ${replyId}`, 'IN');
+
+    const normalizedReplyId = replyId.toLowerCase().trim();
+
+    if (normalizedReplyId === "ver_carrinho") {
+        await verCarrinho(from, whatsappPhoneId, customerId);
+        return;
+    }
+
+    const productCodeMatch = normalizedReplyId.match(/(\d{6,})/);
+    if (productCodeMatch) {
+        const productCode = productCodeMatch[1];
+        const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
+
+        if (orderId && await addItemToCart(orderId, productCode, 1, whatsappPhoneId)) {
+            await enviarComFormatosCorretos(from, `✅ Produto *${productCode}* adicionado ao carrinho.`, whatsappPhoneId);
+            await salvarMensagemNoSupabase(whatsappPhoneId, from, `Adicionado ${productCode} (Interactive)`, 'OUT');
+            await verCarrinho(from, whatsappPhoneId, customerId);
+        } else {
+            await enviarComFormatosCorretos(from, `❌ Não foi possível adicionar o produto *${productCode}* ao carrinho.`, whatsappPhoneId);
+            await salvarMensagemNoSupabase(whatsappPhoneId, from, `Erro ao adicionar ${productCode} (Interactive)`, 'OUT');
+        }
+        return;
+    }
+
+    await enviarComFormatosCorretos(from, `Obrigado pelo seu clique! Não entendi essa ação. Digite *MENU*.`, whatsappPhoneId);
+    await salvarMensagemNoSupabase(whatsappPhoneId, from, `Resposta padrão Interactive`, 'OUT');
+}
 
 async function verCarrinho(from: string, whatsappPhoneId: string, customerId: string): Promise<void> {
     const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
