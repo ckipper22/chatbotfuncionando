@@ -368,11 +368,15 @@ async function addItemToCart(
     });
 
     if (!searchResponse.ok) {
-      console.error('❌ Erro ao buscar produto:', searchResponse.status);
+      const errorBody = await searchResponse.text();
+      console.error(`❌ Erro ao buscar produto: ${searchResponse.status}`);
+      console.error(`📋 Resposta da API: ${errorBody}`);
+      console.error(`🔗 URL tentada: ${searchUrl}`);
       return false;
     }
 
     const searchData = await searchResponse.json();
+    console.log(`✅ API retornou ${searchData.data?.length || 0} produtos`);
     
     // Procurar o produto com o código específico nos resultados
     const product = searchData.data?.find((p: any) => String(p.cod_reduzido) === productCode);
