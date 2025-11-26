@@ -14,7 +14,7 @@ const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const FLASK_API_BASE_URL = process.env.FLASK_API_BASE_URL;
+const FLASK_API_URL = process.env.FLASK_API_URL;
 
 // Verificação das variáveis essenciais
 if (!WHATSAPP_VERIFY_TOKEN || !WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
@@ -28,7 +28,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 }
 
 if (!FLASK_API_BASE_URL) {
-    console.warn('⚠️ AVISO: Variável FLASK_API_BASE_URL não configurada.');
+    console.warn('⚠️ AVISO: Variável FLASK_API_URL não configurada.');
 }
 
 // =========================================================================
@@ -307,13 +307,13 @@ async function addItemToCart(
     quantity: number,
     whatsappPhoneId: string
 ): Promise<boolean> {
-    if (!FLASK_API_BASE_URL) {
-        console.error("❌ FLASK_API_BASE_URL não está definida.");
+    if (!FLASK_API_URL) {
+        console.error("❌ FLASK_API_URL não está definida.");
         return false;
     }
 
     try {
-        const productApiUrl = `${FLASK_API_BASE_URL}/api/products/get_details/${productCode}`;
+        const productApiUrl = `${FLASK_API_URL}/api/products/get_details/${productCode}`;
         const apiResponse = await fetch(productApiUrl);
         const productData = await apiResponse.json();
 
