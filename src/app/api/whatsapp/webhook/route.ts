@@ -350,52 +350,49 @@ async function addItemToCart(
   quantity: number,
   whatsappPhoneId: string
 ): Promise<boolean> {
-  if (!FLASK_API_URL) {
-    console.error("❌ FLASK_API_URL não está definida.");
-    return false;
-  }
-
   try {
-    // 🔍 Buscar produto pela API usando o código como termo de busca
-    console.log(`🔍 Buscando produto com código: ${productCode}`);
-    const searchUrl = `${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(productCode)}`;
-    const searchResponse = await fetch(searchUrl, {
-      headers: {
-        'Content-Type': 'application/json',
-        'ngrok-skip-browser-warning': 'true',
-        'User-Agent': 'WhatsAppWebhook/1.0'
+    console.log(`🛒 Adicionando produto ${productCode} ao carrinho (ordem: ${orderId})`);
+
+    let productName = `Produto ${productCode}`;
+    let unitPrice = 0;
+
+    // 🔍 Tentar buscar produto pela API (opcional, com fallback)
+    if (FLASK_API_URL) {
+      try {
+        const searchUrl = `${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(productCode)}`;
+        console.log(`📡 Buscando dados do produto em: ${searchUrl}`);
+        
+        const searchResponse = await fetch(searchUrl, {
+          headers: {
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true',
+            'User-Agent': 'WhatsAppWebhook/1.0'
+          }
+        });
+
+        if (searchResponse.ok) {
+          const searchData = await searchResponse.json();
+          const product = searchData.data?.find((p: any) => String(p.cod_reduzido) === productCode);
+          
+          if (product) {
+            productName = product.nome_produto;
+            const priceStr = product.preco_final_venda.replace(/[^\d,]/g, '').replace(',', '.');
+            unitPrice = parseFloat(priceStr) || 0;
+            console.log(`✅ Produto encontrado: ${productName} - R$ ${unitPrice}`);
+          } else {
+            console.log(`⚠️ Produto não encontrado na API, usando valores padrão`);
+          }
+        } else {
+          console.log(`⚠️ API retornou erro ${searchResponse.status}, continuando com valores padrão`);
+        }
+      } catch (apiError) {
+        console.log(`⚠️ Erro ao consultar API Flask (continuando): ${apiError}`);
       }
-    });
-
-    if (!searchResponse.ok) {
-      const errorBody = await searchResponse.text();
-      console.error(`❌ Erro ao buscar produto: ${searchResponse.status}`);
-      console.error(`📋 Resposta da API: ${errorBody}`);
-      console.error(`🔗 URL tentada: ${searchUrl}`);
-      return false;
     }
 
-    const searchData = await searchResponse.json();
-    console.log(`✅ API retornou ${searchData.data?.length || 0} produtos`);
-    
-    // Procurar o produto com o código específico nos resultados
-    const product = searchData.data?.find((p: any) => String(p.cod_reduzido) === productCode);
-    
-    if (!product) {
-      console.error(`❌ Produto com código ${productCode} não encontrado nos resultados`);
-      return false;
-    }
-
-    console.log(`✅ Produto encontrado: ${product.nome_produto}`);
-
-    // Extrair preço (tira R$ e converte)
-    const priceStr = product.preco_final_venda.replace(/[^\d,]/g, '').replace(',', '.');
-    const unitPrice = parseFloat(priceStr);
     const totalPrice = unitPrice * quantity;
 
-    console.log(`💰 Preço: ${unitPrice}, Quantidade: ${quantity}, Total: ${totalPrice}`);
-
-    // Inserir no Supabase
+    // 📝 Inserir item no Supabase
     const insertUrl = `${SUPABASE_URL}/rest/v1/order_items`;
     const headers = new Headers({
       'apikey': SUPABASE_ANON_KEY!,
@@ -407,7 +404,7 @@ async function addItemToCart(
     const insertPayload = {
       order_id: orderId,
       product_api_id: productCode,
-      product_name: product.nome_produto,
+      product_name: productName,
       quantity: quantity,
       unit_price: unitPrice,
       total_price: totalPrice
