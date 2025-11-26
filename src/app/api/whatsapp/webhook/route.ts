@@ -4,6 +4,7 @@
 // ====================================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // =========================================================================
 // CONFIGURAÇÃO DAS VARIÁVEIS DE AMBIENTE
@@ -15,11 +16,13 @@ const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const FLASK_API_URL = process.env.FLASK_API_URL;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // Flags para verificar configurações disponíveis
 const hasWhatsAppConfig = !!(WHATSAPP_VERIFY_TOKEN && WHATSAPP_ACCESS_TOKEN && WHATSAPP_PHONE_NUMBER_ID);
 const hasSupabaseConfig = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
 const hasFlaskConfig = !!FLASK_API_URL;
+const hasGeminiConfig = !!GEMINI_API_KEY;
 
 // Log de status das configurações (apenas warnings, sem throw)
 if (!hasWhatsAppConfig) {
@@ -32,6 +35,10 @@ if (!hasSupabaseConfig) {
 
 if (!hasFlaskConfig) {
   console.warn('⚠️ AVISO: Variável FLASK_API_URL não configurada. Busca de produtos desabilitada.');
+}
+
+if (!hasGeminiConfig) {
+  console.warn('⚠️ AVISO: Variável GEMINI_API_KEY não configurada. IA Gemini desabilitada.');
 }
 
 // =========================================================================
@@ -849,7 +856,98 @@ async function verCarrinho(from: string, whatsappPhoneId: string, customerId: st
 }
 
 // =========================================================================
-// FUNÇÃO PRINCIPAL CORRIGIDA - SEM LOOP!
+// FUNÇÃO DE INTERPRETAÇÃO COM IA GEMINI
+// =========================================================================
+
+interface IntencaoMensagem {
+  tipo: 'saudacao' | 'busca_produto' | 'consulta_medicamento' | 'carrinho' | 'comando' | 'outro';
+  termo_busca?: string;
+  medicamento?: string;
+  resposta_ia?: string;
+}
+
+async function interpretarComGemini(mensagem: string): Promise<IntencaoMensagem> {
+  try {
+    if (!hasGeminiConfig) {
+      console.warn('⚠️ Gemini não configurado - usando detecção básica');
+      return detectarIntencaoBasica(mensagem);
+    }
+
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY!);
+    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+
+    const prompt = `Você é um assistente de farmácia virtual. Analise a mensagem do cliente e identifique a intenção.
+
+RESPONDA EM JSON com este formato exato:
+{
+  "tipo": "saudacao" | "busca_produto" | "consulta_medicamento" | "carrinho" | "comando" | "outro",
+  "termo_busca": "nome do produto ou medicamento (se aplicável)",
+  "medicamento": "nome do medicamento (se for consulta de medicamento)",
+  "resposta_ia": "sua resposta de assistente virtual (apenas se for saudação ou outro)"
+}
+
+Tipos:
+- saudacao: Olá, Oi, Como vai, etc
+- busca_produto: Cliente busca por produto/preço/estoque (responda com código JSON apenas)
+- consulta_medicamento: Cliente quer info de medicamento, posologia, efeitos (responda com código JSON apenas)
+- carrinho: Cliente quer ver carrinho ou finalizar pedido (responda com código JSON apenas)
+- comando: Menu, ajuda, atendente (responda com código JSON apenas)
+- outro: Qualquer outra coisa
+
+Mensagem do cliente: "${mensagem}"
+
+Responda APENAS com JSON válido, sem markdown.`;
+
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text().trim();
+    
+    // Remover markdown se houver
+    const jsonText = responseText.replace(/```json\n?|\n?```/g, '').trim();
+    const parsed = JSON.parse(jsonText);
+
+    console.log('🤖 Gemini interpretou:', parsed);
+    return parsed;
+
+  } catch (error) {
+    console.error('❌ Erro ao usar Gemini:', error);
+    return detectarIntencaoBasica(mensagem);
+  }
+}
+
+function detectarIntencaoBasica(mensagem: string): IntencaoMensagem {
+  const msg = mensagem.toLowerCase().trim();
+
+  // Saudações
+  if (/^(oi|olá|ola|hey|e ai|e aí|como vai|tudo bem|opa)/.test(msg)) {
+    return {
+      tipo: 'saudacao',
+      resposta_ia: '*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?\n\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\n*1.* 🔍 Buscar Preços e Estoque de Produtos\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\n*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)\n*4.* 🆘 Ver comandos administrativos (/test, /ajuda)'
+    };
+  }
+
+  // Comandos
+  if (msg === '1' || msg === 'menu' || msg === 'finalizar') {
+    return { tipo: 'comando' };
+  }
+
+  // Busca de produto
+  if (/buscar|preço|preco|estoque|tem|quanto custa/.test(msg)) {
+    const termo = msg.replace(/buscar|preço|preco|estoque|tem\s+|quanto custa|o\s+|a\s+|de\s+/gi, '').trim();
+    return {
+      tipo: 'busca_produto',
+      termo_busca: termo || msg
+    };
+  }
+
+  // Por padrão, trata como busca de produto
+  return {
+    tipo: 'busca_produto',
+    termo_busca: msg
+  };
+}
+
+// =========================================================================
+// FUNÇÃO PRINCIPAL - AGORA COM GEMINI COMO PRIMEIRO PASSO
 // =========================================================================
 
 async function processarMensagemCompleta(from: string, whatsappPhoneId: string, messageText: string) {
@@ -858,102 +956,95 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
 
   await salvarMensagemNoSupabase(whatsappPhoneId, from, messageText, 'IN');
 
-  const normalizedText = messageText.toLowerCase().trim();
+  console.log(`🤖 [GEMINI] Processando: "${messageText}"`);
 
-  console.log(`🔍 [DEBUG] Mensagem recebida: "${messageText}" | Normalizada: "${normalizedText}"`);
+  // ✨ NOVO FLUXO: IA GEMINI COMO PRIMEIRO PASSO
+  const intencao = await interpretarComGemini(messageText);
+  
+  console.log(`🎯 Intenção detectada:`, intencao.tipo);
 
-  // 🔥 CORREÇÃO CRÍTICA: Cada opção DEVE retornar após processar!
-
-  if (normalizedText === '1') {
-    console.log('✅ [DEBUG] Opção 1 selecionada - Buscar produtos');
-    const msg = 'Certo! Digite o nome do produto ou o código de barras (ex: *DIPIRONA* ou *7896000000000*).';
-    await enviarComFormatosCorretos(from, msg);
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
+  // 1️⃣ SAUDAÇÃO - Responder com menu
+  if (intencao.tipo === 'saudacao') {
+    console.log('✅ Saudação detectada');
+    const resposta = intencao.resposta_ia || '*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?';
+    await enviarComFormatosCorretos(from, resposta);
+    await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT');
     return;
   }
 
-  if (normalizedText === '2') {
-    console.log('✅ [DEBUG] Opção 2 selecionada - Consultar medicamentos');
-    const msg = 'Qual medicamento você gostaria de consultar? (Ex: *Losartana posologia*)';
-    await enviarComFormatosCorretos(from, msg);
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
+  // 2️⃣ BUSCA DE PRODUTO - Buscar na API
+  if (intencao.tipo === 'busca_produto' && intencao.termo_busca) {
+    console.log(`✅ Busca de produto: "${intencao.termo_busca}"`);
+    await buscarEOferecerProdutos(from, whatsappPhoneId, intencao.termo_busca);
     return;
   }
 
-  if (normalizedText === '3') {
-    console.log('✅ [DEBUG] Opção 3 selecionada - Ver carrinho');
-    await verCarrinho(from, whatsappPhoneId, customerId);
-    return;
-  }
-
-  if (normalizedText === '4') {
-    console.log('✅ [DEBUG] Opção 4 selecionada - Atendente');
-    const msg = '👩‍💻 *ATENDIMENTO HUMANO*\\n\\nVocê será redirecionado para um de nossos atendentes em horário comercial (segunda a sexta, 8h às 18h).\\n\\nEnquanto isso, posso te ajudar com algo mais?';
-    await enviarComFormatosCorretos(from, msg);
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return;
-  }
-
-  if (normalizedText === 'menu') {
-    console.log('✅ [DEBUG] Comando menu selecionado');
-    await enviarMenuInicial(from, whatsappPhoneId);
-    return;
-  }
-
-  if (normalizedText === 'finalizar') {
-    console.log('✅ [DEBUG] Comando finalizar selecionado');
-    await finalizarPedido(from, whatsappPhoneId, customerId);
-    return;
-  }
-
-  // Processar adição ao carrinho
-  const intencaoCarrinho = extrairIntencaoCarrinho(messageText);
-  if (intencaoCarrinho) {
-    console.log(`✅ [DEBUG] Intenção de carrinho detectada:`, intencaoCarrinho);
-    const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
-    if (orderId && await addItemToCart(orderId, intencaoCarrinho.productCode, intencaoCarrinho.quantity, whatsappPhoneId)) {
-      const sucessoMsg = `✅ Produto *${intencaoCarrinho.productCode}* adicionado ao carrinho!`;
-      await enviarComFormatosCorretos(from, sucessoMsg);
-      await salvarMensagemNoSupabase(whatsappPhoneId, from, sucessoMsg, 'OUT');
-      await verCarrinho(from, whatsappPhoneId, customerId);
-    } else {
-      const erroMsg = `❌ Não foi possível adicionar o produto *${intencaoCarrinho.productCode}* ao carrinho.`;
-      await enviarComFormatosCorretos(from, erroMsg);
-      await salvarMensagemNoSupabase(whatsappPhoneId, from, erroMsg, 'OUT');
-    }
-    return;
-  }
-
-  // Processar consulta de medicamentos
-  const { drugName, infoType } = parseUserMessageForDrugInfo(messageText);
-  if (drugName) {
-    console.log(`✅ [DEBUG] Consulta de medicamento detectada: ${drugName} - ${infoType}`);
-    const infoMedicamento = getMedicamentoInfo(drugName, infoType || 'tudo');
+  // 3️⃣ CONSULTA DE MEDICAMENTO - Retornar info
+  if (intencao.tipo === 'consulta_medicamento' && intencao.medicamento) {
+    console.log(`✅ Consulta de medicamento: ${intencao.medicamento}`);
+    const infoMedicamento = getMedicamentoInfo(intencao.medicamento, 'tudo');
     await enviarComFormatosCorretos(from, infoMedicamento);
     await salvarMensagemNoSupabase(whatsappPhoneId, from, infoMedicamento, 'OUT');
     return;
   }
 
-  // Processar busca com intenção
-  const termoBusca = extrairTermoBusca(messageText);
-  console.log(`🔍 [DEBUG] Termo de busca extraído: ${termoBusca}`);
+  // 4️⃣ CARRINHO
+  if (intencao.tipo === 'carrinho') {
+    console.log('✅ Carrinho');
+    const normalizedText = messageText.toLowerCase().trim();
+    
+    if (normalizedText.includes('finalizar')) {
+      await finalizarPedido(from, whatsappPhoneId, customerId);
+    } else {
+      await verCarrinho(from, whatsappPhoneId, customerId);
+    }
+    return;
+  }
 
-  if (termoBusca) {
-    console.log(`✅ [DEBUG] Busca com intenção detectada: ${termoBusca}`);
+  // 5️⃣ COMANDO (Menu, ajuda, atendente)
+  if (intencao.tipo === 'comando') {
+    console.log('✅ Comando');
+    const normalizedText = messageText.toLowerCase().trim();
+
+    if (normalizedText === '1') {
+      const msg = 'Certo! Digite o nome do produto ou o código de barras (ex: *DIPIRONA* ou *7896000000000*).';
+      await enviarComFormatosCorretos(from, msg);
+      await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
+      return;
+    }
+
+    if (normalizedText === '2') {
+      const msg = 'Qual medicamento você gostaria de consultar? (Ex: *Losartana posologia*)';
+      await enviarComFormatosCorretos(from, msg);
+      await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
+      return;
+    }
+
+    if (normalizedText === '3') {
+      await verCarrinho(from, whatsappPhoneId, customerId);
+      return;
+    }
+
+    if (normalizedText === '4') {
+      const msg = '👩‍💻 *ATENDIMENTO HUMANO*\n\nVocê será redirecionado para um de nossos atendentes em horário comercial (segunda a sexta, 8h às 18h).\n\nEnquanto isso, posso te ajudar com algo mais?';
+      await enviarComFormatosCorretos(from, msg);
+      await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
+      return;
+    }
+
+    await enviarMenuInicial(from, whatsappPhoneId);
+    return;
+  }
+
+  // 6️⃣ OUTRO - Mostrar menu ou tentar busca
+  console.log('❓ Intenção não identificada - tentando busca');
+  const termoBusca = messageText.trim();
+  
+  if (termoBusca.length >= 2) {
     await buscarEOferecerProdutos(from, whatsappPhoneId, termoBusca);
-    return;
+  } else {
+    await enviarMenuInicial(from, whatsappPhoneId);
   }
-
-  // Processar busca direta (apenas se for provavelmente um produto)
-  if (deveFazerBuscaDireta(messageText)) {
-    console.log(`🔍 [DEBUG] Busca direta detectada: "${messageText.trim()}"`);
-    await buscarEOferecerProdutos(from, whatsappPhoneId, messageText.trim());
-    return;
-  }
-
-  // Se nenhum comando foi reconhecido, mostrar menu
-  console.log('❌ [DEBUG] Nenhum comando reconhecido - mostrando menu');
-  await enviarMenuInicial(from, whatsappPhoneId);
 }
 
 // =========================================================================
