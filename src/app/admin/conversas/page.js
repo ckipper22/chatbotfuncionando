@@ -4,13 +4,18 @@
 // ====================================================================================
 
 import { createClient } from '@supabase/supabase-js';
-import DateDisplay from '@/components/DateDisplay'; // Componente Cliente para corrigir Hydration
+import DateDisplay from '@/components/DateDisplay';
 
-// Inicialização do cliente Supabase
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+// Verificar se Supabase está configurado
+const hasSupabaseConfig = !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+
+// Inicialização do cliente Supabase (apenas se configurado)
+const supabase = hasSupabaseConfig 
+  ? createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    )
+  : null;
 
 // Função de utilidade: Agrupa mensagens por cliente (from_number)
 function groupMessagesByCustomer(messages) {
@@ -25,12 +30,10 @@ function groupMessagesByCustomer(messages) {
         count: 0,
       };
     }
-    // Adiciona a mensagem, mantendo a ordem (a lista já vem ordenada por 'created_at' DESC do Supabase)
     conversations[customerNumber].messages.push(msg);
     conversations[customerNumber].count++;
   });
 
-  // Converte o objeto em array e ordena pelas conversas mais recentes
   return Object.values(conversations).sort((a, b) =>
     new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime()
   );
@@ -38,21 +41,56 @@ function groupMessagesByCustomer(messages) {
 
 // Função para buscar os dados (Executada no Servidor)
 async function fetchMessages() {
-  const { data, error } = await supabase
-    .from('whatsapp_messages')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(100); // Aumentei o limite para ter mais histórico
-
-  if (error) {
-    console.error('Erro ao buscar conversas:', error);
+  if (!supabase) {
     return [];
   }
-  return data;
+
+  try {
+    const { data, error } = await supabase
+      .from('whatsapp_messages')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) {
+      console.error('Erro ao buscar conversas:', error);
+      return [];
+    }
+    return data || [];
+  } catch (error) {
+    console.error('Erro ao conectar com Supabase:', error);
+    return [];
+  }
 }
 
 // Componente principal da página
 export default async function ConversationsPage() {
+  // Verificar se Supabase está configurado
+  if (!hasSupabaseConfig) {
+    return (
+      <div className="flex h-screen bg-gray-50 text-gray-800 items-center justify-center">
+        <div className="max-w-md p-8 bg-white rounded-xl shadow-lg text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            Configuração Necessária
+          </h2>
+          <p className="text-gray-600 mb-4">
+            O Supabase não está configurado. Configure as variáveis de ambiente para visualizar as conversas:
+          </p>
+          <ul className="text-left text-sm text-gray-500 space-y-2 mb-4">
+            <li>• NEXT_PUBLIC_SUPABASE_URL</li>
+            <li>• NEXT_PUBLIC_SUPABASE_ANON_KEY</li>
+          </ul>
+          <a 
+            href="/"
+            className="inline-block px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Voltar ao Chat
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   const rawMessages = await fetchMessages();
   const conversations = groupMessagesByCustomer(rawMessages);
 

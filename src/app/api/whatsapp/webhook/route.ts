@@ -16,19 +16,22 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const FLASK_API_URL = process.env.FLASK_API_URL;
 
-// Verificação das variáveis essenciais
-if (!WHATSAPP_VERIFY_TOKEN || !WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
-  console.error('❌ ERRO: Variáveis do WhatsApp não configuradas.');
-  throw new Error('Configuração do WhatsApp ausente');
+// Flags para verificar configurações disponíveis
+const hasWhatsAppConfig = !!(WHATSAPP_VERIFY_TOKEN && WHATSAPP_ACCESS_TOKEN && WHATSAPP_PHONE_NUMBER_ID);
+const hasSupabaseConfig = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
+const hasFlaskConfig = !!FLASK_API_URL;
+
+// Log de status das configurações (apenas warnings, sem throw)
+if (!hasWhatsAppConfig) {
+  console.warn('⚠️ AVISO: Variáveis do WhatsApp não configuradas. O webhook não funcionará até que sejam configuradas.');
 }
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.error('❌ ERRO: Variáveis do Supabase não configuradas.');
-  throw new Error('Configuração do Supabase ausente');
+if (!hasSupabaseConfig) {
+  console.warn('⚠️ AVISO: Variáveis do Supabase não configuradas. Funcionalidades de CRM desabilitadas.');
 }
 
-if (!FLASK_API_URL) {
-  console.warn('⚠️ AVISO: Variável FLASK_API_URL não configurada.');
+if (!hasFlaskConfig) {
+  console.warn('⚠️ AVISO: Variável FLASK_API_URL não configurada. Busca de produtos desabilitada.');
 }
 
 // =========================================================================
