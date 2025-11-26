@@ -1,10 +1,15 @@
-// src/app/layout.tsx (CÓDIGO CORRIGIDO)
+// src/app/layout.tsx
+// ====================================================================
+// ARQUIVO COMPLETO E CORRIGIDO PARA SUPABASE AUTH
+// ====================================================================
 
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import GlobalClientEffects from "@/components/GlobalClientEffects";
+// 1. IMPORTAÇÃO DO NOVO PROVEDOR DE CLIENTE SUPABASE
+import SupabaseClientProvider from '@/components/SupabaseClientProvider';
 
 import "./globals.css";
 
@@ -40,17 +45,20 @@ export default function RootLayout({
     <html lang="pt-BR" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased `}
-        // 🛠️ CORREÇÃO FINAL: Ignora as incompatibilidades causadas por extensões ou temas globais
+        // 2. Mantemos a correção de Hydration para o <body>
         suppressHydrationWarning={true}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          {content}
-        </ThemeProvider>
+        {/* 3. ENVOLVEMOS TODA A APLICAÇÃO NO PROVEDOR DE SESSÃO */}
+        <SupabaseClientProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {content}
+          </ThemeProvider>
+        </SupabaseClientProvider>
       </body>
     </html>
   );
