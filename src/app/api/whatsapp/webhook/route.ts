@@ -493,55 +493,62 @@ function converterParaFormatoFuncional(numeroOriginal: string): string[] {
     return ['+' + numeroConvertido, numeroConvertido];
 }
 
-async function enviarComFormatosCorretos(from: string, texto: string, whatsappPhoneId: string): Promise<boolean> {
-    try {
-        const formatos = converterParaFormatoFuncional(from);
+// CORREÇÃO CRÍTICA: Restaurar função de envio da versão funcional
+async function enviarComFormatosCorretos(from: string, texto: string): Promise<boolean> {
+  try {
+    console.log('🎯 [SEND] Enviando mensagem para:', from);
 
-        for (let i = 0; i < formatos.length; i++) {
-          const formato = formatos[i];
+    const formatos = converterParaFormatoFuncional(from);
 
-          try {
-            const payload = {
-              messaging_product: 'whatsapp',
-              recipient_type: 'individual',
-              to: formato,
-              type: 'text',
-              text: {
-                preview_url: false,
-                body: texto.substring(0, 4096).replace(/\\n/g, '\n')
-              }
-            };
+    for (let i = 0; i < formatos.length; i++) {
+      const formato = formatos[i];
+      console.log(`📤 Tentativa ${i + 1}/${formatos.length}: ${formato}`);
 
-            const url = `https://graph.facebook.com/v19.0/${whatsappPhoneId}/messages`;
-
-            const response = await fetch(url, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(payload),
-            });
-
-            if (response.ok) {
-              return true;
-            } else {
-              const errorResponse = await response.text();
-              console.log(`❌ Falha para: ${formato} - Status: ${response.status} - Erro: ${errorResponse}`);
-            }
-          } catch (error) {
-            console.error(`💥 Erro para ${formato}:`, error);
+      try {
+        const payload = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: formato,
+          type: 'text',
+          text: {
+            preview_url: false,
+            body: texto.substring(0, 4096).replace(/\\n/g, '\n')
           }
+        };
 
-          await new Promise(resolve => setTimeout(resolve, 300));
+        // ✅ CORREÇÃO: Usar NOSSO WhatsApp Phone Number ID fixo das variáveis de ambiente
+        const url = `https://graph.facebook.com/v19.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) {
+          console.log(`✅ Mensagem enviada com sucesso para: ${formato}`);
+          return true;
+        } else {
+          const errorResponse = await response.text();
+          console.log(`❌ Falha para: ${formato} - Status: ${response.status} - Erro: ${errorResponse}`);
         }
-
-        return false;
-
       } catch (error) {
-        console.error('❌ Erro crítico no envio:', error);
-        return false;
+        console.error(`💥 Erro para ${formato}:`, error);
       }
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    console.log('❌ Todos os formatos falharam para:', from);
+    return false;
+
+  } catch (error) {
+    console.error('❌ Erro crítico no envio:', error);
+    return false;
+  }
 }
 
 function parseUserMessageForDrugInfo(message: string): { drugName?: string; infoType?: string } {
