@@ -508,6 +508,7 @@ async function findFarmacyAPI(whatsappPhoneId: string): Promise<{ api_url: strin
 async function consultarAPIFarmacia(apiUrl: string, termo: string): Promise<any> {
   try {
     const url = `${apiUrl}/api/products/search?q=${encodeURIComponent(termo)}`;
+    console.log(`🔗 Consultando API da farmácia: ${url}`);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -524,11 +525,16 @@ async function consultarAPIFarmacia(apiUrl: string, termo: string): Promise<any>
 
     clearTimeout(timeoutId);
 
+    console.log(`📊 Status da API: ${response.status}`);
+
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ API retornou erro: ${response.status} - ${errorText}`);
       throw new Error(`API retornou status: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log(`✅ Resposta da API:`, JSON.stringify(data).substring(0, 500));
     return data;
 
   } catch (error) {
@@ -758,9 +764,14 @@ async function buscarEOferecerProdutos(from: string, whatsappPhoneId: string, te
   try {
     const farmacia = await findFarmacyAPI(whatsappPhoneId);
 
+    console.log(`🏪 Farmácia encontrada:`, farmacia);
+
     if (farmacia && farmacia.api_url) {
       // Tenta buscar via API da farmácia
+      console.log(`🔄 Buscando no banco da API...`);
       const searchResults = await consultarAPIFarmacia(farmacia.api_url, termoBusca);
+
+      console.log(`📦 Produtos retornados:`, searchResults);
 
       if (searchResults.products && searchResults.products.length > 0) {
         searchResults.products.slice(0, 5).forEach((product: any) => {
@@ -874,7 +885,7 @@ async function interpretarComGemini(mensagem: string): Promise<IntencaoMensagem>
     }
 
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `Você é um assistente de farmácia virtual. Analise a mensagem do cliente e identifique a intenção.
 
