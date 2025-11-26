@@ -773,17 +773,23 @@ async function buscarEOferecerProdutos(from: string, whatsappPhoneId: string, te
 
       console.log(`📦 Produtos retornados:`, searchResults);
 
-      if (searchResults.products && searchResults.products.length > 0) {
-        searchResults.products.slice(0, 5).forEach((product: any) => {
-          const precoFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.unit_price);
-
-          resposta += `▪️ *${product.product_name}*\\n`;
-          resposta += `   *Cód:* ${product.product_code} | *Preço:* ${precoFormatado}\\n`;
-          resposta += `   Para adicionar, digite: *'COMPRAR ${product.product_code}'*\\n\\n`;
+      if (searchResults.data && searchResults.data.length > 0) {
+        searchResults.data.slice(0, 5).forEach((product: any) => {
+          resposta += `▪️ *${product.nome_produto}*\\n`;
+          resposta += `   💊 ${product.nom_laboratorio}\\n`;
+          resposta += `   💰 ${product.preco_final_venda}`;
+          
+          if (product.desconto_percentual > 0) {
+            resposta += ` (🔻${product.desconto_percentual.toFixed(1)}% OFF)`;
+          }
+          
+          resposta += `\\n   📦 Estoque: ${product.qtd_estoque} unidades\\n`;
+          resposta += `   📋 Código: ${product.cod_reduzido}\\n`;
+          resposta += `   Para adicionar ao carrinho, digite: *COMPRAR ${product.cod_reduzido}*\\n\\n`;
         });
 
-        if (searchResults.products.length > 5) {
-          resposta += `\\n_Encontramos mais resultados, refina a sua busca ou digite o código do produto para comprar._`;
+        if (searchResults.data.length > 5) {
+          resposta += `\\n_Encontramos ${searchResults.data.length} produtos! Mostrando os 5 primeiros. Refina a busca ou digite o código do produto para comprar._`;
         }
       } else {
         resposta += 'Não encontramos nenhum produto que corresponda à sua busca. Tente um nome diferente ou digite *MENU*.';

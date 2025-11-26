@@ -1,0 +1,60 @@
+[GEMINI] Processando: "Procurar sorinan"
+🤖 Testando modelo Gemini: gemini-2.5-flash
+✅ Modelo gemini-2.5-flash funcionou. Intenção: {
+  tipo: 'busca_produto',
+  termo_busca: 'sorinan',
+  medicamento: '',
+  resposta_ia: ''
+}
+🎯 Intenção detectada: busca_produto
+✅ Busca de produto: "sorinan"
+🔍 Buscando farmácia com whatsapp_phone_id: 136561712865068
+📍 URL de busca: https://xmanikuremcrmvmmpkao.supabase.co/rest/v1/client_connections?whatsapp_phone_id=eq.136561712865068&select=api_base_url,client_id
+📨 Resposta Supabase: 200
+✅ Dados recebidos: [
+  {
+    api_base_url: 'https://unfoggy-nonblindingly-marcene.ngrok-free.dev',
+    client_id: 'd475535a-ea0e-458d-980d-8dc6ad71c637'
+  }
+]
+🏪 Farmácia encontrada: {
+  api_url: 'https://unfoggy-nonblindingly-marcene.ngrok-free.dev',
+  client_id: 'd475535a-ea0e-458d-980d-8dc6ad71c637'
+}
+🔄 Buscando no banco da API...
+🔗 Consultando API da farmácia: https://unfoggy-nonblindingly-marcene.ngrok-free.dev/api/products/search?q=sorinan
+📊 Status da API: 200
+✅ Resposta da API: {"count":2,"data":[{"cod_reduzido":829,"desconto_percentual":50.42,"nom_laboratorio":"PHARMASCIENCE ","nome_produto":"SORINAN 0,5MG/ML GTS AD 30ML","preco_final_venda":"R$ 5,90","qtd_estoque":51,"vlr_liquido_raw_float":5.9,"vlr_liquido_wapp":"5,90","vlr_venda":"R$ 11,90","vlr_venda_raw_float":11.9,"whatsapp_string":"**SORINAN 0,5MG/ML GTS AD 30ML** está com 50,42% OFF! De R$ 11,90 por **R$ 5,90** à vista. Temos 51 unidades em estoque."},{"cod_reduzido":5762,"desconto_percentual":0,"nom_laborator
+📦 Produtos retornados: {
+  count: 2,
+  data: [
+    {
+      cod_reduzido: 829,
+      desconto_percentual: 50.42,
+      nom_laboratorio: 'PHARMASCIENCE ',
+      nome_produto: 'SORINAN 0,5MG/ML GTS AD 30ML',
+      preco_final_venda: 'R$ 5,90',
+      qtd_estoque: 51,
+      vlr_liquido_raw_float: 5.9,
+      vlr_liquido_wapp: '5,90',
+      vlr_venda: 'R$ 11,90',
+      vlr_venda_raw_float: 11.9,
+      whatsapp_string: '**SORINAN 0,5MG/ML GTS AD 30ML** está com 50,42% OFF! De R$ 11,90 por **R$ 5,90** à vista. Temos 51 unidades em estoque.'
+    },
+    {
+      cod_reduzido: 5762,
+      desconto_percentual: 0,
+      nom_laboratorio: 'PHARMASCIENCE ',
+      nome_produto: 'SORINAN 0,9% GTS INF 30ML',
+      preco_final_venda: 'R$ 9,36',
+      qtd_estoque: 0,
+      vlr_liquido_raw_float: 9.36,
+      vlr_liquido_wapp: '9,36',
+      vlr_venda: 'R$ 9,36',
+      vlr_venda_raw_float: 9.36,
+      whatsapp_string: 'Ótima escolha! O preço final para **SORINAN 0,9% GTS INF 30ML** é de **R$ 9,36** à vista. No momento, está esgotado. Gostaria de verificar a encomenda para você?'
+    }
+  ],
+  query: 'sorinan',
+  success: true
+}
