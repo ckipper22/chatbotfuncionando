@@ -1,0 +1,391 @@
+[
+  {
+    "table_name": "client_connections",
+    "column_name": "api_auth_token",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "client_connections",
+    "column_name": "api_base_url",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "client_connections",
+    "column_name": "client_id",
+    "data_type": "uuid",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "client_connections",
+    "column_name": "db_host",
+    "data_type": "character varying",
+    "character_maximum_length": 200
+  },
+  {
+    "table_name": "client_connections",
+    "column_name": "db_name",
+    "data_type": "character varying",
+    "character_maximum_length": 100
+  },
+  {
+    "table_name": "client_connections",
+    "column_name": "db_password_encrypted",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "client_connections",
+    "column_name": "db_user",
+    "data_type": "character varying",
+    "character_maximum_length": 100
+  },
+  {
+    "table_name": "client_connections",
+    "column_name": "id",
+    "data_type": "uuid",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "client_connections",
+    "column_name": "whatsapp_phone_id",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "clients",
+    "column_name": "api_base_url",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "clients",
+    "column_name": "cod_filial",
+    "data_type": "integer",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "clients",
+    "column_name": "cod_rede",
+    "data_type": "integer",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "clients",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "clients",
+    "column_name": "id",
+    "data_type": "uuid",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "clients",
+    "column_name": "name",
+    "data_type": "character varying",
+    "character_maximum_length": 100
+  },
+  {
+    "table_name": "clients",
+    "column_name": "whatsapp_phone_id",
+    "data_type": "character varying",
+    "character_maximum_length": 100
+  },
+  {
+    "table_name": "customers",
+    "column_name": "client_connection_id",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "customers",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "customers",
+    "column_name": "email",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "customers",
+    "column_name": "full_name",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "customers",
+    "column_name": "id",
+    "data_type": "uuid",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "customers",
+    "column_name": "whatsapp_phone_number",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "order_items",
+    "column_name": "id",
+    "data_type": "uuid",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "order_items",
+    "column_name": "order_id",
+    "data_type": "uuid",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "order_items",
+    "column_name": "product_api_id",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "order_items",
+    "column_name": "product_name",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "order_items",
+    "column_name": "quantity",
+    "data_type": "integer",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "order_items",
+    "column_name": "total_price",
+    "data_type": "numeric",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "order_items",
+    "column_name": "unit_price",
+    "data_type": "numeric",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "client_connection_id",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "customer_id",
+    "data_type": "uuid",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "id",
+    "data_type": "uuid",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "observation",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "status",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "orders",
+    "column_name": "total_amount",
+    "data_type": "numeric",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "whatsapp_messages",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "whatsapp_messages",
+    "column_name": "direction",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "whatsapp_messages",
+    "column_name": "from_number",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "whatsapp_messages",
+    "column_name": "id",
+    "data_type": "uuid",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "whatsapp_messages",
+    "column_name": "message_body",
+    "data_type": "text",
+    "character_maximum_length": null
+  },
+  {
+    "table_name": "whatsapp_messages",
+    "column_name": "whatsapp_phone_id",
+    "data_type": "text",
+    "character_maximum_length": null
+  }
+]
+
+[
+  {
+    "table_schema": "public",
+    "table_name": "client_connections"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "clients"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "customers"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "order_items"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "orders"
+  },
+  {
+    "table_schema": "public",
+    "table_name": "whatsapp_messages"
+  }
+]
+
+[
+  {
+    "id": "9108fb2e-9d0e-4e8c-b016-79c20541b2a7",
+    "client_id": "d475535a-ea0e-458d-980d-8dc6ad71c637",
+    "db_host": "192.168.1.12",
+    "db_name": "sgfpod1",
+    "db_user": "postgres",
+    "db_password_encrypted": "1fcacc9d602d4943883a515753e1fbe9:dfe585c5e440c565060cd9fd4b18db41",
+    "api_base_url": "https://unfoggy-nonblindingly-marcene.ngrok-free.dev",
+    "api_auth_token": null,
+    "whatsapp_phone_id": "136561712865068"
+  }
+]
+
+[
+  {
+    "id": "a6e390c3-7fb2-44dd-bf4c-0616e84571d2",
+    "created_at": "2025-11-26 02:00:29.645532+00",
+    "whatsapp_phone_number": "555584557096",
+    "full_name": null,
+    "email": null,
+    "client_connection_id": "136561712865068"
+  }
+]
+
+[
+  {
+    "id": "6b1fd84e-5cd4-42ac-bc76-5d8de8f794d2",
+    "created_at": "2025-11-25 23:07:25.265365+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "Olá",
+    "direction": "IN"
+  },
+  {
+    "id": "875ada3a-3e84-45dc-bee1-efaf0cb131dd",
+    "created_at": "2025-11-25 23:07:27.574502+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\\n\\nComo posso te ajudar hoje?\\n\\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\\n*1.* 🔍 Buscar Preços e Estoque de Produtos\\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\\n*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)\\n*4.* 🆘 Ver comandos administrativos (/test, /ajuda)",
+    "direction": "OUT"
+  },
+  {
+    "id": "4a59f97f-23c7-46c3-9084-aabc823fe2b3",
+    "created_at": "2025-11-25 23:07:38.28062+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "Qual o preço do hepafig",
+    "direction": "IN"
+  },
+  {
+    "id": "891a8ab7-d354-4c53-b2b4-1ee67502ebb3",
+    "created_at": "2025-11-25 23:07:40.314457+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "🔍 *RESULTADOS DA BUSCA (5 ITENS)*\n\n*1. HEPAFIG ABA LIQ 120ML* (MERCOFARMA)\\n💰 *R$ 17,16* | ✅ DISPONÍVEL\\n----------------------------------------\n*2. HEPAFIG ABACAXI FLAC 10ML* (MERCOFARMA)\\n💰 *R$ 1,50* | ✅ DISPONÍVEL\\n----------------------------------------\n*3. KIT DISPLAY MERCOFARMA HEPAFIG* (LAB. PADRAO)\\n💰 *R$ 0,10* | ✅ DISPONÍVEL\\n----------------------------------------\n*4. HEPAFIG ABACAXI LIQ 120ML* (MERCOFARMA)\\n💰 *R$ 13,90* | ❌ ESGOTADO\\n----------------------------------------\n*5. HEPAFIG BOLDO FLAC 10ML* (MERCOFARMA)\\n💰 *R$ 1,90* | ❌ ESGOTADO\\n\n\n\n💡 *Ação:* Digite o número do item (*1, 2, 3...*) para mais detalhes, ou *voltar* para o Menu Principal.",
+    "direction": "OUT"
+  },
+  {
+    "id": "f31b4953-62c2-4731-a715-2d778b2958b8",
+    "created_at": "2025-11-25 23:20:35.032003+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "Oi",
+    "direction": "IN"
+  },
+  {
+    "id": "d519626a-eb3b-49f2-a835-9eb5704f7bc5",
+    "created_at": "2025-11-25 23:20:37.214464+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\\n\\nComo posso te ajudar hoje?\\n\\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\\n*1.* 🔍 Buscar Preços e Estoque de Produtos\\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\\n*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)\\n*4.* 🆘 Ver comandos administrativos (/test, /ajuda)",
+    "direction": "OUT"
+  },
+  {
+    "id": "58d0b42d-5718-4af1-9aa7-791c857b17bd",
+    "created_at": "2025-11-25 23:55:25.692732+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "Olá",
+    "direction": "IN"
+  },
+  {
+    "id": "681a58df-8d43-4094-9f81-cf28077ae908",
+    "created_at": "2025-11-25 23:55:26.805194+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\\n\\nComo posso te ajudar hoje?\\n\\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\\n*1.* 🔍 Buscar Preços e Estoque de Produtos\\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\\n*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)\\n*4.* 🆘 Ver comandos administrativos (/test, /ajuda)",
+    "direction": "OUT"
+  },
+  {
+    "id": "bb16205d-f432-47a6-b526-7f749d30f764",
+    "created_at": "2025-11-26 02:00:30.295912+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "Olá",
+    "direction": "IN"
+  },
+  {
+    "id": "2b470f01-c6ac-4ba6-9d00-ea02635560a8",
+    "created_at": "2025-11-26 02:00:32.34767+00",
+    "whatsapp_phone_id": "136561712865068",
+    "from_number": "555584557096",
+    "message_body": "*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\\n\\nComo posso te ajudar hoje?\\n\\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\\n*1.* 🔍 Buscar Preços e Estoque de Produtos\\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\\n*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)\\n*4.* 🆘 Ver comandos administrativos (/test, /ajuda)",
+    "direction": "OUT"
+  }
+]
+
+

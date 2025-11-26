@@ -356,18 +356,42 @@ async function addItemToCart(
   }
 
   try {
-    const productApiUrl = `${FLASK_API_URL}/api/products/get_details/${productCode}`;
-    const apiResponse = await fetch(productApiUrl);
-    const productData = await apiResponse.json();
+    // 🔍 Buscar produto pela API usando o código como termo de busca
+    console.log(`🔍 Buscando produto com código: ${productCode}`);
+    const searchUrl = `${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(productCode)}`;
+    const searchResponse = await fetch(searchUrl, {
+      headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+        'User-Agent': 'WhatsAppWebhook/1.0'
+      }
+    });
 
-    if (!apiResponse.ok || !productData.success) {
-      console.error('❌ Erro ao buscar produto na API Flask:', productData.error || 'Erro desconhecido');
+    if (!searchResponse.ok) {
+      console.error('❌ Erro ao buscar produto:', searchResponse.status);
       return false;
     }
 
-    const unitPrice = parseFloat(productData.unit_price);
+    const searchData = await searchResponse.json();
+    
+    // Procurar o produto com o código específico nos resultados
+    const product = searchData.data?.find((p: any) => String(p.cod_reduzido) === productCode);
+    
+    if (!product) {
+      console.error(`❌ Produto com código ${productCode} não encontrado nos resultados`);
+      return false;
+    }
+
+    console.log(`✅ Produto encontrado: ${product.nome_produto}`);
+
+    // Extrair preço (tira R$ e converte)
+    const priceStr = product.preco_final_venda.replace(/[^\d,]/g, '').replace(',', '.');
+    const unitPrice = parseFloat(priceStr);
     const totalPrice = unitPrice * quantity;
 
+    console.log(`💰 Preço: ${unitPrice}, Quantidade: ${quantity}, Total: ${totalPrice}`);
+
+    // Inserir no Supabase
     const insertUrl = `${SUPABASE_URL}/rest/v1/order_items`;
     const headers = new Headers({
       'apikey': SUPABASE_ANON_KEY!,
@@ -379,11 +403,13 @@ async function addItemToCart(
     const insertPayload = {
       order_id: orderId,
       product_api_id: productCode,
-      product_name: productData.product_name,
+      product_name: product.nome_produto,
       quantity: quantity,
       unit_price: unitPrice,
       total_price: totalPrice
     };
+
+    console.log(`📝 Inserindo no Supabase:`, insertPayload);
 
     const insertResponse = await fetch(insertUrl, {
       method: 'POST',
@@ -392,10 +418,12 @@ async function addItemToCart(
     });
 
     if (!insertResponse.ok) {
-      console.error('❌ ERRO ao inserir item no carrinho:', await insertResponse.text());
+      const errorText = await insertResponse.text();
+      console.error('❌ ERRO ao inserir item no carrinho:', errorText);
       return false;
     }
 
+    console.log(`✅ Produto adicionado ao carrinho com sucesso!`);
     return true;
 
   } catch (error) {

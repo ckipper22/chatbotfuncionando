@@ -1,0 +1,314 @@
+Caixa de Entrada 💬
+1 conversas ativas
+
+555584557096
+26/11/2025, 14:07:30
+🔍 *Resultados da busca por "5762":*\n\n⚠️ Não foi...
+
+Conversa com: 555584557096
+Total de 90 mensagens
+
+Olá
+
+RECEBIDA · 25/11/2025, 20:07:25
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?\n\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\n*1.* 🔍 Buscar Preços e Estoque de Produtos\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\n*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)\n*4.* 🆘 Ver comandos administrativos (/test, /ajuda)
+
+ENVIADA · 25/11/2025, 20:07:27
+Qual o preço do hepafig
+
+RECEBIDA · 25/11/2025, 20:07:38
+🔍 *RESULTADOS DA BUSCA (5 ITENS)*
+
+*1. HEPAFIG ABA LIQ 120ML* (MERCOFARMA)\n💰 *R$ 17,16* | ✅ DISPONÍVEL\n----------------------------------------
+*2. HEPAFIG ABACAXI FLAC 10ML* (MERCOFARMA)\n💰 *R$ 1,50* | ✅ DISPONÍVEL\n----------------------------------------
+*3. KIT DISPLAY MERCOFARMA HEPAFIG* (LAB. PADRAO)\n💰 *R$ 0,10* | ✅ DISPONÍVEL\n----------------------------------------
+*4. HEPAFIG ABACAXI LIQ 120ML* (MERCOFARMA)\n💰 *R$ 13,90* | ❌ ESGOTADO\n----------------------------------------
+*5. HEPAFIG BOLDO FLAC 10ML* (MERCOFARMA)\n💰 *R$ 1,90* | ❌ ESGOTADO\n
+
+
+💡 *Ação:* Digite o número do item (*1, 2, 3...*) para mais detalhes, ou *voltar* para o Menu Principal.
+
+ENVIADA · 25/11/2025, 20:07:40
+Oi
+
+RECEBIDA · 25/11/2025, 20:20:35
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?\n\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\n*1.* 🔍 Buscar Preços e Estoque de Produtos\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\n*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)\n*4.* 🆘 Ver comandos administrativos (/test, /ajuda)
+
+ENVIADA · 25/11/2025, 20:20:37
+Olá
+
+RECEBIDA · 25/11/2025, 20:55:25
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?\n\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\n*1.* 🔍 Buscar Preços e Estoque de Produtos\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\n*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)\n*4.* 🆘 Ver comandos administrativos (/test, /ajuda)
+
+ENVIADA · 25/11/2025, 20:55:26
+Olá
+
+RECEBIDA · 25/11/2025, 23:00:30
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?\n\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\n*1.* 🔍 Buscar Preços e Estoque de Produtos\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\n*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)\n*4.* 🆘 Ver comandos administrativos (/test, /ajuda)
+
+ENVIADA · 25/11/2025, 23:00:32
+Qual o preço do hepafig
+
+RECEBIDA · 25/11/2025, 23:12:41
+🔍 *RESULTADO DA BUSCA POR: HEPAFIG*\n\nNão encontramos nenhum produto com esse nome. Tente um termo mais genérico.
+
+ENVIADA · 25/11/2025, 23:12:43
+Olá
+
+RECEBIDA · 25/11/2025, 23:50:48
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?\n\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\n*1.* 🔍 Buscar Preços e Estoque de Produtos\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\n*3.* 🛒 Ver/Finalizar Carrinho\n*4.* 👩‍💻 Falar com um Atendente (Horário Comercial)\n
+
+ENVIADA · 25/11/2025, 23:50:49
+1
+
+RECEBIDA · 25/11/2025, 23:51:01
+Certo! Digite o nome do produto ou o código de barras (ex: *DIPIRONA* ou *7896000000000*).
+
+ENVIADA · 25/11/2025, 23:51:02
+Sorinan
+
+RECEBIDA · 25/11/2025, 23:51:16
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?\n\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\n*1.* 🔍 Buscar Preços e Estoque de Produtos\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\n*3.* 🛒 Ver/Finalizar Carrinho\n*4.* 👩‍💻 Falar com um Atendente (Horário Comercial)\n
+
+ENVIADA · 25/11/2025, 23:51:17
+1
+
+RECEBIDA · 25/11/2025, 23:52:27
+Certo! Digite o nome do produto ou o código de barras (ex: *DIPIRONA* ou *7896000000000*).
+
+ENVIADA · 25/11/2025, 23:52:28
+Dipirona
+
+RECEBIDA · 25/11/2025, 23:52:53
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?\n\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\n*1.* 🔍 Buscar Preços e Estoque de Produtos\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\n*3.* 🛒 Ver/Finalizar Carrinho\n*4.* 👩‍💻 Falar com um Atendente (Horário Comercial)\n
+
+ENVIADA · 25/11/2025, 23:52:54
+Olá
+
+RECEBIDA · 26/11/2025, 00:11:45
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?\n\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\n*1.* 🔍 Buscar Preços e Estoque de Produtos\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\n*3.* 🛒 Ver/Finalizar Carrinho\n*4.* 👩‍💻 Falar com um Atendente (Horário Comercial)\n
+
+ENVIADA · 26/11/2025, 00:11:46
+1
+
+RECEBIDA · 26/11/2025, 00:11:52
+Certo! Digite o nome do produto ou o código de barras (ex: *DIPIRONA* ou *7896000000000*).
+
+ENVIADA · 26/11/2025, 00:11:53
+Sorinan
+
+RECEBIDA · 26/11/2025, 00:12:01
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?\n\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\n*1.* 🔍 Buscar Preços e Estoque de Produtos\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\n*3.* 🛒 Ver/Finalizar Carrinho\n*4.* 👩‍💻 Falar com um Atendente (Horário Comercial)\n
+
+ENVIADA · 26/11/2025, 00:12:02
+1
+
+RECEBIDA · 26/11/2025, 00:26:46
+Certo! Digite o nome do produto ou o código de barras (ex: *DIPIRONA* ou *7896000000000*).
+
+ENVIADA · 26/11/2025, 00:26:47
+Sorinan
+
+RECEBIDA · 26/11/2025, 00:26:55
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?\n\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\n*1.* 🔍 Buscar Preços e Estoque de Produtos\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\n*3.* 🛒 Ver/Finalizar Carrinho\n*4.* 👩‍💻 Falar com um Atendente (Horário Comercial)\n
+
+ENVIADA · 26/11/2025, 00:26:56
+2
+
+RECEBIDA · 26/11/2025, 00:27:05
+Qual medicamento você gostaria de consultar? (Ex: *Losartana posologia*)
+
+ENVIADA · 26/11/2025, 00:27:06
+Losartana
+
+RECEBIDA · 26/11/2025, 00:27:15
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?\n\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\n*1.* 🔍 Buscar Preços e Estoque de Produtos\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\n*3.* 🛒 Ver/Finalizar Carrinho\n*4.* 👩‍💻 Falar com um Atendente (Horário Comercial)\n
+
+ENVIADA · 26/11/2025, 00:27:16
+3
+
+RECEBIDA · 26/11/2025, 00:27:29
+🛒 *SEU CARRINHO DE COMPRAS* (ID: c5406010)\n\nSeu carrinho está vazio! Comece a adicionar produtos digitando o nome ou o código (ex: "quero losartana" ou "adicionar 123456").\n\nOu *digite menu* para voltar ao Menu Principal.
+
+ENVIADA · 26/11/2025, 00:27:31
+Olá
+
+RECEBIDA · 26/11/2025, 00:38:00
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?\n\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\n*1.* 🔍 Buscar Preços e Estoque de Produtos\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\n*3.* 🛒 Ver/Finalizar Carrinho\n*4.* 👩‍💻 Falar com um Atendente (Horário Comercial)\n
+
+ENVIADA · 26/11/2025, 00:38:01
+1
+
+RECEBIDA · 26/11/2025, 00:38:07
+Certo! Digite o nome do produto ou o código de barras (ex: *DIPIRONA* ou *7896000000000*).
+
+ENVIADA · 26/11/2025, 00:38:08
+Sorinan
+
+RECEBIDA · 26/11/2025, 00:38:15
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nComo posso te ajudar hoje?\n\nDigite o *número* da opção desejada, ou digite o nome do produto/medicamento:\n*1.* 🔍 Buscar Preços e Estoque de Produtos\n*2.* 💊 Consultar Informações de Medicamentos (Bula)\n*3.* 🛒 Ver/Finalizar Carrinho\n*4.* 👩‍💻 Falar com um Atendente (Horário Comercial)\n
+
+ENVIADA · 26/11/2025, 00:38:16
+1
+
+RECEBIDA · 26/11/2025, 00:39:06
+Certo! Digite o nome do produto ou o código de barras (ex: *DIPIRONA* ou *7896000000000*).
+
+ENVIADA · 26/11/2025, 00:39:06
+Buscar sorinan
+
+RECEBIDA · 26/11/2025, 00:39:14
+🔍 *Resultados da busca por "sorinan":*\n\nNão encontramos nenhum produto que corresponda à sua busca. Tente um nome diferente ou digite *MENU*.
+
+ENVIADA · 26/11/2025, 00:39:16
+Olá
+
+RECEBIDA · 26/11/2025, 00:43:46
+🔍 *Resultados da busca por "Olá":*\n\nNão encontramos nenhum produto que corresponda à sua busca. Tente um nome diferente ou digite *MENU*.
+
+ENVIADA · 26/11/2025, 00:43:48
+Olá
+
+RECEBIDA · 26/11/2025, 12:42:32
+🔍 *Resultados da busca por "Olá":*\n\n⚠️ Não foi possível comunicar com a API da farmácia. Por favor, tente novamente mais tarde ou digite *ATENDENTE*.
+
+ENVIADA · 26/11/2025, 12:42:34
+Olá
+
+RECEBIDA · 26/11/2025, 12:48:10
+🔍 *Resultados da busca por "Olá":*\n\nNão encontramos nenhum produto que corresponda à sua busca. Tente um nome diferente ou digite *MENU*.
+
+ENVIADA · 26/11/2025, 12:48:13
+Sorinan
+
+RECEBIDA · 26/11/2025, 12:48:23
+🔍 *Resultados da busca por "Sorinan":*\n\nNão encontramos nenhum produto que corresponda à sua busca. Tente um nome diferente ou digite *MENU*.
+
+ENVIADA · 26/11/2025, 12:48:25
+Buscar sorinan
+
+RECEBIDA · 26/11/2025, 12:48:37
+🔍 *Resultados da busca por "sorinan":*\n\nNão encontramos nenhum produto que corresponda à sua busca. Tente um nome diferente ou digite *MENU*.
+
+ENVIADA · 26/11/2025, 12:48:39
+Olá
+
+RECEBIDA · 26/11/2025, 12:59:16
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*
+
+Como posso te ajudar hoje?
+
+Digite o *número* da opção desejada, ou digite o nome do produto/medicamento:
+*1.* 🔍 Buscar Preços e Estoque de Produtos
+*2.* 💊 Consultar Informações de Medicamentos (Bula)
+*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)
+*4.* 🆘 Ver comandos administrativos (/test, /ajuda)
+
+ENVIADA · 26/11/2025, 12:59:17
+1
+
+RECEBIDA · 26/11/2025, 12:59:27
+Certo! Digite o nome do produto ou o código de barras (ex: *DIPIRONA* ou *7896000000000*).
+
+ENVIADA · 26/11/2025, 12:59:28
+Sorinan
+
+RECEBIDA · 26/11/2025, 12:59:39
+🔍 *Resultados da busca por "sorinan":*\n\nNão encontramos nenhum produto que corresponda à sua busca. Tente um nome diferente ou digite *MENU*.
+
+ENVIADA · 26/11/2025, 12:59:42
+ola
+
+RECEBIDA · 26/11/2025, 13:43:27
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*
+
+Como posso te ajudar hoje?
+
+Digite o *número* da opção desejada, ou digite o nome do produto/medicamento:
+*1.* 🔍 Buscar Preços e Estoque de Produtos
+*2.* 💊 Consultar Informações de Medicamentos (Bula)
+*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)
+*4.* 🆘 Ver comandos administrativos (/test, /ajuda)
+
+ENVIADA · 26/11/2025, 13:43:30
+1
+
+RECEBIDA · 26/11/2025, 13:43:52
+Certo! Digite o nome do produto ou o código de barras (ex: *DIPIRONA* ou *7896000000000*).
+
+ENVIADA · 26/11/2025, 13:43:52
+sorinan
+
+RECEBIDA · 26/11/2025, 13:44:00
+🔍 *Resultados da busca por "sorinan":*\n\nNão encontramos nenhum produto que corresponda à sua busca. Tente um nome diferente ou digite *MENU*.
+
+ENVIADA · 26/11/2025, 13:44:02
+ola
+
+RECEBIDA · 26/11/2025, 13:51:10
+*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*
+
+Como posso te ajudar hoje?
+
+Digite o *número* da opção desejada, ou digite o nome do produto/medicamento:
+*1.* 🔍 Buscar Preços e Estoque de Produtos
+*2.* 💊 Consultar Informações de Medicamentos (Bula)
+*3.* 👩‍💻 Falar com um Atendente (Horário Comercial)
+*4.* 🆘 Ver comandos administrativos (/test, /ajuda)
+
+ENVIADA · 26/11/2025, 13:51:11
+1
+
+RECEBIDA · 26/11/2025, 13:51:19
+Certo! Digite o nome do produto ou o código de barras (ex: *DIPIRONA* ou *7896000000000*).
+
+ENVIADA · 26/11/2025, 13:51:20
+sorinan
+
+RECEBIDA · 26/11/2025, 13:51:27
+🔍 *Resultados da busca por "sorinan":*\n\nNão encontramos nenhum produto que corresponda à sua busca. Tente um nome diferente ou digite *MENU*.
+
+ENVIADA · 26/11/2025, 13:51:29
+Olá
+
+RECEBIDA · 26/11/2025, 13:58:26
+Olá! Bem-vindo(a) à nossa farmácia virtual. Como posso ajudar hoje?
+
+ENVIADA · 26/11/2025, 13:58:29
+Procurar sorinan
+
+RECEBIDA · 26/11/2025, 13:59:12
+🔍 *Resultados da busca por "sorinan":*\n\nNão encontramos nenhum produto que corresponda à sua busca. Tente um nome diferente ou digite *MENU*.
+
+ENVIADA · 26/11/2025, 13:59:16
+Olá
+
+RECEBIDA · 26/11/2025, 14:05:50
+Olá! Bem-vindo(a) à nossa farmácia virtual. Como posso ajudar você hoje?
+
+ENVIADA · 26/11/2025, 14:05:54
+Tudo bem?
+
+RECEBIDA · 26/11/2025, 14:06:02
+Olá! Estou aqui para ajudar. Em que posso auxiliá-lo(a) hoje?
+
+ENVIADA · 26/11/2025, 14:06:05
+Tudo bem com vc?
+
+RECEBIDA · 26/11/2025, 14:06:23
+Olá! Estou bem, obrigado por perguntar. Em que posso ajudar hoje?
+
+ENVIADA · 26/11/2025, 14:06:26
+Qual o preço do sorinan?
+
+RECEBIDA · 26/11/2025, 14:06:45
+🔍 *Resultados da busca por "sorinan":*\n\n▪️ *SORINAN 0,5MG/ML GTS AD 30ML*\n   💊 PHARMASCIENCE \n   💰 R$ 5,90 (🔻50.4% OFF)\n   📦 Estoque: 51 unidades\n   📋 Código: 829\n   Para adicionar ao carrinho, digite: *COMPRAR 829*\n\n▪️ *SORINAN 0,9% GTS INF 30ML*\n   💊 PHARMASCIENCE \n   💰 R$ 9,36\n   📦 Estoque: 0 unidades\n   📋 Código: 5762\n   Para adicionar ao carrinho, digite: *COMPRAR 5762*\n\n
+
+ENVIADA · 26/11/2025, 14:06:48
+5762
+
+RECEBIDA · 26/11/2025, 14:07:27
+🔍 *Resultados da busca por "5762":*\n\n⚠️ Não foi possível buscar produtos neste momento. Por favor, tente novamente mais tarde ou digite *ATENDENTE*.
+
+ENVIADA · 26/11/2025, 14:07:30
+Visualização de histórico (A área de resposta seria implementada aqui).
