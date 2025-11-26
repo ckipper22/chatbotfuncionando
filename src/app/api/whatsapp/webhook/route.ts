@@ -777,13 +777,14 @@ async function buscarEOferecerProdutos(from: string, whatsappPhoneId: string, te
         searchResults.data.slice(0, 5).forEach((product: any) => {
           resposta += `▪️ *${product.nome_produto}*\\n`;
           resposta += `   💊 ${product.nom_laboratorio}\\n`;
-          resposta += `   💰 ${product.preco_final_venda}`;
           
           if (product.desconto_percentual > 0) {
-            resposta += ` (🔻${product.desconto_percentual.toFixed(1)}% OFF)`;
+            resposta += `   💰 ~~${product.vlr_venda}~~ *${product.preco_final_venda}* (🔻${product.desconto_percentual.toFixed(1)}% OFF)\\n`;
+          } else {
+            resposta += `   💰 *${product.preco_final_venda}*\\n`;
           }
           
-          resposta += `\\n   📦 Estoque: ${product.qtd_estoque} unidades\\n`;
+          resposta += `   📦 Estoque: ${product.qtd_estoque} unidades\\n`;
           resposta += `   📋 Código: ${product.cod_reduzido}\\n`;
           resposta += `   Para adicionar ao carrinho, digite: *COMPRAR ${product.cod_reduzido}*\\n\\n`;
         });
@@ -990,7 +991,27 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
 
   console.log(`🤖 [GEMINI] Processando: "${messageText}"`);
 
-  // ✨ NOVO FLUXO: IA GEMINI COMO PRIMEIRO PASSO
+  // 🛒 VERIFICA SE É COMANDO "COMPRAR [CÓDIGO]"
+  const comprarMatch = messageText.match(/^comprar\s+(\d+)/i);
+  if (comprarMatch) {
+    const productCode = comprarMatch[1];
+    console.log(`🛒 Comando COMPRAR detectado: ${productCode}`);
+    
+    const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
+    if (orderId && await addItemToCart(orderId, productCode, 1, whatsappPhoneId)) {
+      const sucessoMsg = `✅ *PRODUTO ADICIONADO!*\\n\\nProduto *${productCode}* foi adicionado ao seu carrinho.\\n\\nDigite *CARRINHO* para visualizar ou *FINALIZAR* para completar o pedido.`;
+      await enviarComFormatosCorretos(from, sucessoMsg);
+      await salvarMensagemNoSupabase(whatsappPhoneId, from, sucessoMsg, 'OUT');
+      return;
+    } else {
+      const erroMsg = `❌ Não foi possível adicionar o produto ao carrinho.\\n\\nVerifique se o código *${productCode}* está correto e tente novamente.`;
+      await enviarComFormatosCorretos(from, erroMsg);
+      await salvarMensagemNoSupabase(whatsappPhoneId, from, erroMsg, 'OUT');
+      return;
+    }
+  }
+
+  // ✨ FLUXO COM GEMINI - PARA OUTROS TIPOS DE MENSAGEM
   const intencao = await interpretarComGemini(messageText);
   
   console.log(`🎯 Intenção detectada:`, intencao.tipo);
