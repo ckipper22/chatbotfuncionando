@@ -885,9 +885,16 @@ async function interpretarComGemini(mensagem: string): Promise<IntencaoMensagem>
     }
 
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    
+    // Usar modelo Gemini 2.5 (atual e funcional)
+    const modelsToTest = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-pro'];
+    
+    for (const modelName of modelsToTest) {
+      try {
+        console.log(`🤖 Testando modelo Gemini: ${modelName}`);
+        const model = genAI.getGenerativeModel({ model: modelName });
 
-    const prompt = `Você é um assistente de farmácia virtual. Analise a mensagem do cliente e identifique a intenção.
+        const prompt = `Você é um assistente de farmácia virtual. Analise a mensagem do cliente e identifique a intenção.
 
 RESPONDA EM JSON com este formato exato:
 {
@@ -899,25 +906,33 @@ RESPONDA EM JSON com este formato exato:
 
 Tipos:
 - saudacao: Olá, Oi, Como vai, etc
-- busca_produto: Cliente busca por produto/preço/estoque (responda com código JSON apenas)
-- consulta_medicamento: Cliente quer info de medicamento, posologia, efeitos (responda com código JSON apenas)
-- carrinho: Cliente quer ver carrinho ou finalizar pedido (responda com código JSON apenas)
-- comando: Menu, ajuda, atendente (responda com código JSON apenas)
+- busca_produto: Cliente busca por produto/preço/estoque
+- consulta_medicamento: Cliente quer info de medicamento, posologia, efeitos
+- carrinho: Cliente quer ver carrinho ou finalizar pedido
+- comando: Menu, ajuda, atendente
 - outro: Qualquer outra coisa
 
 Mensagem do cliente: "${mensagem}"
 
 Responda APENAS com JSON válido, sem markdown.`;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text().trim();
-    
-    // Remover markdown se houver
-    const jsonText = responseText.replace(/```json\n?|\n?```/g, '').trim();
-    const parsed = JSON.parse(jsonText);
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text().trim();
+        
+        // Remover markdown se houver
+        const jsonText = responseText.replace(/```json\n?|\n?```/g, '').trim();
+        const parsed = JSON.parse(jsonText);
 
-    console.log('🤖 Gemini interpretou:', parsed);
-    return parsed;
+        console.log(`✅ Modelo ${modelName} funcionou. Intenção:`, parsed);
+        return parsed;
+        
+      } catch (error) {
+        console.log(`❌ Modelo ${modelName} falhou:`, (error as Error).message);
+        continue;
+      }
+    }
+    
+    throw new Error('Nenhum modelo Gemini disponível');
 
   } catch (error) {
     console.error('❌ Erro ao usar Gemini:', error);

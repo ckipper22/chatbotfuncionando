@@ -1,0 +1,703 @@
+// src/app/next_api/whatsapp/webhook/route.ts
+import { consultarProduto } from '@/lib/services/api-confere-nota';
+import { NextRequest, NextResponse } from 'next/server';
+import { getGeminiService } from '../../../../lib/services/gemini-service';
+import { getMedicamentoInfo, medicamentosData } from '../../../../../Lib/medicamentos_data';
+
+// =========================================================================
+// VARIÁVEIS E FUNÇÕES AUXILIARES PARA ENVIO WHATSAPP
+// =========================================================================
+
+const FORMATOS_COMPROVADOS = [
+  '+5555984557096',
+  '5555984557096',
+];
+
+function converterParaFormatoFuncional(numeroOriginal: string): string[] {
+  console.log('🎯 [CONVERT] Convertendo para formato funcional:', numeroOriginal);
+
+  const numeroLimpo = numeroOriginal.replace(/\D/g, '');
+  console.log('🎯 [CONVERT] Número limpo:', numeroLimpo);
+
+  if (numeroLimpo === '555584557096') {
+    const formatosFuncionais = [
+      '+5555984557096',
+      '5555984557096',
+    ];
+    console.log('🎯 [CONVERT] ✅ Convertido para formatos funcionais (caso específico):', formatosFuncionais);
+    return formatosFuncionais;
+  }
+
+  let numeroConvertido = numeroLimpo;
+
+  if (numeroLimpo.length === 12 && numeroLimpo.startsWith('55')) {
+    const ddd = numeroLimpo.substring(2, 4);
+    const numeroSemDDIeDDD = numeroLimpo.substring(4);
+    if (numeroSemDDIeDDD.length === 8 && !['1','2','3','4','5'].includes(numeroSemDDIeDDD.charAt(0))) {
+        numeroConvertido = '55' + ddd + '9' + numeroSemDDIeDDD;
+        console.log('🎯 [CONVERT] ✅ Adicionado 9 para celular brasileiro (heurística):', numeroConvertido);
+    }
+  }
+
+  const formatosFinais = [
+    '+' + numeroConvertido,
+    numeroConvertido
+  ];
+
+  console.log('🎯 [CONVERT] Formatos finais a serem tentados (genérico):', formatosFinais);
+  return formatosFinais;
+}
+
+async function testarFormatosSequencial(numero: string, texto: string): Promise<string | null> {
+  console.log('🧪 [SEQUENTIAL TEST] Iniciando teste sequencial para:', numero);
+
+  const formatos = converterParaFormatoFuncional(numero);
+
+  for (let i = 0; i < formatos.length; i++) {
+    const formato = formatos[i];
+    console.log(`🧪 [SEQUENTIAL TEST] Tentativa ${i + 1}/${formatos.length}: ${formato}`);
+
+    const sucesso = await tentarEnvioUnico(formato, texto, i + 1);
+    if (sucesso) {
+      console.log(`✅ [SEQUENTIAL TEST] SUCESSO no formato ${i + 1}: ${formato}`);
+      return formato;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+
+  console.log('❌ [SEQUENTIAL TEST] Todos os formatos falharam');
+  return null;
+}
+
+async function tentarEnvioUnico(numero: string, texto: string, tentativa: number): Promise<boolean> {
+  try {
+    console.log(`📤 [SEND ${tentativa}] Tentando enviar para: ${numero}`);
+
+    const payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: numero,
+      type: 'text',
+      text: {
+        preview_url: false,
+        body: texto.substring(0, 4096)
+      }
+    };
+
+    console.log(`📝 [SEND ${tentativa}] Payload:`, JSON.stringify(payload, null, 2));
+
+    const WHATSAPP_API_URL = `https://graph.facebook.com/v22.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+
+    const response = await fetch(WHATSAPP_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const responseText = await response.text();
+
+    console.log(`📨 [SEND ${tentativa}] Status: ${response.status}`);
+    console.log(`📨 [SEND ${tentativa}] Response: ${responseText}`);
+
+    if (response.ok) {
+      console.log(`🎉 [SEND ${tentativa}] ✅ SUCESSO para: ${numero}`);
+      return true;
+    } else {
+      try {
+        const errorData = JSON.parse(responseText);
+        console.error(`💥 [SEND ${tentativa}] ❌ FALHA para: ${numero} - Status: ${response.status}, Erro:`, errorData);
+      } catch (e) {
+        console.error(`💥 [SEND ${tentativa}] ❌ FALHA para: ${numero} - Status: ${response.status}, Response: ${responseText}`);
+      }
+      return false;
+    }
+
+  } catch (error) {
+    console.error(`❌ [SEND ${tentativa}] Erro de rede ou desconhecido para ${numero}:`, error);
+    return false;
+  }
+}
+
+async function enviarComFormatosCorretos(numeroOriginal: string, texto: string): Promise<boolean> {
+  try {
+    console.log('🎯 [SEND FIXED] Usando formatos comprovadamente funcionais para:', numeroOriginal);
+
+    const formatoFuncional = await testarFormatosSequencial(numeroOriginal, texto);
+
+    if (formatoFuncional) {
+      console.log(`✅ [SEND FIXED] Mensagem enviada com sucesso usando formato: ${formatoFuncional}`);
+      return true;
+    } else {
+      console.log(`❌ [SEND FIXED] Não foi possível enviar para nenhum formato de: ${numeroOriginal}`);
+      return false;
+    }
+
+  } catch (error) {
+    console.error('❌ [SEND FIXED] Erro crítico no envio:', error);
+    return false;
+  }
+}
+
+// =========================================================================
+// FUNÇÕES AUXILIARES PARA PROCESSAMENTO DE MENSAGENS
+// =========================================================================
+
+function parseUserMessageForDrugInfo(message: string): { drugName?: string; infoType?: string } {
+  const lowerMessage = message.toLowerCase();
+  let drugName: string | undefined;
+  let infoType: string | undefined;
+
+  const infoTypeKeywords: { [key: string]: string[] } = {
+    "classe terapeutica": ["classe terapeutica", "classe farmacologica", "categoria", "grupo de medicamentos", "tipo de remedio"],
+    "posologia": ["posologia", "dose", "como usar", "modo de usar", "dosagem", "quantas vezes", "como tomar"],
+    "indicacoes": ["indicacoes", "para que serve", "usos", "quando usar", "utilizacao", "beneficios"],
+    "efeitos colaterais": ["efeitos colaterais", "reacoes adversas", "colaterais", "o que pode causar", "problemas", "efeitos indesejados"],
+    "contraindicacoes": ["contraindicacoes", "contra indicado", "nao usar quando", "quem nao pode usar", "restricoes", "quando nao usar", "proibido"],
+    "mecanismo de acao": ["mecanismo de acao", "como funciona", "acao do remedio", "age no organismo", "mecanismo"],
+    "interacoes medicamentosas": ["interacoes medicamentosas", "pode misturar com", "outros remedios", "combinar com", "interage com", "interagir"],
+    "tudo": ["tudo", "informacoes completas", "tudo sobre", "informacoes gerais", "ficha completa", "informacao completa"],
+  };
+
+  for (const typeKey in infoTypeKeywords) {
+    if (infoTypeKeywords[typeKey].some(keyword => lowerMessage.includes(keyword))) {
+      infoType = typeKey;
+      break;
+    }
+  }
+
+  const allDrugNames = medicamentosData.map(m => m["Nome do Medicamento"].toLowerCase());
+  let bestMatchDrug: string | undefined;
+  let bestMatchLength = 0;
+
+  for (const drug of allDrugNames) {
+    if (lowerMessage.includes(drug) && drug.length > bestMatchLength) {
+      bestMatchDrug = drug;
+      bestMatchLength = drug.length;
+    }
+  }
+  drugName = bestMatchDrug;
+
+  return { drugName, infoType };
+}
+
+// =========================================================================
+// ROTA NEXT.JS API - WEBHOOK PARA WHATSAPP BUSINESS API
+// =========================================================================
+
+console.log('🎯 [COMPLETE SYSTEM] Sistema completo com IA ativada!');
+console.log('✅ [FORMATS] Formatos que funcionam:', FORMATOS_COMPROVADOS);
+console.log('📊 [CONFIG] Status completo:');
+console.log('   WEBHOOK_TOKEN:', process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN ? '✅' : '❌');
+console.log('   PHONE_ID:', process.env.WHATSAPP_PHONE_NUMBER_ID || '❌');
+console.log('   ACCESS_TOKEN:', process.env.WHATSAPP_ACCESS_TOKEN ? '✅' : '❌');
+console.log('   GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ IA ATIVADA!' : '❌ IA DESATIVADA');
+
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const mode = searchParams.get('hub.mode');
+  const token = searchParams.get('hub.verify_token');
+  const challenge = searchParams.get('hub.challenge');
+
+  console.log('🔐 [WEBHOOK VERIFICATION] Verificação do webhook:', {
+    mode,
+    tokenMatch: token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
+    challenge: challenge?.substring(0, 20) + '...'
+  });
+
+  if (mode === 'subscribe' && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
+    console.log('✅ [WEBHOOK] Verificação bem-sucedida!');
+    return new NextResponse(challenge, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/plain',
+        'Cache-Control': 'no-cache'
+      }
+    });
+  }
+
+  console.log('❌ [WEBHOOK] Verificação falhou');
+  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    console.log('📨 [WEBHOOK] Nova mensagem recebida');
+
+    if (!process.env.WHATSAPP_PHONE_NUMBER_ID || !process.env.WHATSAPP_ACCESS_TOKEN) {
+      console.error('❌ [WEBHOOK] Configuração crítica faltando: WHATSAPP_PHONE_NUMBER_ID ou WHATSAPP_ACCESS_TOKEN');
+      return NextResponse.json({ error: 'Configuration error' }, { status: 500 });
+    }
+
+    const body = await request.json();
+    console.log('📦 [WEBHOOK] Payload recebido:', JSON.stringify(body, null, 2));
+
+    const value = body.entry?.[0]?.changes?.[0]?.value;
+
+    if (value?.statuses) {
+      const status = value.statuses[0]?.status;
+      console.log('📊 [STATUS] Status de entrega recebido:', status);
+      return NextResponse.json({ status: 'ok' }, { status: 200 });
+    }
+
+    const messages = value?.messages;
+    if (!messages?.length) {
+      console.log('ℹ️ [WEBHOOK] Nenhuma mensagem para processar ou tipo inválido');
+      return NextResponse.json({ status: 'ok' }, { status: 200 });
+    }
+
+    console.log(`🔄 [WEBHOOK] Processando ${messages.length} mensagem(ns)`);
+
+    for (const message of messages) {
+      await processarComIACompleta(message);
+    }
+
+    return NextResponse.json({ status: 'ok' }, { status: 200 });
+
+  } catch (error) {
+    console.error('❌ [WEBHOOK] Erro crítico no sistema:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+// 🤖 PROCESSAMENTO COMPLETO COM IA E FALLBACK
+async function processarComIACompleta(message: any): Promise<void> {
+  const { from, text, type, id } = message;
+
+  console.log('   [AI PROCESS] Processando com IA completa:', {
+    from,
+    type,
+    messageId: id,
+    hasText: !!text?.body
+  });
+
+  try {
+    if (type !== 'text' || !text?.body) {
+      console.log('⚠️ [AI PROCESS] Mensagem ignorada (não é texto)');
+      return;
+    }
+
+    const userMessage = text.body.trim();
+    const lowerMessage = userMessage.toLowerCase();
+
+    console.log(`   [AI PROCESS] De ${from}: "${userMessage}"`);
+
+    const geminiService = getGeminiService();
+
+    // 👇👇👇 CONSULTA DE PRODUTOS - ADICIONADO AQUI 👇👇👇
+    if (lowerMessage.startsWith('buscar ') ||
+        lowerMessage.startsWith('produto ') ||
+        lowerMessage.startsWith('consulta ') ||
+        lowerMessage.startsWith('preço ') ||
+        lowerMessage.startsWith('preco ') ||
+        lowerMessage.startsWith('estoque ')) {
+
+      console.log(`🛍️ [PRODUTO] Consultando produto: "${userMessage}"`);
+
+      try {
+        const termoBusca = userMessage.replace(/^(buscar|produto|consulta|preço|preco|estoque)\s*/i, '').trim();
+
+        if (termoBusca.length < 2) {
+          await enviarComFormatosCorretos(from,
+            `🔍 *BUSCA DE PRODUTOS*\\n\\n` +
+            `Por favor, digite o nome do produto que deseja buscar (mínimo 2 caracteres).\\n\\n` +
+            `💡 *Exemplos:*\\n` +
+            `• *buscar paracetamol*\\n` +
+            `• *produto dipirona*\\n` +
+            `• *estoque nimesulida*`
+          );
+          return;
+        }
+
+        const resultado = await consultarProduto(termoBusca);
+
+        if (!resultado.success || resultado.count === 0) {
+          await enviarComFormatosCorretos(from,
+            `❌ *PRODUTO NÃO ENCONTRADO*\\n\\n` +
+            `Não encontrei produtos para "*${termoBusca}*".\\n\\n` +
+            `💡 *Sugestões:*\\n` +
+            `• Verifique a ortografia\\n` +
+            `• Tente um termo mais específico\\n` +
+            `• Use apenas o nome principal`
+          );
+          return;
+        }
+
+        let resposta = `🔍 *${resultado.count} PRODUTO(S) ENCONTRADO(S)*\\n` +
+                      `*Busca:* "${termoBusca}"\\n\\n`;
+
+        resultado.data.slice(0, 5).forEach((produto: any, index: number) => {
+          resposta += `*${index + 1}. ${produto.nome_produto}*\\n`;
+          resposta += `💊 ${produto.nom_laboratorio}\\n`;
+          resposta += `💰 ${produto.preco_final_venda}`;
+          if (produto.desconto_percentual > 0) {
+            resposta += ` (🔻${produto.desconto_percentual.toFixed(1)}% OFF)`;
+          }
+          resposta += `\\n📦 Estoque: ${produto.qtd_estoque} unidades\\n`;
+          resposta += `📋 Código: ${produto.cod_reduzido}\\n\\n`;
+        });
+
+        if (resultado.count > 5) {
+          resposta += `📊 *E mais ${resultado.count - 5} produtos...*\\n`;
+          resposta += `Use um termo mais específico para ver todos.\\n\\n`;
+        }
+
+        resposta += `💡 *Dica:* Use *"código 12345"* para detalhes de um produto específico.`;
+
+        await enviarComFormatosCorretos(from, resposta);
+        return;
+
+      } catch (error) {
+        console.error('❌ [PRODUTO] Erro na consulta:', error);
+        await enviarComFormatosCorretos(from,
+          `⚠️ *ERRO NA CONSULTA*\\n\\n` +
+          `Não consegui buscar produtos no momento.\\n` +
+          `Nossa equipe foi notificada.\\n\\n` +
+          `Tente novamente em alguns instantes.`
+        );
+        return;
+      }
+    }
+    // 👆👆👆 FIM DA CONSULTA DE PRODUTOS 👆👆👆
+
+    // Comandos administrativos
+    if (lowerMessage === '/test' || lowerMessage === 'test') {
+      const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA ATIVA' : '⚠️ IA INATIVA';
+      const statusMsg = `✅ *SISTEMA COMPLETO FUNCIONANDO!*\\n\\n🔗 WhatsApp: ✅ Conectado\\n${statusIA}\\n🛍️ Produtos: ✅ API Conectada\\n📊 Formatos: ✅ Corretos\\n🚀 Status: 100% Operacional\\n\\nTudo funcionando perfeitamente!`;
+      await enviarComFormatosCorretos(from, statusMsg);
+      return;
+    }
+
+    if (lowerMessage === '/debug' || lowerMessage === 'debug') {
+      const formatos = converterParaFormatoFuncional(from);
+      const statusIA = process.env.GEMINI_API_KEY ? '✅ ATIVA' : '❌ INATIVA';
+      const debugInfo = `🔧 *DEBUG SISTEMA COMPLETO*\\n\\n📱 Seu número: ${from}\\n🎯 Convertido para:\\n• ${formatos[0]}\\n• ${formatos[1]}\\n\\n🤖 IA Status: ${statusIA}\\n🛍️ API Produtos: ✅ Conectada\\n📊 Formatos: ${FORMATOS_COMPROVADOS.length} testados\\n✅ Sistema: 100% Operacional\\n\\n🚀 *TUDO FUNCIONANDO!*`;
+      await enviarComFormatosCorretos(from, debugInfo);
+      return;
+    }
+
+    if (lowerMessage === '/limpar' || lowerMessage === 'limpar') {
+      try {
+        if (process.env.GEMINI_API_KEY) {
+          geminiService.clearHistory(from);
+          await enviarComFormatosCorretos(from, '🗑️ *HISTÓRICO LIMPO!*\\n\\nMemória da IA resetada com sucesso.\\nVamos começar uma nova conversa! 🚀');
+        } else {
+          await enviarComFormatosCorretos(from, '🗑️ *COMANDO RECEBIDO!*\\n\\nIA será ativada em breve.\\nSistema WhatsApp funcionando normalmente.');
+        }
+      } catch (error) {
+        console.error('❌ [LIMPAR] Erro:', error);
+        await enviarComFormatosCorretos(from, '❌ Erro ao limpar histórico.\\nSistema continua funcionando normalmente.');
+      }
+      return;
+    }
+
+    if (lowerMessage === '/ajuda' || lowerMessage === 'ajuda' || lowerMessage === '/help') {
+      const statusIA = process.env.GEMINI_API_KEY ? '🤖 IA totalmente ativa - Posso conversar sobre qualquer assunto!' : '⚙️ IA sendo configurada';
+      const helpMsg = `🤖 *ASSISTENTE INTELIGENTE ATIVO*\\n\\n` +
+        `🛍️ *buscar [produto]* - Consulta produtos em estoque\\n` +
+        `✅ */test* - Status do sistema\\n` +
+        `🔧 */debug* - Informações técnicas\\n` +
+        `🗑️ */limpar* - Resetar conversa\\n` +
+        `❓ */ajuda* - Esta mensagem\\n\\n` +
+        `${statusIA}\\n\\n` +
+        `💬 *Como usar:*\\n` +
+        `Envie qualquer mensagem para conversar comigo!\\n` +
+        `Sou um assistente inteligente pronto para ajudar.\\n\\n` +
+        `🚀 *STATUS: TOTALMENTE OPERACIONAL*`;
+      await enviarComFormatosCorretos(from, helpMsg);
+      return;
+    }
+
+    // Processamento com Inteligência Artificial
+    if (!process.env.GEMINI_API_KEY) {
+      console.log('⚠️ [AI PROCESS] GEMINI_API_KEY não encontrada');
+      await enviarComFormatosCorretos(from, '🤖 *ASSISTENTE QUASE PRONTO!*\\n\\nSistema WhatsApp: ✅ Funcionando perfeitamente\\n🛍️ Produtos: ✅ API Conectada\\nIA: ⚙️ Sendo configurada\\n\\nEm breve estarei conversando inteligentemente!\\nUse */test* para verificar status.');
+      return;
+    }
+
+    let aiResponseText: string;
+    try {
+      console.log('🤖 [AI] Iniciando processamento com Gemini IA...');
+      aiResponseText = await geminiService.generateResponse(userMessage, from);
+      console.log(`🤖 [AI] Resposta da IA gerada com sucesso (${aiResponseText.length} caracteres)`);
+    } catch (aiError: any) {
+      console.error('❌ [AI] Erro na inteligência artificial:', aiError);
+      if (aiError.response && aiError.response.promptFeedback && aiError.response.promptFeedback.blockReason) {
+        console.warn(`⚠️ Gemini API bloqueou o prompt: ${aiError.response.promptFeedback.blockReason}. Forçando fallback de medicamentos.`);
+        aiResponseText = "Atenção (Política de Conteúdo da IA)";
+      } else {
+        const errorMsg = `🤖 *ASSISTENTE TEMPORARIAMENTE INDISPONÍVEL*\\n\\n` +
+          `Estou com dificuldades momentâneas para processar sua mensagem.\\n\\n` +
+          `💡 *Sugestões:*\\n` +
+          `• Tente reformular sua pergunta\\n` +
+          `• Envie uma mensagem mais simples\\n` +
+          `• Use */test* para verificar o status\\n\\n` +
+          `🔄 Tentarei novamente em alguns instantes...`;
+        await enviarComFormatosCorretos(from, errorMsg);
+        return;
+      }
+    }
+
+    const medicalDisclaimerPattern = /atenção \(política de conteúdo da ia\)|não posso fornecer informações médicas|não sou um profissional de saúde|não estou qualificado para dar conselhos médicos|consulte um médico ou farmacêutico/i;
+    const isMedicalDisclaimer = medicalDisclaimerPattern.test(aiResponseText.toLowerCase());
+
+    if (isMedicalDisclaimer) {
+      console.log("➡️ LLM acionou o disclaimer médico ou foi bloqueado. Tentando consultar a Lib/medicamentos_data.ts como fallback.");
+
+      const parsedInfo = parseUserMessageForDrugInfo(userMessage);
+
+      if (parsedInfo.drugName && parsedInfo.infoType) {
+        console.log(`🔎 Informação extraída para fallback: Medicamento: '${parsedInfo.drugName}', Tipo: '${parsedInfo.infoType}'`);
+        const libResult = getMedicamentoInfo(parsedInfo.drugName, parsedInfo.infoType);
+
+        if (libResult.includes("Não encontrei informações sobre o medicamento") || libResult.includes("Não tenho a informação específica sobre")) {
+          const finalResponse = `_Atenção (Política de Conteúdo da IA)_ - Para sua segurança, por favor, consulte diretamente um *farmacêutico* em nossa loja ou um *médico*. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas ${libResult.toLowerCase()}. Por favor, procure um profissional de saúde para obter orientação.`;
+          await enviarComFormatosCorretos(from, finalResponse);
+        } else {
+          const finalResponse = `_De acordo com nossa base de dados interna:_\\n\\n${libResult}\\n\\n*_Importante:_ Esta informação é para fins educacionais e informativos e não substitui o conselho, diagnóstico ou tratamento de um profissional de saúde qualificado. Sempre consulte um *médico* ou *farmacêutico* para orientações específicas sobre sua saúde e para a interpretação correta das informações.`;
+          await enviarComFormatosCorretos(from, finalResponse);
+        }
+      } else {
+        console.warn("⚠️ Não foi possível extrair nome do medicamento ou tipo de informação da mensagem do usuário para o fallback.");
+        const finalResponse = `_Atenção (Política de Conteúdo da IA)_ - Para sua segurança, por favor, consulte diretamente um *farmacêutico* em nossa loja ou um *médico*. Como assistente, não posso fornecer informações ou recomendações médicas. Tentei buscar em nossa base de dados interna, mas não consegui entender qual medicamento ou informação específica você procura. Por favor, tente perguntar de forma mais direta (ex: _'Qual a posologia da losartana?'_ ou _'Indicações do paracetamol?'_).`;
+        await enviarComFormatosCorretos(from, finalResponse);
+      }
+    } else {
+      await enviarComFormatosCorretos(from, aiResponseText);
+    }
+
+  } catch (error) {
+    console.error('❌ [AI PROCESS] Erro crítico no processamento:', error);
+
+    const recoveryMsg = `⚠️ *ERRO TEMPORÁRIO DETECTADO*\\n\\n` +
+      `O sistema detectou um problema momentâneo e está se recuperando automaticamente.\\n\\n` +
+      `🔄 *Ações tomadas:*\\n` +
+      `• Reinicialização automática em andamento\\n` +
+      `• Sistema WhatsApp mantido ativo\\n` +
+      `• Logs de erro registrados\\n\\n` +
+      `Use */test* para verificar o status de recuperação.`;
+
+    try {
+      await enviarComFormatosCorretos(from, recoveryMsg);
+    } catch (recoveryError) {
+      console.error('❌ [RECOVERY] Falha crítica na recuperação:', recoveryError);
+    }
+  }
+}
+
+
+# .env.local (na raiz do seu projeto)
+
+# ===============================================
+# VARIÁVEIS DE AMBIENTE PARA SUPABASE
+# ===============================================
+
+# O URL do seu projeto Supabase (Pode ser público)
+NEXT_PUBLIC_SUPABASE_URL="https://xmanikuremcrmmpkao.supabase.co"
+
+# A chave pública "anon" do seu projeto Supabase (para o cliente)
+NEXT_PUBLIC_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhtYW5pa3VyZW1jcm12bW1wa2FvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMwNjU1OTMsImV4cCI6MjA3ODY0MTU5M30.DSJN4hhAnn_f8f1yisd6Vb6qtJD3lGZgIO-Zoe9UVfg"
+
+# A chave "service_role" do seu projeto Supabase (para o servidor, MANTENHA SECRETA!)
+SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhtYW5pa3VyZW1jcm11bW1wa2FvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzA2NTU5MywiZXhwIjoyMDc4NjQxNTkzfQ.OGNrjcWnXhPsSbVUtdx268Imszhz-xHQwtlVn6f9-g4"
+
+
+# ===============================================
+# VARIÁVEIS DE AMBIENTE PARA WHATSAPP
+# ===============================================
+
+# Token de verificação para o Webhook do WhatsApp (VOCÊ JÁ FORNECEU!)
+WHATSAPP_WEBHOOK_VERIFY_TOKEN="meu_token_secreto_123"
+
+# Access Token do WhatsApp (VOCÊ JÁ FORNECEU!)
+WHATSAPP_ACCESS_TOKEN="EAALmzZClluwUBPZCpB0QMYh6K2ZC9QatRqJSbuvH9KdJm61KFGlvmeDMh2IuVP7RSKQDcaQJadReaLBYZBCLJB4xCDrXjkRcRWHvqbXHOlosPraJ78lbYPZA3Hc15ZC74ZBqowlZBjZBl4NeZBBZAvveY0ReCF64wb9SM8UJ8LNZCPWR4vjjZCPiKbHPSRgZDZD"
+
+
+# ===============================================
+# OUTRAS VARIÁVEIS
+# ===============================================
+
+# Chave de criptografia para a senha do banco de dados do cliente
+# Se essa variável for usada em seu código, você precisa definir um valor secreto para ela.
+CLIENT_DB_PASSWORD_ENCRYPTION_KEY="### AQUI VOCÊ DEVE INSERIR UMA CHAVE SECRETA FORTE E ALEATÓRIA ###"
+
+# Variáveis para dados do solicitante
+DADOS_SOLICITANTE_RAJAO_SOCIAL="Carlos Kipper Ltda"
+DADOS_SOLICITANTE_CNPJ="13.408.443/0001-68"
+DADOS_SOLICITANTE_IE="090/0055324"
+DADOS_SOLICITANTE_AFE="7216566"
+DADOS_SOLICITANTE_ENDERECO="Avenida Presidente Kennedy, 1754 Bairro: Arco Iris, Panambi - RS, CEP 98280-000"
+DADOS_SOLICITANTE_TEL="55 98455 7096"
+DADOS_SOLICITANTE_EMAIL="ckipper22@gmail.com"
+DADOS_SOLICITANTE_COD_REDE=1
+DADOS_SOLICITANTE_COD_FILIAL=1
+
+// Lib/medicamentos_data.ts
+
+// Este arquivo contém dados estruturados de bulas de medicamentos (Bulário Estático).
+// Ele é usado como fonte de consulta quando o LLM (Gemini) tem restrições de segurança ou falha ao responder sobre medicamentos.
+
+export interface MedicamentoBula {
+    "Nome do Medicamento": string;
+    "Princípio(s) Ativo(s)": string[];
+    "Classe Farmacológica": string;
+    "Mecanismo de Ação": string;
+    "Indicações": string;
+    "Posologia": string;
+    "Contraindicações": string;
+    "Efeitos Colaterais": string;
+    "Advertências e Precauções": string;
+    "Interações Medicamentosas": string; // Novo campo adicionado conforme a necessidade
+}
+
+export const medicamentosData: MedicamentoBula[] = [ // Renomeado de bulasEstaticas para medicamentosData
+    {
+        "Nome do Medicamento": "Losartana",
+        "Princípio(s) Ativo(s)": ["Losartana Potássica"],
+        "Classe Farmacológica": "Antagonista do Receptor da Angiotensina II (ARA-II)",
+        "Mecanismo de Ação": "A losartana atua bloqueando seletivamente os receptores AT1 da angiotensina II, impedindo a vasoconstrição, a liberação de aldosterona e outros efeitos da angiotensina II. Isso resulta em vasodilatação, redução da pressão arterial e diminuição da retenção de sódio e água.",
+        "Indicações": "Hipertensão arterial (pressão alta), incluindo casos de hipertrofia ventricular esquerda; insuficiência cardíaca (para reduzir o risco de morbidade e mortalidade, especialmente em pacientes intolerantes a inibidores da ECA); proteção renal em pacientes com diabetes tipo 2 e proteinúria (excreção excessiva de proteínas na urina) para retardar a progressão da doença renal.",
+        "Posologia": "Adultos: A dose inicial usual para hipertensão é de 50 mg, uma vez ao dia. Para insuficiência cardíaca, a dose inicial é de 12,5 mg, uma vez ao dia. A dose pode ser ajustada pelo médico, geralmente até 100 mg/dia, dependendo da resposta do paciente e da condição clínica. A administração pode ser feita com ou sem alimentos.",
+        "Contraindicações": "Hipersensibilidade conhecida à losartana ou a qualquer componente da fórmula; gravidez (especialmente no segundo e terceiro trimestres, devido ao risco de toxicidade fetal e neonatal); lactação; uso concomitante com alisquireno em pacientes com diabetes mellitus ou insuficiência renal moderada a grave (GFR < 60 mL/min/1.73m²), devido ao aumento do risco de hipotensão, hipercalemia e piora da função renal.",
+        "Efeitos Colaterais": "Os efeitos mais comuns incluem tontura, cefaleia e fadiga. Outros efeitos podem ser hipercalemia (aumento de potássio no sangue, devido à inibição da aldosterona), hipotensão ortostática, dor abdominal, diarreia e tosse (menos comum que com inibidores da ECA). Reações mais raras, mas graves, incluem angioedema (inchaço da face, lábios, língua e/ou garganta) e alterações da função renal.",
+        "Advertências e Precauções": "É fundamental monitorar a função renal e os níveis de potássio sérico, especialmente em pacientes com insuficiência renal, insuficiência cardíaca, ou naqueles que utilizam diuréticos poupadores de potássio ou suplementos de potássio. Evitar o uso durante a gravidez e, se a gravidez for detectada, descontinuar o medicamento imediatamente. Usar com cautela em pacientes com estenose da artéria renal (risco de piora da função renal) e em pacientes com depleção de volume (desidratação), pois podem apresentar hipotensão sintomática. Interações medicamentosas importantes incluem diuréticos poupadores de potássio, suplementos de potássio, AINEs (podem reduzir o efeito anti-hipertensivo e aumentar o risco de disfunção renal) e lítio (aumenta os níveis séricos de lítio).",
+        "Interações Medicamentosas": "Interações importantes incluem diuréticos poupadores de potássio, suplementos de potássio, AINEs (podem reduzir o efeito anti-hipertensivo e aumentar o risco de disfunção renal) e lítio (aumenta os níveis séricos de lítio)."
+    },
+    {
+        "Nome do Medicamento": "Sinvastatina",
+        "Princípio(s) Ativo(s)": ["Sinvastatina"],
+        "Classe Farmacológica": "Inibidor da HMG-CoA Redutase (Estatina)",
+        "Mecanismo de Ação": "A sinvastatina atua inibindo competitivamente a enzima HMG-CoA redutase, que é a enzima limitante da biossíntese do colesterol no fígado. Ao reduzir a produção hepática de colesterol, aumenta-se o número de receptores de LDL na superfície das células hepáticas, o que leva a uma maior captação e catabolismo do LDL-colesterol do sangue, resultando na redução dos níveis de colesterol total, LDL-C e triglicerídeos e um leve aumento do HDL-C.",
+        "Indicações": "Hipercolesterolemia primária (colesterol alto) e dislipidemia mista, incluindo hipercolesterolemia familiar homozigótica e heterozigótica; hipertrigliceridemia isolada; prevenção de eventos cardiovasculares (infarto do miocárdio, acidente vascular cerebral, necessidade de revascularização) em pacientes de alto risco, como aqueles com doença arterial coronariana estabelecida, diabetes mellitus, doença vascular periférica ou histórico de AVC. Também indicada para redução do risco de morte por doença arterial coronariana.",
+        "Posologia": "Adultos: A dose inicial usualmente varia de 10 mg a 40 mg, uma vez ao dia, preferencialmente à noite. A administração noturna é recomendada porque a biossíntese do colesterol é mais ativa durante a noite. A dose pode ser ajustada pelo médico a intervalos de 4 semanas ou mais, conforme a resposta do paciente e os níveis-alvo de lipídios. A dose máxima recomendada é de 40 mg/dia para a maioria dos pacientes, embora doses mais altas (até 80 mg) possam ser usadas em situações específicas e sob estrita supervisão médica.",
+        "Contraindicações": "Hipersensibilidade à sinvastatina ou a qualquer componente da fórmula; doença hepática ativa ou elevações persistentes e inexplicáveis das transaminases séricas (enzimas hepáticas); gravidez e lactação (devido ao potencial teratogênico e à interrupção da biossíntese de esteroides essenciais para o feto/lactente); uso concomitante de inibidores potentes da CYP3A4, como itraconazol, cetoconazol, posaconazol, voriconazol (antifúngicos azólicos), eritromicina, claritromicina, telitromicina (antibióticos macrolídeos), inibidores da protease do HIV (ex: nelfinavir, atazanavir), boceprevir, telaprevir, nefazodona e gemfibrozila.",
+        "Efeitos Colaterais": "Os efeitos mais comuns são geralmente leves e transitórios, incluindo mialgia (dor muscular), dor abdominal, constipação, flatulência e cefaleia. Efeitos mais graves, embora raros, incluem miopatia (fraqueza muscular com ou sem elevação de creatina quinase - CK), rabdomiólise (lesão muscular grave que pode levar à insuficiência renal aguda) e disfunção hepática (elevação das transaminases séricas). É crucial que o paciente relate qualquer dor muscular inexplicável, sensibilidade ou fraqueza.",
+        "Advertências e Precauções": "É essencial monitorar a função hepática (enzimas transaminases) antes do início do tratamento e periodicamente durante o uso, especialmente se houver sintomas sugestivos de lesão hepática. Avaliar o risco de miopatia/rabdomiólise, que é aumentado em pacientes com fatores de risco (ex: idade avançada, hipotireoidismo não controlado, insuficiência renal, uso concomitante de certos medicamentos). Recomenda-se evitar o consumo excessivo de álcool e sumo de toranja (grapefruit juice), pois este último pode aumentar significativamente os níveis plasmáticos de sinvastatina, elevando o risco de efeitos adversos. Interações medicamentosas com amiodarona, verapamil, diltiazem e anlodipino também requerem cautela e ajuste de dose da sinvastatina.",
+        "Interações Medicamentosas": "Interações importantes com inibidores potentes da CYP3A4 (ex: antifúngicos azólicos, antibióticos macrolídeos, inibidores da protease do HIV, nefazodona, gemfibrozila), amiodarona, verapamil, diltiazem e anlodipino."
+    },
+    {
+        "Nome do Medicamento": "Diclofenaco",
+        "Princípio(s) Ativo(s)": ["Diclofenaco Sódico", "Diclofenaco Potássico"],
+        "Classe Farmacológica": "Anti-inflamatório Não Esteroidal (AINE)",
+        "Mecanismo de Ação": "O diclofenaco exerce suas ações analgésica, anti-inflamatória e antipirética principalmente através da inibição da biossíntese de prostaglandinas, que são mediadores da inflamação, dor e febre. Ele atua inibindo as enzimas ciclooxigenase-1 (COX-1) e ciclooxigenase-2 (COX-2). A inibição da COX-1 está associada a efeitos gastrointestinais, enquanto a inibição da COX-2 é responsável pelos efeitos anti-inflamatórios e analgésicos. O diclofenaco potássico tem um início de ação mais rápido que o sódico, sendo preferível para dor aguda.",
+        "Indicações": "Tratamento de dores agudas e crônicas de diversas origens (ex: dor pós-operatória, dor de dente, cólica menstrual, dor lombar, dor musculoesquelética), inflamação em condições como artrite reumatoide, osteoartrite, espondilite anquilosante, gota aguda, e também para o controle da febre (em algumas formulações e indicações específicas).",
+        "Posologia": "Adultos: A dose varia amplamente de 50 mg a 150 mg por dia, divididos em 2 ou 3 doses, dependendo da formulação (comprimidos, cápsulas, gotas, injetáveis, supositórios, géis tópicos) e da condição a ser tratada. É crucial utilizar a menor dose eficaz pelo menor tempo possível para minimizar os riscos de efeitos adversos. Para dor aguda, o diclofenaco potássico pode ser administrado em doses de 25-50 mg a cada 6-8 horas.",
+        "Contraindicações": "Hipersensibilidade conhecida ao diclofenaco, a outros AINEs (incluindo aspirina) ou a qualquer componente da fórmula; úlcera péptica ativa ou histórico de sangramento/perfuração gastrointestinal; insuficiência cardíaca grave; insuficiência hepática ou renal grave; gravidez (especialmente no terceiro trimestre, devido ao risco de fechamento prematuro do ducto arterioso fetal e disfunção renal fetal); asma, urticária ou rinite aguda precipitadas por AINEs; histórico de eventos tromboembólicos ou doença cardiovascular grave.",
+        "Efeitos Colaterais": "Os efeitos mais comuns incluem distúrbios gastrointestinais, como dor epigástrica, náuseas, vômitos, diarreia, dispepsia, dor abdominal e flatulência. Efeitos mais graves incluem úlcera gastrointestinal, sangramento ou perfuração (que podem ser fatais, especialmente em idosos), eventos trombóticos cardiovasculares (infarto do miocárdio, acidente vascular cerebral), insuficiência renal aguda, elevação das enzimas hepáticas e reações cutâneas graves (ex: síndrome de Stevens-Johnson).",
+        "Advertências e Precauções": "Devido ao risco de eventos gastrointestinais graves (sangramento, ulceração, perfuração), cardiovasculares (trombose, infarto do miocárdio, AVC) e renais (insuficiência renal aguda), o diclofenaco deve ser usado com extrema cautela. Pacientes com histórico de doenças gastrointestinais, cardíacas, renais ou hepáticas, bem como idosos, apresentam maior risco. Recomenda-se monitorar a função renal e hepática em tratamentos prolongados. Evitar em pacientes com desidratação grave. O uso concomitante com outros AINEs, anticoagulantes (ex: varfarina), antiagregantes plaquetários (ex: aspirina, clopidogrel) ou corticosteroides aumenta o risco de sangramento. Pode reduzir o efeito de diuréticos e anti-hipertensivos. Aconselha-se a menor dose e menor duração possíveis.",
+        "Interações Medicamentosas": "O uso concomitante com outros AINEs, anticoagulantes (ex: varfarina), antiagregantes plaquetários (ex: aspirina, clopidogrel) ou corticosteroides aumenta o risco de sangramento. Pode reduzir o efeito de diuréticos e anti-hipertensivos."
+    },
+    {
+        "Nome do Medicamento": "Nimesulida",
+        "Princípio(s) Ativo(s)": ["Nimesulida"],
+        "Classe Farmacológica": "Anti-inflamatório Não Esteroidal (AINE) com inibição preferencial da COX-2",
+        "Mecanismo de Ação": "A nimesulida é um AINE que atua inibindo preferencialmente a enzima ciclooxigenase-2 (COX-2), responsável pela produção de prostaglandinas mediadoras da inflamação, dor e febre. Embora tenha alguma afinidade pela COX-1, sua seletividade pela COX-2 é maior do que a de AINEs não seletivos, o que, teoricamente, poderia reduzir o risco de efeitos adversos gastrointestinais, embora esse benefício seja controverso e os riscos hepáticos sejam uma preocupação particular.",
+        "Indicações": "Tratamento de dores agudas (ex: dor de garganta, dor de dente, dores pós-operatórias, dismenorreia primária), inflamação (associada a condições como osteoartrite) e febre. É frequentemente utilizada para condições inflamatórias e dolorosas que requerem um efeito anti-inflamatório rápido.",
+        "Posologia": "Adultos: A dose usual é de 100 mg, duas vezes ao dia. A duração do tratamento deve ser a mais curta possível e não deve exceder 15 dias, devido ao risco de hepatotoxicidade. A nimesulida deve ser administrada após as refeições para minimizar a irritação gástrica.",
+        "Contraindicações": "Hipersensibilidade à nimesulida, a outros AINEs ou a qualquer componente da fórmula; úlcera péptica ativa ou histórico de sangramento/perfuração gastrointestinal; histórico de reações hepatotóxicas à nimesulida; insuficiência hepática (incluindo elevação de transaminases); insuficiência renal grave; insuficiência cardíaca grave; gravidez (terceiro trimestre) e lactação; crianças menores de 12 anos; uso concomitante de outras substâncias hepatotóxicas ou álcool em excesso.",
+        "Efeitos Colaterais": "Os efeitos mais comuns incluem dor epigástrica, náuseas, vômitos, diarreia, rash cutâneo e prurido. O principal e mais grave efeito colateral associado à nimesulida é a hepatotoxicidade (lesão hepática), que pode variar de elevações assintomáticas de enzimas hepáticas a casos raros, mas graves, de insuficiência hepática aguda, por vezes fatal. Outros efeitos incluem sangramento gastrointestinal, reações alérgicas (incluindo anafilaxia) e, menos frequentemente, efeitos renais e cardiovasculares semelhantes a outros AINEs.",
+        "Advertências e Precauções": "Devido ao risco significativo de hepatotoxicidade, a nimesulida deve ser utilizada com extrema cautela e sob estrita vigilância médica. É crucial que a duração do tratamento seja a mais curta possível e não exceda 15 dias. Pacientes devem ser instruídos a descontinuar o medicamento e procurar atendimento médico imediatamente se desenvolverem sintomas de disfunção hepática (ex: náuseas persistentes, vômitos, dor abdominal, fadiga, icterícia, urina escura). Evitar o uso concomitante com outros AINEs ou medicamentos hepatotóxicos. Usar com cautela em pacientes com histórico de doenças gastrointestinais, cardiovasculares, ou com alterações da coagulação. Monitorar a função hepática (transaminases) antes e durante o tratamento, se clinicamente indicado.",
+        "Interações Medicamentosas": "Evitar o uso concomitante com outros AINEs ou medicamentos hepatotóxicos."
+    },
+    {
+        "Nome do Medicamento": "Omeprazol",
+        "Princípio(s) Ativo(s)": ["Omeprazol"],
+        "Classe Farmacológica": "Inibidor da Bomba de Prótons (IBP)",
+        "Mecanismo de Ação": "O omeprazol é um inibidor da bomba de prótons que atua de forma irreversível na H+/K+-ATPase (bomba de prótons) nas células parietais do estômago. Esta bomba é responsável pela etapa final da secreção de ácido gástrico. Ao inibir essa bomba, o omeprazol reduz significativamente a produção de ácido, independentemente do estímulo (alimentos, histamina, gastrina, acetilcolina), proporcionando um controle eficaz da acidez gástrica.",
+        "Indicações": "Tratamento da doença do refluxo gastroesofágico (DRGE), incluindo esofagite de refluxo erosiva e não erosiva; cicatrização e prevenção de recidivas de úlceras gástricas e duodenais (incluindo úlceras associadas ao uso de AINEs); erradicação do *Helicobacter pylori* (em combinação com antibióticos apropriados); síndrome de Zollinger-Ellison (condição rara de hipersecreção ácida); e dispepsia funcional.",
+        "Posologia": "Adultos: A dose usual varia de 20 mg a 40 mg, uma vez ao dia, geralmente pela manhã, antes da primeira refeição. Para erradicação de *H. pylori*, a dose é tipicamente de 20 mg duas vezes ao dia, em combinação com antibióticos, por 7 a 14 dias. A duração do tratamento varia conforme a indicação, sendo de 4 a 8 semanas para úlceras e DRGE, e uso contínuo para síndrome de Zollinger-Ellison.",
+        "Contraindicações": "Hipersensibilidade conhecida ao omeprazol, a outros benzimidazóis substituídos (ex: pantoprazol, esomeprazol) ou a qualquer componente da fórmula; uso concomitante com nelfinavir (um antiviral) é contraindicado, pois o omeprazol pode reduzir significativamente a concentração plasmática do nelfinavir.",
+        "Efeitos Colaterais": "Os efeitos mais comuns são geralmente leves e transitórios, incluindo cefaleia, dor abdominal, diarreia, náuseas, vômitos e flatulência. Efeitos menos comuns podem incluir tontura, erupções cutâneas, prurido, parestesias (sensação de formigamento) e boca seca. O uso prolongado (especialmente por mais de um ano) tem sido associado a um risco aumentado de fraturas ósseas (principalmente de quadril, punho e coluna), deficiência de vitamina B12 (devido à redução da absorção), hipomagnesemia (níveis baixos de magnésio no sangue), nefrite intersticial aguda e aumento do risco de infecções gastrointestinais (ex: *Clostridium difficile*).",
+        "Advertências e Precauções": "Antes de iniciar o tratamento com omeprazol, é fundamental excluir a possibilidade de malignidade gástrica (câncer de estômago), pois o medicamento pode mascarar os sintomas. O uso prolongado (mais de um ano) requer monitoramento médico regular para avaliar os riscos potenciais, como deficiência de B12, hipomagnesemia e fraturas. Pacientes com DRGE crônica devem ter cautela ao interromper o tratamento, pois pode ocorrer 'rebote' ácido, com piora dos sintomas. Interações medicamentosas importantes incluem clopidogrel (o omeprazol pode reduzir a eficácia antiplaquetária), varfarina (potencial aumento do INR), metotrexato (aumento dos níveis de metotrexato) e medicamentos cuja absorção depende do pH gástrico (ex: cetoconazol, digoxina).",
+        "Interações Medicamentosas": "Interações importantes incluem clopidogrel (o omeprazol pode reduzir a eficácia antiplaquetária), varfarina (potencial aumento do INR), metotrexato (aumento dos níveis de metotrexato) e medicamentos cuja absorção depende do pH gástrico (ex: cetoconazol, digoxina)."
+    },
+    {
+        "Nome do Medicamento": "Pantoprazol",
+        "Princípio(s) Ativo(s)": ["Pantoprazol Sódico Sesqui-hidratado"],
+        "Classe Farmacológica": "Inibidor da Bomba de Prótons (IBP)",
+        "Mecanismo de Ação": "O pantoprazol, assim como outros IBPs, é um inibidor seletivo e irreversível da H+/K+-ATPase (bomba de prótons) nas células parietais gástricas. Ele se liga covalentemente à bomba, inibindo a secreção de ácido clorídrico no lúmen gástrico. Sua ação é prolongada e independente do estímulo, proporcionando um controle eficaz da acidez gástrica e permitindo a cicatrização de lesões esofágicas e gástricas.",
+        "Indicações": "Tratamento da doença do refluxo gastroesofágico (DRGE), incluindo esofagite de refluxo erosiva; cicatrização e prevenção de recidivas de úlceras gástricas e duodenais (incluindo úlceras induzidas por AINEs); erradicação do *Helicobacter pylori* (em combinação com antibióticos); síndrome de Zollinger-Ellison e outras condições de hipersecreção patológica.",
+        "Posologia": "Adultos: A dose usual varia de 20 mg a 40 mg, uma vez ao dia, preferencialmente pela manhã, antes da primeira refeição. Para erradicação de *H. pylori*, a dose é tipicamente de 40 mg duas vezes ao dia, em combinação com antibióticos, por 7 a 14 dias. A duração do tratamento depende da indicação e da resposta clínica, variando de algumas semanas a uso contínuo em casos específicos.",
+        "Contraindicações": "Hipersensibilidade conhecida ao pantoprazol, a outros benzimidazóis substituídos ou a qualquer componente da fórmula. O uso concomitante com nelfinavir (um antiviral) é contraindicado, devido ao risco de redução significativa da concentração plasmática do nelfinavir.",
+        "Efeitos Colaterais": "Os efeitos mais comuns são geralmente leves e transitórios, incluindo cefaleia, dor abdominal superior, diarreia, constipação, náuseas, vômitos e flatulência. Efeitos menos comuns podem incluir tontura, urticária, boca seca e reações alérgicas. O uso prolongado (especialmente por mais de um ano) tem sido associado a um risco aumentado de fraturas ósseas, deficiência de vitamina B12 e hipomagnesemia. Há também um risco potencial, embora raro, de nefrite intersticial aguda e infecções por *Clostridium difficile*.",
+        "Advertências e Precauções": "É crucial excluir a possibilidade de malignidade gástrica antes de iniciar o tratamento com pantoprazol, pois os sintomas podem ser mascarados. O uso prolongado (mais de um ano) requer monitoramento médico regular para avaliar os riscos potenciais associados, como deficiência de B12, hipomagnesemia e fraturas. O pantoprazol tem menos interações medicamentosas clinicamente significativas mediadas pelo CYP2C19 em comparação com omeprazol e esomeprazol, o que pode ser uma vantagem em pacientes que usam clopidogrel. No entanto, ainda deve-se ter cautela com medicamentos cuja absorção depende do pH gástrico e com metotrexato (risco de aumento dos níveis).",
+        "Interações Medicamentosas": "O pantoprazol tem menos interações clinicamente significativas mediadas pelo CYP2C19 em comparação com omeprazol e esomeprazol. Deve-se ter cautela com medicamentos cuja absorção depende do pH gástrico e com metotrexato."
+    },
+    {
+        "Nome do Medicamento": "Esomeprazol",
+        "Princípio(s) Ativo(s)": ["Esomeprazol Magnésico", "Esomeprazol Sódico"],
+        "Classe Farmacológica": "Inibidor da Bomba de Prótons (IBP)",
+        "Mecanismo de Ação": "O esomeprazol é o S-enantiômero do omeprazol e atua como um inibidor seletivo e irreversível da H+/K+-ATPase (bomba de prótons) nas células parietais do estômago. Sua formulação como S-enantiômero confere-lhe uma maior biodisponibilidade e um perfil farmacocinético mais consistente em comparação com o omeprazol, resultando em uma inibição ácida mais potente e prolongada. Ele bloqueia a etapa final da produção de ácido, independentemente do estímulo.",
+        "Indicações": "Tratamento da doença do refluxo gastroesofágico (DRGE), incluindo cicatrização de esofagite erosiva e manutenção da cicatrização para prevenir recidivas; tratamento sintomático da DRGE; cicatrização e prevenção de úlceras gástricas e duodenais (incluindo as associadas ao uso de AINEs); erradicação do *Helicobacter pylori* (em combinação com antibióticos); síndrome de Zollinger-Ellison e outras condições de hipersecreção patológica.",
+        "Posologia": "Adultos: A dose usual varia de 20 mg a 40 mg, uma vez ao dia, preferencialmente pela manhã, pelo menos uma hora antes da refeição. Para erradicação de *H. pylori*, a dose é tipicamente de 20 mg ou 40 mg duas vezes ao dia, em combinação com antibióticos, por 7 a 14 dias. A duração do tratamento é determinada pela indicação e resposta clínica, variando de algumas semanas a uso contínuo em condições crônicas.",
+        "Contraindicações": "Hipersensibilidade conhecida ao esomeprazol, a outros benzimidazóis substituídos ou a qualquer componente da fórmula. O uso concomitante com nelfinavir (um antiviral) é contraindicado, pois o esomeprazol pode reduzir significativamente a concentração plasmática do nelfinavir.",
+        "Efeitos Colaterais": "Os efeitos mais comuns são geralmente leves e transitórios, incluindo cefaleia, dor abdominal, diarreia, náuseas, vômitos e flatulência. Efeitos menos comuns podem incluir tontura, boca seca, erupção cutânea e urticária. O uso prolongado (especialmente por mais de um ano) tem sido associado a um risco aumentado de fraturas ósseas (principalmente de quadril, punho e coluna), deficiência de vitamina B12 e hipomagnesemia. Há também um risco potencial, embora raro, de nefrite intersticial aguda e aumento do risco de infecções por *Clostridium difficile*.",
+        "Advertências e Precauções": "É fundamental excluir a possibilidade de malignidade gástrica antes de iniciar o tratamento com esomeprazol, pois os sintomas podem ser mascarados. O uso prolongado (mais de um ano) requer monitoramento médico regular para avaliar os riscos potenciais associados, como deficiência de B12, hipomagnesemia e fraturas. Pacientes com DRGE crônica devem ter cautela ao interromper o tratamento, pois pode ocorrer 'rebote' ácido. O esomeprazol, assim como o omeprazol, pode interagir com o clopidogrel, reduzindo sua eficácia antiplaquetária, embora a relevância clínica dessa interação seja debatida e dependa da dose e duração. Outras interações importantes incluem varfarina (potencial aumento do INR), metotrexato (aumento dos níveis de metotrexato) e medicamentos cuja absorção depende do pH gástrico.",
+        "Interações Medicamentosas": "O esomeprazol, assim como o omeprazol, pode interagir com o clopidogrel, reduzindo sua eficácia antiplaquetária. Outras interações importantes incluem varfarina (potencial aumento do INR), metotrexato (aumento dos níveis de metotrexato) e medicamentos cuja absorção depende do pH gástrico."
+    }
+];
+
+// Mapeamento dos termos de busca do usuário para as chaves da interface MedicamentoBula
+const infoTypeMap: { [key: string]: keyof MedicamentoBula } = {
+    "classe terapeutica": "Classe Farmacológica",
+    "posologia": "Posologia",
+    "indicacoes": "Indicações",
+    "efeitos colaterais": "Efeitos Colaterais",
+    "contraindicacoes": "Contraindicações",
+    "mecanismo de acao": "Mecanismo de Ação",
+    "interacoes medicamentosas": "Interações Medicamentosas",
+};
+
+/**
+ * Função para buscar informações específicas de um medicamento em nossa base de dados estática.
+ *
+ * @param drugName O nome do medicamento a ser buscado.
+ * @param infoType O tipo de informação desejada (ex: "posologia", "efeitos colaterais", "tudo").
+ * @returns Uma string contendo a informação solicitada ou uma mensagem de "não encontrado".
+ */
+export function getMedicamentoInfo(drugName: string, infoType: string): string {
+    const termoBuscaMedicamento = drugName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    const medicamentoEncontrado = medicamentosData.find(bula =>
+        bula["Nome do Medicamento"].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(termoBuscaMedicamento)
+    );
+
+    if (!medicamentoEncontrado) {
+        return `Não encontrei informações sobre o medicamento '${drugName}' em nossa base de dados.`;
+    }
+
+    // Caso o usuário peça por "tudo" ou "informações completas"
+    if (infoType === "tudo") {
+        let fullInfo = `Informações completas sobre **${medicamentoEncontrado["Nome do Medicamento"]}**:\n\n`;
+        // Excluir "Nome do Medicamento" e "Advertências e Precauções" para evitar redundância e melhorar a leitura.
+        const excludedKeys: Array<keyof MedicamentoBula> = ["Nome do Medicamento", "Advertências e Precauções"];
+
+        for (const key in medicamentoEncontrado) {
+            const typedKey = key as keyof MedicamentoBula;
+            if (!excludedKeys.includes(typedKey)) {
+                const value = medicamentoEncontrado[typedKey];
+                fullInfo += `* **${key}:** ${Array.isArray(value) ? value.join(', ') : value}\n`;
+            }
+        }
+        return fullInfo;
+    }
+
+    const mappedInfoType = infoTypeMap[infoType];
+
+    if (!mappedInfoType) {
+        // Se o tipo de informação solicitado não for mapeado
+        return `Não tenho a informação específica sobre '${infoType}' para o medicamento '${medicamentoEncontrado["Nome do Medicamento"]}'. Por favor, tente termos como 'classe terapeutica', 'posologia', 'indicacoes', 'efeitos colaterais', 'contraindicacoes', 'mecanismo de acao', 'interacoes medicamentosas' ou 'tudo'.`;
+    }
+
+    const info = medicamentoEncontrado[mappedInfoType];
+
+    if (info) {
+        return `* **${mappedInfoType}** do medicamento **${medicamentoEncontrado["Nome do Medicamento"]}**: ${Array.isArray(info) ? info.join(', ') : info}`;
+    } else {
+        // Se o campo existe na interface mas está vazio no dado
+        return `Não encontrei a informação de '${mappedInfoType}' para o medicamento '${medicamentoEncontrado["Nome do Medicamento"]}'.`;
+    }
+}
