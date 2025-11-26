@@ -112,6 +112,25 @@ The application is configured to run automatically via the "Next.js Dev Server" 
 2. Changes are automatically reflected due to hot module replacement
 3. Check the workflow logs for any errors
 
+### Dependencies Installation
+Dependencies were successfully installed on November 26, 2025 using:
+```bash
+npm install --legacy-peer-deps
+```
+
+The `--legacy-peer-deps` flag was required due to React 19 compatibility issues with `react-day-picker@8.10.1`. All 894 packages are installed and functional.
+
+### Deployment Configuration
+The application is configured for autoscale deployment with:
+- **Build command**: `npm run build`
+- **Start command**: `npm run start` (runs on 0.0.0.0:5000)
+- **Deployment target**: Autoscale (stateless, scales with traffic)
+
+This configuration is suitable for the WhatsApp Bot Backend as it:
+- Can scale up/down based on webhook traffic
+- Doesn't maintain critical state in server memory (uses localStorage on client)
+- Works well with the stateless nature of the API endpoints
+
 ### API Endpoints
 
 All API routes are in `src/app/api/`:
@@ -137,6 +156,13 @@ No specific user preferences have been set yet.
 The following packages show deprecation warnings but are still functional:
 - `@supabase/auth-helpers-*` packages (should migrate to `@supabase/ssr`)
 - `eslint@8.57.0` (EOL, should upgrade to v9+)
+
+### Supabase Configuration (Optional)
+The application now gracefully handles missing Supabase environment variables:
+- If `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are not set, the SupabaseClientProvider will simply pass through the children without wrapping them in SessionContextProvider
+- This allows the core chatbot functionality to work without Supabase
+- To use Supabase features (authentication, database), add the required environment variables in the Secrets tab
+- The application will automatically detect and enable Supabase functionality when the variables are present
 
 ## Next Steps
 
