@@ -23,45 +23,87 @@ export class WhatsAppAPI {
     };
   }
 
-  async sendTextMessage(to: string, text: string): Promise<WhatsAppMessage> {
-    const url = `${this.getBaseUrl()}/messages`;
-    
-    const payload = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: to.replace(/\D/g, ''),
-      type: 'text',
-      text: {
-        preview_url: false,
-        body: text,
-      },
-    };
+  private normalizePhoneNumber(phone: string): string[] {
+    const numeroLimpo = phone.replace(/\D/g, '');
+    const formatos = new Set<string>();
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(payload),
-    });
+    // 1. Adiciona o número limpo original
+    formatos.add(numeroLimpo);
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error?.message || 'Failed to send message');
+    // 2. Lógica para adicionar 9º dígito em números BR (55 + DDD + 8 dígitos)
+    if (numeroLimpo.length === 12 && numeroLimpo.startsWith('55')) {
+      const ddd = numeroLimpo.substring(2, 4);
+      const numeroSemDDIeDDD = numeroLimpo.substring(4);
+
+      // Se tiver 8 dígitos e NÃO começar com fixo (1-5), assume que é celular e adiciona o 9
+      if (numeroSemDDIeDDD.length === 8 && !['1', '2', '3', '4', '5'].includes(numeroSemDDIeDDD.charAt(0))) {
+        const numeroComNove = '55' + ddd + '9' + numeroSemDDIeDDD;
+        formatos.add(numeroComNove);
+      }
     }
 
-    const result = await response.json();
+    // 3. Caso o número já tenha 13 dígitos (55 + DDD + 9 + 8), tenta versão sem o 9 também (alguns sistemas antigos)
+    if (numeroLimpo.length === 13 && numeroLimpo.startsWith('55')) {
+      // Opcional, mas seguro
+      // formatos.add(numeroLimpo); // já adicionado
+    }
 
-    return {
-      id: result.messages[0].id,
-      from: this.config.phone_number_id,
-      to: to.replace(/\D/g, ''),
-      timestamp: new Date().toISOString(),
-      type: 'text',
-      direction: 'outbound',
-      status: 'sent',
-      content: {
-        text,
-      },
-    };
+    return Array.from(formatos);
+  }
+
+  async sendTextMessage(to: string, text: string): Promise<WhatsAppMessage> {
+    const formats = this.normalizePhoneNumber(to);
+    let lastError: any;
+
+    for (const phone of formats) {
+      try {
+        const url = `${this.getBaseUrl()}/messages`;
+
+        const payload = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: phone,
+          type: 'text',
+          text: {
+            preview_url: false,
+            body: text,
+          },
+        };
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          // Se for erro de destinatário (131030), lançamos para tentar o próximo formato
+          throw new Error(error.error?.message || 'Failed to send message');
+        }
+
+        const result = await response.json();
+
+        return {
+          id: result.messages[0].id,
+          from: this.config.phone_number_id,
+          to: phone,
+          timestamp: new Date().toISOString(),
+          type: 'text',
+          direction: 'outbound',
+          status: 'sent',
+          content: {
+            text,
+          },
+        };
+      } catch (error) {
+        // Guarda erro e tenta próximo formato
+        lastError = error;
+      }
+    }
+
+    // Se saiu do loop, todos falharam
+    throw lastError;
   }
 
   async sendMediaMessage(
