@@ -1,6 +1,9 @@
 // src/app/api/whatsapp/webhook/route.ts
+// ====================================================================================
+// WEBHOOK FINAL - SEM BASE LOCAL, SÓ API + GOOGLE CSE FALLBACK (MEDICAL BLOCK)
+// ====================================================================================
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // =========================================================================
 // CONFIGURAÇÃO DAS VARIÁVEIS DE AMBIENTE
@@ -275,8 +278,11 @@ async function interpretarComGemini(mensagem: string): Promise<{ resposta: strin
     const model = genAI.getGenerativeModel({
       model: 'gemini-1.5-flash',
       safetySettings: [
-        { category: HarmCategory.HARM_CATEGORY_MEDICAL, threshold: HarmBlockThreshold.BLOCK_NONE },
-      ]
+        {
+          category: 'HARM_CATEGORY_MEDICAL' as const,
+          threshold: 'BLOCK_NONE' as const,
+        },
+      ],
     });
 
     const prompt = `Você é um assistente de farmácia. Responda com clareza, mas NUNCA dê conselhos médicos.
@@ -288,7 +294,7 @@ Mensagem: "${mensagem}"`;
 
     const safetyRatings = response.candidates?.[0]?.safetyRatings || [];
     const isMedicalBlocked = safetyRatings.some(r =>
-      r.category === HarmCategory.HARM_CATEGORY_MEDICAL &&
+      r.category === 'HARM_CATEGORY_MEDICAL' &&
       (r.probability === 'HIGH' || r.probability === 'VERY_HIGH')
     );
 
@@ -298,6 +304,7 @@ Mensagem: "${mensagem}"`;
 
     return { resposta: response.text, usarCSE: false };
   } catch (error) {
+    console.error('❌ Erro Gemini:', error);
     return { resposta: '', usarCSE: true };
   }
 }
@@ -336,7 +343,6 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
 
   const termo = messageText.trim();
   if (termo.length >= 2 && hasFlaskConfig && FLASK_API_URL) {
-    // Buscar na API da farmácia (sem fallback local)
     try {
       const res = await fetch(`${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(termo)}`, {
         headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' }
