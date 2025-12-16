@@ -17,7 +17,10 @@ const GOOGLE_CSE_CX = process.env.CUSTOM_SEARCH_CX;
 // Inicializar API do WhatsApp
 const whatsapp = new WhatsAppAPI({
     access_token: WHATSAPP_ACCESS_TOKEN || '',
-    phone_number_id: WHATSAPP_PHONE_NUMBER_ID || ''
+    phone_number_id: WHATSAPP_PHONE_NUMBER_ID || '',
+    webhook_verify_token: WHATSAPP_VERIFY_TOKEN || '',
+    is_active: true,
+    webhook_url: ''
 });
 
 // =========================================================================
@@ -44,7 +47,7 @@ function ehPerguntaMedicaOuMedicamento(mensagem: string): boolean {
 function extrairTermoBuscaInteligente(mensagem: string): { buscar: boolean, termo: string } {
     const msgMin = mensagem.toLowerCase().trim();
     if (ehSaudacao(msgMin) || ehPerguntaMedicaOuMedicamento(msgMin)) return { buscar: false, termo: '' };
-    
+
     // Simplificado para focar na intenção do usuário
     // Se a mensagem for curta e não for saudação/médica, assume que pode ser produto
     const palavras = msgMin.split(' ');
@@ -67,23 +70,23 @@ async function enviarComFormatosCorretos(to: string, text: string) {
 
 async function buscaGoogleFallback(consulta: string): Promise<string> {
     if (!GOOGLE_CSE_KEY || !GOOGLE_CSE_CX) return '⚠️ Busca de backup indisponível no momento.';
-    
+
     try {
         const url = new URL('https://www.googleapis.com/customsearch/v1');
         url.searchParams.set('key', GOOGLE_CSE_KEY);
         url.searchParams.set('cx', GOOGLE_CSE_CX);
         url.searchParams.set('q', consulta);
-        
+
         const res = await fetch(url.toString());
         const data = await res.json();
-        
+
         if (!data.items?.length) return '🔍 Não encontrei informações específicas.';
-        
+
         let resposta = `🔍 *Informações sobre "${consulta}":*\n\n`;
         data.items.slice(0, 2).forEach((item: any) => {
             resposta += `• *${item.title}*\n${item.snippet}\n\n`;
         });
-        
+
         return resposta + '⚠️ Informações da web. Consulte um profissional.';
     } catch (e) {
         console.error('Erro Google CSE:', e);
@@ -93,18 +96,18 @@ async function buscaGoogleFallback(consulta: string): Promise<string> {
 
 async function buscarProdutoNaApi(termo: string): Promise<string> {
     if (!FLASK_API_URL) return '⚠️ Sistema de produtos indisponível.';
-    
+
     try {
         const res = await fetch(`${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(termo)}`);
         const data = await res.json();
-        
+
         if (!data.data?.length) return `🔍 Nenhum produto encontrado para "*${termo}*".`;
-        
+
         let resposta = `🔍 *Resultados para "${termo}":*\n\n`;
         data.data.slice(0, 5).forEach((p: any) => {
             resposta += `▪️ *${p.nome_produto}*\n💰 ${p.preco_final_venda || 'Consultar'}\n📦 Estoque: ${p.qtd_estoque || 0}\n\n`;
         });
-        
+
         return resposta;
     } catch (e) {
         console.error('Erro Flask API:', e);
@@ -114,23 +117,23 @@ async function buscarProdutoNaApi(termo: string): Promise<string> {
 
 async function interpretarComGemini(mensagem: string): Promise<{ resposta: string, usarCSE: boolean }> {
     if (!GEMINI_API_KEY) return { resposta: '', usarCSE: true };
-    
+
     try {
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-        
+
         const prompt = `Você é um assistente de farmácia útil e amigável.
         Responda à mensagem: "${mensagem}".
         Não dê conselhos médicos perigosos. Se não souber, diga que não sabe.`;
-        
+
         const result = await model.generateContent(prompt);
         const text = result.response.text();
-        
+
         // Verifica recusas simples
         if (text.toLowerCase().includes('não posso') && text.toLowerCase().includes('médico')) {
             return { resposta: '', usarCSE: true };
         }
-        
+
         return { resposta: text, usarCSE: false };
     } catch (e) {
         console.error('Erro Gemini:', e);
@@ -151,8 +154,8 @@ async function processarMensagemCompleta(de: string, texto: string) {
         const produtos = await buscarProdutoNaApi(termo);
         // Se a busca retornou resultados, envia. Se não (erro ou vazio), tenta conversa.
         if (!produtos.startsWith('🔍 Nenhum')) {
-           await enviarComFormatosCorretos(de, produtos);
-           return;
+            await enviarComFormatosCorretos(de, produtos);
+            return;
         }
         // Se não achou produto, continua para tentar Gemini (talvez seja conversa)
     }
@@ -171,7 +174,7 @@ async function processarMensagemCompleta(de: string, texto: string) {
         await enviarComFormatosCorretos(de, fallback);
         return;
     }
-    
+
     if (resposta) {
         await enviarComFormatosCorretos(de, resposta);
     }
@@ -179,7 +182,7 @@ async function processarMensagemCompleta(de: string, texto: string) {
 
 export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
-    if (searchParams.get('hub.mode') === 'subscribe' && 
+    if (searchParams.get('hub.mode') === 'subscribe' &&
         searchParams.get('hub.verify_token') === WHATSAPP_VERIFY_TOKEN) {
         return new NextResponse(searchParams.get('hub.challenge'), { status: 200 });
     }
