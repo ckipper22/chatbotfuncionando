@@ -468,11 +468,11 @@ async function interpretarComGemini(mensagem: string): Promise<{ resposta: strin
   try {
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY!);
     const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      safetySettings: [
-        { category: HarmCategory.HARM_CATEGORY_MEDICAL, threshold: HarmBlockThreshold.BLOCK_NONE },
-      ]
-    });
+  model: 'gemini-1.5-flash',
+  safetySettings: [
+    { category: 'HARM_CATEGORY_MEDICAL', threshold: 'BLOCK_NONE' },
+  ]
+});
 
     const prompt = `Você é um assistente de farmácia. Responda com clareza, mas NUNCA dê conselhos médicos.
 Se a pergunta for sobre posologia, efeitos colaterais, contraindicações, etc., responda: "Sou um assistente virtual e não posso fornecer orientações médicas. Consulte um farmacêutico."
