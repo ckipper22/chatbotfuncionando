@@ -155,11 +155,15 @@ async function interpretarComGemini(mensagem: string): Promise<{ resposta: strin
         console.log(`🔑 [GEMINI DEBUG] API Key presente: ${GEMINI_API_KEY.substring(0, 5)}...`);
 
         // Modelos para tentar (da versão mais nova/rápida para a mais estável)
-        // Usando versões específicas para evitar erros de alias (404)
+        // Usando versões específicas (001/002) para evitar erros de alias (404)
         const modelsToTest = [
             'gemini-1.5-flash',
+            'gemini-1.5-flash-001',
+            'gemini-1.5-flash-002',
             'gemini-1.5-flash-latest',
-            'gemini-1.5-pro-latest',
+            'gemini-1.5-pro',
+            'gemini-1.5-pro-001',
+            'gemini-1.5-pro-002',
             'gemini-pro',
             'gemini-1.0-pro'
         ];
