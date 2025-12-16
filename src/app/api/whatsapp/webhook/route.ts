@@ -26,7 +26,12 @@ const whatsapp = new WhatsAppAPI({
 // =========================================================================
 // DETECTORES INTELIGENTES
 // =========================================================================
-const SAUDACOES = ['olá', 'ola', 'oi', 'tudo bem', 'bom dia', 'boa tarde', 'boa noite', 'hey', 'hello', 'hi', 'eae', 'opa'];
+// =========================================================================
+// DETECTORES INTELIGENTES
+// =========================================================================
+// Mantenha apenas saudações curtas/diretas que exigem menu imediato.
+// "tudo bem", "como vai" devem passar para o Gemini.
+const SAUDACOES = ['olá', 'ola', 'oi', 'hey', 'hello', 'hi', 'eae', 'opa', 'menu', 'inicio', 'início'];
 
 function ehSaudacao(mensagem: string): boolean {
     const msgLimpa = mensagem.toLowerCase().replace(/[?!.,]/g, '').trim();
@@ -45,13 +50,26 @@ function ehPerguntaMedicaOuMedicamento(mensagem: string): boolean {
 }
 
 function extrairTermoBuscaInteligente(mensagem: string): { buscar: boolean, termo: string } {
-    const msgMin = mensagem.toLowerCase().trim();
+    let msgMin = mensagem.toLowerCase().trim();
+
+    // Stopwords para remover
+    const stopWords = ['tem', 'gostaria', 'quero', 'preciso', 'você tem', 'voce tem', 'buscar', 'preço', 'valor', 'quanto custa', 'o', 'a', 'do', 'da', 'de'];
+
+    // Remove pontuação final
+    msgMin = msgMin.replace(/[?!.,]*$/, '');
+
+    // Verifica se começa com alguma stopword e limpa
+    for (const word of stopWords) {
+        if (msgMin.startsWith(word + ' ')) {
+            msgMin = msgMin.substring(word.length).trim();
+        }
+    }
+
     if (ehSaudacao(msgMin) || ehPerguntaMedicaOuMedicamento(msgMin)) return { buscar: false, termo: '' };
 
-    // Simplificado para focar na intenção do usuário
-    // Se a mensagem for curta e não for saudação/médica, assume que pode ser produto
     const palavras = msgMin.split(' ');
-    if (palavras.length < 5) {
+    // Se sobrou algo curto (1-4 palavras), assume que é busca de produto
+    if (palavras.length > 0 && palavras.length < 5) {
         return { buscar: true, termo: msgMin };
     }
     return { buscar: false, termo: '' };
@@ -65,9 +83,6 @@ async function enviarComFormatosCorretos(to: string, text: string) {
         await whatsapp.sendTextMessage(to, text);
     } catch (error: any) {
         console.error('Erro ao enviar mensagem:', error);
-        if (error.toString().includes('131030') || error.message?.includes('131030')) {
-            console.error('⚠️ DICA IMPORTANTE: Seu app está em modo DEV. O número de destino não está na lista de testadores permitidos. Adicione-o no painel da Meta (WhatsApp > API Setup) ou mude o app para modo Live.');
-        }
     }
 }
 
@@ -106,9 +121,19 @@ async function buscarProdutoNaApi(termo: string): Promise<string> {
 
         if (!data.data?.length) return `🔍 Nenhum produto encontrado para "*${termo}*".`;
 
-        let resposta = `🔍 *Resultados para "${termo}":*\n\n`;
+        let resposta = `🔍 *Resultados da busca por "${termo}":*\n\n`;
         data.data.slice(0, 5).forEach((p: any) => {
-            resposta += `▪️ *${p.nome_produto}*\n💰 ${p.preco_final_venda || 'Consultar'}\n📦 Estoque: ${p.qtd_estoque || 0}\n\n`;
+            const preco = p.preco_final_venda || 'R$ 0,00';
+            const estoque = p.qtd_estoque || 0;
+            const codigo = p.cod_reduzido || p.codigo || '000000';
+            const laboratorio = p.nom_laboratorio || p.laboratorio || '';
+
+            resposta += `▪️ *${p.nome_produto}*\n`;
+            if (laboratorio) resposta += `   💊 ${laboratorio}\n`;
+            resposta += `   💰 ${preco}\n`;
+            resposta += `   📦 Estoque: ${estoque} unidades\n`;
+            resposta += `   📋 Código: ${codigo}\n`;
+            resposta += `   Para adicionar ao carrinho, digite: *COMPRAR ${codigo}*\n\n`;
         });
 
         return resposta;
