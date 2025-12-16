@@ -154,33 +154,58 @@ async function interpretarComGemini(mensagem: string): Promise<{ resposta: strin
         console.log(`🤖 [GEMINI DEBUG] Iniciando chamada para: "${mensagem}"`);
         console.log(`🔑 [GEMINI DEBUG] API Key presente: ${GEMINI_API_KEY.substring(0, 5)}...`);
 
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        // Tentar usar o modelo gemini-pro que é mais estável na versão atual da lib
-        const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+        // Modelos para tentar (da versão mais nova/rápida para a mais estável)
+        const modelsToTest = ['gemini-1.5-flash', 'gemini-pro', 'gemini-1.0-pro'];
+        let lastError: any;
 
-        const prompt = `Você é um assistente de farmácia útil e amigável.
-        Responda à mensagem do cliente: "${mensagem}".
-        
-        DIRETRIZES:
-        1. Responda SEMPRE em Português do Brasil.
-        2. Seja cordial e direto.
-        3. Não dê conselhos médicos perigosos ou prescrições. Se não souber, diga que não sabe.
-        4. Se perguntarem sobre preço ou estoque, diga que não tem acesso em tempo real e peça para digitar o nome do produto para busca.
-        
-        Responda agora:`;
+        for (const modelName of modelsToTest) {
+            try {
+                console.log(`🤖 [GEMINI DEBUG] Tentando modelo: "${modelName}"...`);
 
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
+                const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+                const model = genAI.getGenerativeModel({ model: modelName });
 
-        console.log(`✅ [GEMINI DEBUG] Resposta recebida: "${text.substring(0, 100)}..."`);
+                const prompt = `Você é um assistente de farmácia útil e amigável.
+            Responda à mensagem do cliente: "${mensagem}".
 
-        // Verifica recusas simples
-        if (text.toLowerCase().includes('não posso') && text.toLowerCase().includes('médico')) {
-            console.warn('⚠️ [GEMINI DEBUG] Gemini recusou responder (filtro médico).');
-            return { resposta: '', usarCSE: true };
+            DIRETRIZES:
+            1. Responda SEMPRE em Português do Brasil.
+            2. Seja cordial e direto.
+            3. Não dê conselhos médicos perigosos ou prescrições. Se não souber, diga que não sabe.
+            4. Se perguntarem sobre preço ou estoque, diga que não tem acesso em tempo real e peça para digitar o nome do produto para busca.
+
+            Responda agora:`;
+
+                const result = await model.generateContent(prompt);
+                const text = result.response.text();
+
+                console.log(`✅ [GEMINI DEBUG] Sucesso com modelo ${modelName}! Resposta: "${text.substring(0, 50)}..."`);
+
+                // Verifica recusas simples
+                if (text.toLowerCase().includes('não posso') && text.toLowerCase().includes('médico')) {
+                    console.warn('⚠️ [GEMINI DEBUG] Gemini recusou responder (filtro médico).');
+                    return { resposta: '', usarCSE: true };
+                }
+
+                return { resposta: text, usarCSE: false };
+
+            } catch (e: any) {
+                console.warn(`⚠️ [GEMINI DEBUG] Falha no modelo ${modelName}: ${e.message}`);
+                lastError = e;
+                // Se o erro for de API Key inválida ou cota, não adianta tentar outros modelos
+                if (e.toString().includes('API key not valid') || e.toString().includes('429')) {
+                    break;
+                }
+                continue; // Tenta o próximo
+            }
         }
 
-        return { resposta: text, usarCSE: false };
+        // Se chegou aqui, todos falharam
+        console.error('❌ [GEMINI DEBUG] Todos os modelos falharam.');
+        if (lastError) {
+            console.error('Último erro:', lastError);
+        }
+        return { resposta: '', usarCSE: true };
     } catch (e: any) {
         console.error('❌ [GEMINI DEBUG] Erro GRAVE ao chamar Gemini:');
         console.error(e);
