@@ -1,6 +1,5 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { WhatsAppAPI } from '@/lib/whatsapp-api';
 
 // =========================================================================
@@ -144,90 +143,101 @@ async function buscarProdutoNaApi(termo: string): Promise<string> {
 }
 
 async function interpretarComGemini(mensagem: string): Promise<{ resposta: string, usarCSE: boolean }> {
-    // DEBUG: Verificar se a chave existe
     if (!GEMINI_API_KEY) {
         console.error('❌ [GEMINI DEBUG] API Key não encontrada nas variáveis de ambiente!');
         return { resposta: '', usarCSE: true };
     }
 
-    try {
-        console.log(`🤖 [GEMINI DEBUG] Iniciando chamada para: "${mensagem}"`);
-        console.log(`🔑 [GEMINI DEBUG] API Key presente: ${GEMINI_API_KEY.substring(0, 5)}...`);
+    // Modelos para tentar (da versão mais nova/rápida para a mais estável)
+    const modelsToTest = [
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-pro',
+        'gemini-pro',
+        'gemini-1.0-pro'
+    ];
+    let lastError: any;
 
-        // Modelos para tentar (da versão mais nova/rápida para a mais estável)
-        // Usando versões específicas (001/002) para evitar erros de alias (404)
-        const modelsToTest = [
-            'gemini-1.5-flash',
-            'gemini-1.5-flash-001',
-            'gemini-1.5-flash-002',
-            'gemini-1.5-flash-latest',
-            'gemini-1.5-pro',
-            'gemini-1.5-pro-001',
-            'gemini-1.5-pro-002',
-            'gemini-pro',
-            'gemini-1.0-pro'
-        ];
-        let lastError: any;
+    console.log(`🤖 [GEMINI REST] Iniciando chamada para: "${mensagem.substring(0, 20)}..."`);
+    console.log(`🔑 [GEMINI REST] API Key presente: ${GEMINI_API_KEY.substring(0, 5)}...`);
 
-        for (const modelName of modelsToTest) {
-            try {
-                console.log(`🤖 [GEMINI DEBUG] Tentando modelo: "${modelName}"...`);
+    for (const modelName of modelsToTest) {
+        try {
+            console.log(`🤖 [GEMINI REST] Tentando modelo (v1): "${modelName}"...`);
 
-                const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-                const model = genAI.getGenerativeModel({ model: modelName });
+            // Usando API v1 REST diretamente para evitar erros da biblioteca (404 em v1beta)
+            const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
 
-                const prompt = `Você é um assistente de farmácia útil e amigável.
+            const prompt = `Você é um assistente de farmácia útil e amigável.
             Responda à mensagem do cliente: "${mensagem}".
-
+            
             DIRETRIZES:
             1. Responda SEMPRE em Português do Brasil.
             2. Seja cordial e direto.
             3. Não dê conselhos médicos perigosos ou prescrições. Se não souber, diga que não sabe.
             4. Se perguntarem sobre preço ou estoque, diga que não tem acesso em tempo real e peça para digitar o nome do produto para busca.
-
+            
             Responda agora:`;
 
-                const result = await model.generateContent(prompt);
-                const text = result.response.text();
+            const payload = {
+                contents: [{
+                    parts: [{ text: prompt }]
+                }],
+                generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 500
+                }
+            };
 
-                console.log(`✅ [GEMINI DEBUG] Sucesso com modelo ${modelName}! Resposta: "${text.substring(0, 50)}..."`);
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
 
-                // Verifica recusas simples
-                if (text.toLowerCase().includes('não posso') && text.toLowerCase().includes('médico')) {
-                    console.warn('⚠️ [GEMINI DEBUG] Gemini recusou responder (filtro médico).');
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+
+            const data = await response.json();
+
+            // Validação robusta da resposta
+            const candidates = data.candidates;
+            if (!candidates || !candidates.length || !candidates[0].content || !candidates[0].content.parts || !candidates[0].content.parts.length) {
+                if (data.promptFeedback && data.promptFeedback.blockReason) {
+                    console.warn('⚠️ [GEMINI REST] Bloqueio de segurança:', data.promptFeedback.blockReason);
                     return { resposta: '', usarCSE: true };
                 }
-
-                return { resposta: text, usarCSE: false };
-
-            } catch (e: any) {
-                console.warn(`⚠️ [GEMINI DEBUG] Falha no modelo ${modelName}: ${e.message}`);
-                lastError = e;
-                // Se o erro for de API Key inválida ou cota, não adianta tentar outros modelos
-                if (e.toString().includes('API key not valid') || e.toString().includes('429')) {
-                    break;
-                }
-                continue; // Tenta o próximo
+                throw new Error('Resposta vazia ou inválida da API');
             }
+
+            const text = candidates[0].content.parts[0].text;
+            console.log(`✅ [GEMINI REST] Sucesso com modelo ${modelName}! Resposta: "${text.substring(0, 50)}..."`);
+
+            // Verifica recusas simples no texto
+            if (text.toLowerCase().includes('não posso') && text.toLowerCase().includes('médico')) {
+                console.warn('⚠️ [GEMINI REST] Gemini recusou responder (filtro médico).');
+                return { resposta: '', usarCSE: true };
+            }
+
+            return { resposta: text, usarCSE: false };
+
+        } catch (e: any) {
+            console.warn(`⚠️ [GEMINI REST] Falha no modelo ${modelName}: ${e.message}`);
+            lastError = e;
+            // Se for erro de autenticação (400/403), aborta logo
+            if (e.message.includes('400') && e.message.includes('API key')) break;
+            continue; // Tenta o próximo
         }
-
-        // Se chegou aqui, todos falharam
-        console.error('❌ [GEMINI DEBUG] Todos os modelos falharam.');
-        if (lastError) {
-            console.error('Último erro:', lastError);
-        }
-        return { resposta: '', usarCSE: true };
-    } catch (e: any) {
-        console.error('❌ [GEMINI DEBUG] Erro GRAVE ao chamar Gemini:');
-        console.error(e);
-        console.error('Detalhes do erro:', JSON.stringify(e, null, 2));
-
-        // Se o erro for de API Key inválida ou cota excedida, avisa no log
-        if (e.toString().includes('API key not valid')) console.error('🔴 [GEMINI DEBUG] A Chave de API é inválida!');
-        if (e.toString().includes('429')) console.error('🔴 [GEMINI DEBUG] Cota de requisições excedida (Erro 429)!');
-
-        return { resposta: '', usarCSE: true };
     }
+
+    // Se chegou aqui, todos falharam
+    console.error('❌ [GEMINI REST] Todos os modelos falharam.');
+    if (lastError) {
+        console.error('Último erro:', lastError);
+    }
+    return { resposta: '', usarCSE: true };
 }
 
 const CONVERSA_BASICA = [
