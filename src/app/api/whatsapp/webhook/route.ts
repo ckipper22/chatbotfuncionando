@@ -1,6 +1,6 @@
 // src/app/api/whatsapp/webhook/route.ts
 // ====================================================================================
-// WEBHOOK FINAL - SEM BASE LOCAL, SÓ API + GOOGLE CSE FALLBACK (MEDICAL BLOCK)
+// WEBHOOK FINAL - SEM BASE LOCAL, SÓ API + GOOGLE CSE FALLBACK
 // ====================================================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -48,6 +48,54 @@ function extrairTermoBusca(mensagem: string): string | null {
 }
 
 // =========================================================================
+// DETECTOR DE CONSULTA MÉDICA/MEDICAMENTOS
+// =========================================================================
+function isMedicalOrDrugQuestion(mensagem: string): boolean {
+  const lowerMsg = mensagem.toLowerCase();
+  
+  const medicalKeywords = [
+    'para que serve', 'serve para', 'uso do', 'uso da',
+    'posologia', 'dose', 'dosagem', 'quantos comprimidos',
+    'efeito', 'efeitos', 'colateral', 'colaterais',
+    'contra indicação', 'contraindicação', 'contra-indicação',
+    'interação', 'interações', 'reação', 'reações',
+    'tratamento', 'sintoma', 'sintomas', 'doença', 'doenças',
+    'dor', 'dores', 'febre', 'inflamação', 'infecção',
+    'antibiótico', 'analgésico', 'antitérmico', 'anti-inflamatório',
+    'remédio', 'remédios', 'medicamento', 'medicamentos'
+  ];
+
+  const commonDrugs = [
+    'paracetamol', 'dipirona', 'ibuprofeno', 'dorflex',
+    'torsilax', 'novalgina', 'neosaldina', 'loratadina',
+    'allegra', 'dexametasona', 'omeprazol', 'ranitidina',
+    'losartana', 'captopril', 'metformina', 'glifage',
+    'sinvastatina', 'atorvastatina', 'amoxicilina',
+    'azitromicina', 'ciprofloxacino'
+  ];
+
+  const hasMedicalKeyword = medicalKeywords.some(keyword => 
+    lowerMsg.includes(keyword)
+  );
+
+  const hasDrugName = commonDrugs.some(drug => 
+    lowerMsg.includes(drug)
+  );
+
+  const drugPatterns = [
+    /(para que serve|serve para) (o|a)?\s*[\w\s]+/i,
+    /(posologia|dosagem|dose) (de|do|da)?\s*[\w\s]+/i,
+    /(efeito|efeitos) (colateral|colaterais) (de|do|da)?\s*[\w\s]+/i,
+  ];
+
+  const hasDrugPattern = drugPatterns.some(pattern => 
+    pattern.test(mensagem)
+  );
+
+  return hasMedicalKeyword || hasDrugName || hasDrugPattern;
+}
+
+// =========================================================================
 // GOOGLE CUSTOM SEARCH FALLBACK
 // =========================================================================
 async function googleFallbackSearch(query: string): Promise<string> {
@@ -69,11 +117,11 @@ async function googleFallbackSearch(query: string): Promise<string> {
       return '🔍 Não encontrei resultados relevantes na web. Tente reformular sua pergunta.';
     }
 
-    let resposta = `ℹ️ A IA está com restrição para responder sobre saúde. Abaixo, resultados confiáveis da web:\n\n`;
+    let resposta = `🔍 *Resultados da web para "${query}":*\n\n`;
     for (const item of data.items.slice(0, 3)) {
       resposta += `• **${item.title}**\n  ${item.link}\n  ${item.snippet}\n\n`;
     }
-    resposta += '_Consulte sempre um profissional de saúde para orientações médicas._';
+    resposta += '⚠️ *Atenção*: Estas informações vêm de fontes da web. Consulte sempre um médico ou farmacêutico para orientações médicas.';
     return resposta;
   } catch (error) {
     console.error('❌ Erro no fallback Google CSE:', error);
@@ -199,9 +247,7 @@ async function addItemToCart(orderId: string, productCode: string, quantity: num
             saveProductToCache(productCode, productName, unitPrice).catch(() => {});
           }
         }
-      } catch (e) {
-        // silencioso
-      }
+      } catch (e) {}
     }
 
     if (!hasSupabaseConfig) return false;
@@ -273,36 +319,45 @@ async function interpretarComGemini(mensagem: string): Promise<{ resposta: strin
     return { resposta: 'IA desativada. Digite *MENU* para opções.', usarCSE: false };
   }
 
+  // Se for pergunta médica, usar Google CSE diretamente
+  if (isMedicalOrDrugQuestion(mensagem)) {
+    console.log('🔍 Pergunta médica detectada, usando Google CSE direto');
+    return { resposta: '', usarCSE: true };
+  }
+
   try {
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY!);
     const model = genAI.getGenerativeModel({
       model: 'gemini-1.5-flash',
-      safetySettings: [
-        {
-          category: 'HARM_CATEGORY_MEDICAL' as const,
-          threshold: 'BLOCK_NONE' as const,
-        },
-      ],
     });
 
-    const prompt = `Você é um assistente de farmácia. Responda com clareza, mas NUNCA dê conselhos médicos.
-Se a pergunta for sobre posologia, efeitos colaterais, contraindicações, etc., responda: "Sou um assistente virtual e não posso fornecer orientações médicas. Consulte um farmacêutico."
-Mensagem: "${mensagem}"`;
+    const prompt = `Você é um assistente de farmácia. Responda à pergunta do usuário de forma clara e informativa.
+
+Pergunta: "${mensagem}"
+
+Responda de forma útil e direta. Se for sobre produtos de farmácia (exceto medicamentos com prescrição), forneça informações.`;
 
     const result = await model.generateContent(prompt);
     const response = result.response;
+    const respostaText = response.text()?.trim() || '';
 
-    const safetyRatings = response.candidates?.[0]?.safetyRatings || [];
-    const isMedicalBlocked = safetyRatings.some(r =>
-      r.category === 'HARM_CATEGORY_MEDICAL' &&
-      (r.probability === 'HIGH' || r.probability === 'VERY_HIGH')
-    );
+    console.log('📝 Resposta do Gemini:', respostaText.substring(0, 200));
 
-    if (isMedicalBlocked || !response.text?.trim()) {
+    // Verificar se a resposta contém frases de recusa
+    if (!respostaText || 
+        respostaText.toLowerCase().includes('não posso') ||
+        respostaText.toLowerCase().includes('consulte um') ||
+        respostaText.toLowerCase().includes('procure um') ||
+        respostaText.toLowerCase().includes('orientação médica') ||
+        respostaText.toLowerCase().includes('sou um assistente virtual')) {
+      console.log('🚫 Gemini recusou responder, usando Google CSE');
       return { resposta: '', usarCSE: true };
     }
 
-    return { resposta: response.text, usarCSE: false };
+    // Adicionar aviso a todas as respostas do Gemini
+    const respostaComAviso = `${respostaText}\n\n⚠️ *Atenção*: Para informações sobre medicamentos e saúde, consulte sempre um médico ou farmacêutico.`;
+    
+    return { resposta: respostaComAviso, usarCSE: false };
   } catch (error) {
     console.error('❌ Erro Gemini:', error);
     return { resposta: '', usarCSE: true };
@@ -328,26 +383,16 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
     return;
   }
 
-  const { resposta, usarCSE } = await interpretarComGemini(messageText);
-
-  if (usarCSE) {
-    const fallback = await googleFallbackSearch(messageText);
-    await enviarComFormatosCorretos(from, fallback);
-    return;
-  }
-
-  if (resposta.trim() !== '') {
-    await enviarComFormatosCorretos(from, resposta);
-    return;
-  }
-
-  const termo = messageText.trim();
-  if (termo.length >= 2 && hasFlaskConfig && FLASK_API_URL) {
+  // Processar a mensagem
+  const termoBusca = extrairTermoBusca(messageText);
+  
+  // Se for busca de produto
+  if (termoBusca && hasFlaskConfig && FLASK_API_URL) {
     try {
-      const res = await fetch(`${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(termo)}`, {
+      const res = await fetch(`${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(termoBusca)}`, {
         headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' }
       });
-      let resposta = `🔍 *Resultados da busca por "${termo}":*\n\n`;
+      let resposta = `🔍 *Resultados da busca por "${termoBusca}":*\n\n`;
       if (res.ok) {
         const data = await res.json();
         if (data?.data?.length > 0) {
@@ -378,7 +423,22 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
     return;
   }
 
-  await enviarComFormatosCorretos(from, '*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nDigite o nome de um produto ou *MENU* para opções.');
+  // Para outras mensagens, usar Gemini + Google CSE
+  const { resposta, usarCSE } = await interpretarComGemini(messageText);
+
+  if (usarCSE) {
+    const fallback = await googleFallbackSearch(messageText);
+    await enviarComFormatosCorretos(from, fallback);
+    return;
+  }
+
+  if (resposta.trim() !== '') {
+    await enviarComFormatosCorretos(from, resposta);
+    return;
+  }
+
+  // Resposta padrão
+  await enviarComFormatosCorretos(from, '*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\n• Digite o nome de um produto para buscar\n• Para questões de saúde, consulte um profissional\n• Digite *MENU* para opções');
 }
 
 // =========================================================================
