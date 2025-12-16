@@ -169,14 +169,36 @@ async function interpretarComGemini(mensagem: string): Promise<{ resposta: strin
     }
 }
 
+const CONVERSA_BASICA = [
+    'tudo bem', 'tudo bom', 'como vai', 'como est', 'e ai', 'e aí', 'beleza',
+    'obrigado', 'obrigada', 'valeu', 'tchau', 'ate logo', 'até logo'
+];
+
+function ehConversaBasica(mensagem: string): boolean {
+    const msgLimpa = mensagem.toLowerCase().replace(/[?!.,]/g, '').trim();
+    return CONVERSA_BASICA.some(frase => msgLimpa.includes(frase));
+}
+
 async function processarMensagemCompleta(de: string, texto: string) {
-    // 1. Saudação
+    // 1. Saudação Estrita (Menu)
     if (ehSaudacao(texto)) {
         await enviarComFormatosCorretos(de, 'Olá! Sou seu assistente virtual. Como posso ajudar?');
         return;
     }
 
-    // 2. Busca de Produto (via Flask)
+    // 2. Conversa Básica (Tenta Gemini, mas com fallback seguro)
+    if (ehConversaBasica(texto)) {
+        const { resposta } = await interpretarComGemini(texto);
+        if (resposta) {
+            await enviarComFormatosCorretos(de, resposta);
+        } else {
+            // Fallback amigável se Gemini falhar/não estiver configurado
+            await enviarComFormatosCorretos(de, 'Tudo ótimo por aqui! Como posso ajudar você hoje?');
+        }
+        return;
+    }
+
+    // 3. Busca de Produto (via Flask)
     const { buscar, termo } = extrairTermoBuscaInteligente(texto);
     if (buscar) {
         const produtos = await buscarProdutoNaApi(termo);
@@ -185,19 +207,20 @@ async function processarMensagemCompleta(de: string, texto: string) {
             await enviarComFormatosCorretos(de, produtos);
             return;
         }
-        // Se não achou produto, continua para tentar Gemini (talvez seja conversa)
+        // Se não achou produto, continua para tentar Gemini (talvez seja conversa complexa)
     }
 
-    // 3. Pergunta Médica (Google CSE)
+    // 4. Pergunta Médica (Google CSE)
     if (ehPerguntaMedicaOuMedicamento(texto)) {
         const res = await buscaGoogleFallback(texto);
         await enviarComFormatosCorretos(de, res);
         return;
     }
 
-    // 4. Gemini
+    // 5. Gemini Geral (para outras coisas não capturadas)
     const { resposta, usarCSE } = await interpretarComGemini(texto);
     if (usarCSE) {
+        // Só faz fallback para Google se NÃO parecia ser conversa básica e NÃO era produto
         const fallback = await buscaGoogleFallback(texto);
         await enviarComFormatosCorretos(de, fallback);
         return;
