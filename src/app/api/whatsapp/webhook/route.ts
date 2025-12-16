@@ -125,7 +125,8 @@ function extrairIntencaoCarrinho(mensagem: string): { quantity: number; productC
     const matchQuantity = lowerMsg.match(regexQuantity);
 
     // Evitar que o código do produto seja confundido com a quantidade se aparecer primeiro
-    if (matchQuantity && matchQuantity[1] !== productCode && matchCode.index > matchQuantity.index) {
+    // CORREÇÃO: Uso do operador de asserção non-null (!) para resolver o erro de tipagem em Vercel/TS.
+    if (matchQuantity && matchQuantity[1] !== productCode && matchCode.index! > matchQuantity.index!) {
         quantity = parseInt(matchQuantity[1], 10);
         if (isNaN(quantity) || quantity < 1) quantity = 1;
     }
