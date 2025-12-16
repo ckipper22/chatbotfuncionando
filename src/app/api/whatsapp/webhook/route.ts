@@ -155,8 +155,8 @@ async function interpretarComGemini(mensagem: string): Promise<{ resposta: strin
         console.log(`🔑 [GEMINI DEBUG] API Key presente: ${GEMINI_API_KEY.substring(0, 5)}...`);
 
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        // Tentar usar o modelo flash que é mais rápido e geralmente disponível
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        // Tentar usar o modelo gemini-pro que é mais estável na versão atual da lib
+        const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
 
         const prompt = `Você é um assistente de farmácia útil e amigável.
         Responda à mensagem do cliente: "${mensagem}".
