@@ -149,12 +149,13 @@ async function interpretarComGemini(mensagem: string): Promise<{ resposta: strin
     }
 
     // Modelos para tentar (da versão mais nova/rápida para a mais estável)
+    // Sincronizado com branch legacy (15112025) que funcionava
     const modelsToTest = [
+        'gemini-2.5-flash',
+        'gemini-2.5-pro',
+        'gemini-2.5-flash-lite-preview-09-2025',
         'gemini-1.5-flash',
-        'gemini-1.5-flash-latest',
-        'gemini-1.5-pro',
-        'gemini-pro',
-        'gemini-1.0-pro'
+        'gemini-pro'
     ];
     let lastError: any;
 
