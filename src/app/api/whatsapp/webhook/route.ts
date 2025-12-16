@@ -63,8 +63,11 @@ function extrairTermoBuscaInteligente(mensagem: string): { buscar: boolean, term
 async function enviarComFormatosCorretos(to: string, text: string) {
     try {
         await whatsapp.sendTextMessage(to, text);
-    } catch (error) {
+    } catch (error: any) {
         console.error('Erro ao enviar mensagem:', error);
+        if (error.toString().includes('131030') || error.message?.includes('131030')) {
+            console.error('⚠️ DICA IMPORTANTE: Seu app está em modo DEV. O número de destino não está na lista de testadores permitidos. Adicione-o no painel da Meta (WhatsApp > API Setup) ou mude o app para modo Live.');
+        }
     }
 }
 
