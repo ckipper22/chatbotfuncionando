@@ -1,7 +1,7 @@
 // src/app/api/whatsapp/webhook/route.ts
 // ====================================================================================
 // WEBHOOK CORRIGIDO - VERSÃO FUNCIONAL COMPLETA COM FALLBACK GOOGLE SEARCH
-// CORREÇÃO DE TIPAGEM GEMINI APLICADA: result.text -> result.response.text
+// CORREÇÃO DE TIPAGEM GEMINI FINALIZADA: result.response.text.trim() -> result.response.text().trim()
 // ====================================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -147,8 +147,8 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
 
             const result = await model.generateContent(messageText);
             
-            // CORREÇÃO APLICADA AQUI: result.response.text
-            const geminiResponse = result.response.text.trim(); 
+            // CORREÇÃO FINAL APLICADA AQUI: result.response.text()
+            const geminiResponse = result.response.text().trim(); 
 
             if (geminiResponse) {
                 resposta = geminiResponse;
