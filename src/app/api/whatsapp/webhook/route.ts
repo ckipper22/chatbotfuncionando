@@ -144,27 +144,52 @@ async function buscarProdutoNaApi(termo: string): Promise<string> {
 }
 
 async function interpretarComGemini(mensagem: string): Promise<{ resposta: string, usarCSE: boolean }> {
-    if (!GEMINI_API_KEY) return { resposta: '', usarCSE: true };
+    // DEBUG: Verificar se a chave existe
+    if (!GEMINI_API_KEY) {
+        console.error('❌ [GEMINI DEBUG] API Key não encontrada nas variáveis de ambiente!');
+        return { resposta: '', usarCSE: true };
+    }
 
     try {
+        console.log(`🤖 [GEMINI DEBUG] Iniciando chamada para: "${mensagem}"`);
+        console.log(`🔑 [GEMINI DEBUG] API Key presente: ${GEMINI_API_KEY.substring(0, 5)}...`);
+
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+        // Tentar usar o modelo flash que é mais rápido e geralmente disponível
         const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
         const prompt = `Você é um assistente de farmácia útil e amigável.
-        Responda à mensagem: "${mensagem}".
-        Não dê conselhos médicos perigosos. Se não souber, diga que não sabe.`;
+        Responda à mensagem do cliente: "${mensagem}".
+        
+        DIRETRIZES:
+        1. Responda SEMPRE em Português do Brasil.
+        2. Seja cordial e direto.
+        3. Não dê conselhos médicos perigosos ou prescrições. Se não souber, diga que não sabe.
+        4. Se perguntarem sobre preço ou estoque, diga que não tem acesso em tempo real e peça para digitar o nome do produto para busca.
+        
+        Responda agora:`;
 
         const result = await model.generateContent(prompt);
         const text = result.response.text();
 
+        console.log(`✅ [GEMINI DEBUG] Resposta recebida: "${text.substring(0, 100)}..."`);
+
         // Verifica recusas simples
         if (text.toLowerCase().includes('não posso') && text.toLowerCase().includes('médico')) {
+            console.warn('⚠️ [GEMINI DEBUG] Gemini recusou responder (filtro médico).');
             return { resposta: '', usarCSE: true };
         }
 
         return { resposta: text, usarCSE: false };
-    } catch (e) {
-        console.error('Erro Gemini:', e);
+    } catch (e: any) {
+        console.error('❌ [GEMINI DEBUG] Erro GRAVE ao chamar Gemini:');
+        console.error(e);
+        console.error('Detalhes do erro:', JSON.stringify(e, null, 2));
+
+        // Se o erro for de API Key inválida ou cota excedida, avisa no log
+        if (e.toString().includes('API key not valid')) console.error('🔴 [GEMINI DEBUG] A Chave de API é inválida!');
+        if (e.toString().includes('429')) console.error('🔴 [GEMINI DEBUG] Cota de requisições excedida (Erro 429)!');
+
         return { resposta: '', usarCSE: true };
     }
 }
@@ -179,50 +204,75 @@ function ehConversaBasica(mensagem: string): boolean {
     return CONVERSA_BASICA.some(frase => msgLimpa.includes(frase));
 }
 
+// ... (existing code)
+
+const INTENCAO_COMPRA = [
+    'comprar', 'encomendar', 'pedido', 'adicionar', 'levar', 'carrinho', 'quero comprar'
+];
+
+function ehIntencaoCompra(mensagem: string): boolean {
+    const msgLimpa = mensagem.toLowerCase();
+    return INTENCAO_COMPRA.some(termo => msgLimpa.includes(termo));
+}
+
 async function processarMensagemCompleta(de: string, texto: string) {
-    // 1. Saudação Estrita (Menu)
+    // 1. Saudação Estrita
     if (ehSaudacao(texto)) {
         await enviarComFormatosCorretos(de, 'Olá! Sou seu assistente virtual. Como posso ajudar?');
         return;
     }
 
-    // 2. Conversa Básica (Tenta Gemini, mas com fallback seguro)
+    // 2. Conversa Básica
     if (ehConversaBasica(texto)) {
         const { resposta } = await interpretarComGemini(texto);
         if (resposta) {
             await enviarComFormatosCorretos(de, resposta);
         } else {
-            // Fallback amigável se Gemini falhar/não estiver configurado
             await enviarComFormatosCorretos(de, 'Tudo ótimo por aqui! Como posso ajudar você hoje?');
         }
         return;
     }
 
-    // 3. Busca de Produto (via Flask)
+    // 3. Intenção de Compra Genérica (NOVO)
+    // Se o usuário diz "gostaria de encomendar" sem um produto claro, orientamos ele.
+    if (ehIntencaoCompra(texto)) {
+        await enviarComFormatosCorretos(de, 'Para fazer um pedido, por favor digite o *nome do produto* ou medicamento que você procura (ex: "Dipirona" ou "Tem Dorflex?").');
+        return;
+    }
+
+    // 4. Busca de Produto (via Flask)
     const { buscar, termo } = extrairTermoBuscaInteligente(texto);
     if (buscar) {
         const produtos = await buscarProdutoNaApi(termo);
-        // Se a busca retornou resultados, envia. Se não (erro ou vazio), tenta conversa.
         if (!produtos.startsWith('🔍 Nenhum')) {
             await enviarComFormatosCorretos(de, produtos);
             return;
         }
-        // Se não achou produto, continua para tentar Gemini (talvez seja conversa complexa)
     }
 
-    // 4. Pergunta Médica (Google CSE)
+    // 5. Pergunta Médica (Google CSE)
     if (ehPerguntaMedicaOuMedicamento(texto)) {
         const res = await buscaGoogleFallback(texto);
         await enviarComFormatosCorretos(de, res);
         return;
     }
 
-    // 5. Gemini Geral (para outras coisas não capturadas)
+    // 6. Gemini Geral / Fallback
     const { resposta, usarCSE } = await interpretarComGemini(texto);
+
     if (usarCSE) {
-        // Só faz fallback para Google se NÃO parecia ser conversa básica e NÃO era produto
-        const fallback = await buscaGoogleFallback(texto);
-        await enviarComFormatosCorretos(de, fallback);
+        // Se o Gemini falhou/não configurado, só buscamos no Google se PARECER uma pergunta.
+        // Evita buscar frases soltas como "gostaria de encomendar".
+        const parecePergunta = texto.includes('?') ||
+            ['como', 'o que', 'qual', 'onde', 'porque', 'por que'].some(p => texto.toLowerCase().startsWith(p));
+
+        if (parecePergunta) {
+            const fallback = await buscaGoogleFallback(texto);
+            await enviarComFormatosCorretos(de, fallback);
+        } else {
+            // Fallback final Seguro -> Menu/Ajuda
+            await enviarComFormatosCorretos(de, 'Desculpe, não entendi. 😕\n\nVocê pode:\n1. Digitar o nome de um produto para buscar.\n2. Fazer uma pergunta sobre saúde.\n3. Dizer "Menu" para ver opções.');
+        }
         return;
     }
 
