@@ -1,9 +1,6 @@
 // src/app/api/whatsapp/webhook/route.ts
-// ====================================================================================
-// WEBHOOK FINAL - SEM BASE LOCAL, SÓ API + GOOGLE CSE FALLBACK (MEDICAL BLOCK)
-// ====================================================================================
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 
 // =========================================================================
 // CONFIGURAÇÃO DAS VARIÁVEIS DE AMBIENTE
@@ -18,7 +15,6 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GOOGLE_CSE_KEY = process.env.CUSTOM_SEARCH_API_KEY;
 const GOOGLE_CSE_CX = process.env.CUSTOM_SEARCH_CX;
 
-// Flags de configuração
 const hasWhatsAppConfig = !!(WHATSAPP_VERIFY_TOKEN && WHATSAPP_ACCESS_TOKEN && WHATSAPP_PHONE_NUMBER_ID);
 const hasSupabaseConfig = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
 const hasFlaskConfig = !!FLASK_API_URL;
@@ -48,26 +44,12 @@ function extrairTermoBusca(mensagem: string): string | null {
   return termo.length >= 2 ? termo : null;
 }
 
-function deveFazerBuscaDireta(mensagem: string): boolean {
-  const texto = mensagem.toLowerCase().trim();
-  if (extrairTermoBusca(mensagem)) return false;
-  if (/^[1-4]$/.test(texto)) return false;
-  const comandosConhecidos = ['menu', 'finalizar', 'carrinho', 'atendente', 'ajuda', 'voltar'];
-  if (comandosConhecidos.includes(texto)) return false;
-  if (/^\d{6,}$/.test(texto)) return false;
-  const termosMedicamento = ['posologia', 'efeito', 'contraindicacao', 'bula', 'dose', 'como usar'];
-  if (termosMedicamento.some(termo => texto.includes(termo))) return false;
-  if (texto.length < 3) return false;
-  const palavrasComuns = ['oi', 'ola', 'ok', 'sim', 'nao', 'obrigado', 'obrigada'];
-  return !palavrasComuns.includes(texto);
-}
-
 // =========================================================================
 // GOOGLE CUSTOM SEARCH FALLBACK
 // =========================================================================
 async function googleFallbackSearch(query: string): Promise<string> {
   if (!hasGoogleCSE) {
-    return '⚠️ Busca de backup indisponível. Tente novamente mais tarde.';
+    return '⚠️ Busca de backup indisponível no momento.';
   }
   try {
     const url = new URL('https://www.googleapis.com/customsearch/v1');
@@ -81,7 +63,7 @@ async function googleFallbackSearch(query: string): Promise<string> {
     const data = await res.json();
 
     if (!data.items || data.items.length === 0) {
-      return '🔍 Não encontrei resultados relevantes. Tente reformular sua pergunta.';
+      return '🔍 Não encontrei resultados relevantes na web. Tente reformular sua pergunta.';
     }
 
     let resposta = `ℹ️ A IA está com restrição para responder sobre saúde. Abaixo, resultados confiáveis da web:\n\n`;
@@ -92,14 +74,15 @@ async function googleFallbackSearch(query: string): Promise<string> {
     return resposta;
   } catch (error) {
     console.error('❌ Erro no fallback Google CSE:', error);
-    return '⚠️ Não foi possível buscar informações no momento. Por favor, tente mais tarde.';
+    return '⚠️ Não foi possível buscar informações no momento.';
   }
 }
 
 // =========================================================================
-// CACHE E SUPABASE
+// CACHE E SUPABASE (mínimo necessário)
 // =========================================================================
 async function saveProductToCache(productCode: string, productName: string, unitPrice: number): Promise<void> {
+  if (!hasSupabaseConfig) return;
   try {
     const insertUrl = `${SUPABASE_URL}/rest/v1/product_cache?on_conflict=product_code`;
     const headers = new Headers({
@@ -119,6 +102,7 @@ async function saveProductToCache(productCode: string, productName: string, unit
 }
 
 async function getProductFromCache(productCode: string): Promise<{ name: string; price: number } | null> {
+  if (!hasSupabaseConfig) return null;
   try {
     const selectUrl = `${SUPABASE_URL}/rest/v1/product_cache?product_code=eq.${productCode}`;
     const headers = new Headers({ 'apikey': SUPABASE_ANON_KEY!, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` });
@@ -127,12 +111,12 @@ async function getProductFromCache(productCode: string): Promise<{ name: string;
     const data = await response.json();
     return data?.[0] ? { name: data[0].product_name, price: data[0].unit_price } : null;
   } catch (error) {
-    console.log(`⚠️ Erro ao buscar do cache:`, error);
     return null;
   }
 }
 
 async function getOrCreateCustomer(from: string, whatsappPhoneId: string): Promise<string | null> {
+  if (!hasSupabaseConfig) return null;
   try {
     const headers = new Headers({
       'apikey': SUPABASE_ANON_KEY!,
@@ -156,12 +140,12 @@ async function getOrCreateCustomer(from: string, whatsappPhoneId: string): Promi
     data = await res.json();
     return data?.[0]?.id || null;
   } catch (error) {
-    console.error('❌ Erro CRM:', error);
     return null;
   }
 }
 
 async function getOrCreateCartOrder(customerId: string, whatsappPhoneId: string): Promise<string | null> {
+  if (!hasSupabaseConfig) return null;
   try {
     const headers = new Headers({
       'apikey': SUPABASE_ANON_KEY!,
@@ -185,36 +169,7 @@ async function getOrCreateCartOrder(customerId: string, whatsappPhoneId: string)
     data = await res.json();
     return data?.[0]?.id || null;
   } catch (error) {
-    console.error('❌ Erro Carrinho:', error);
     return null;
-  }
-}
-
-async function getOrderItems(orderId: string): Promise<any[]> {
-  try {
-    const headers = new Headers({ 'apikey': SUPABASE_ANON_KEY!, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` });
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/order_items?order_id=eq.${orderId}&select=*`, { method: 'GET', headers });
-    return res.ok ? (await res.json()) : [];
-  } catch (error) {
-    console.error('❌ Erro itens pedido:', error);
-    return [];
-  }
-}
-
-async function updateOrderTotal(orderId: string, newTotal: number): Promise<void> {
-  try {
-    const headers = new Headers({
-      'apikey': SUPABASE_ANON_KEY!,
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      'Content-Type': 'application/json'
-    });
-    await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${orderId}`, {
-      method: 'PATCH',
-      headers,
-      body: JSON.stringify({ total_amount: newTotal })
-    });
-  } catch (error) {
-    console.error('❌ Erro update total:', error);
   }
 }
 
@@ -227,7 +182,7 @@ async function addItemToCart(orderId: string, productCode: string, quantity: num
     if (cached) {
       productName = cached.name;
       unitPrice = cached.price;
-    } else if (FLASK_API_URL) {
+    } else if (hasFlaskConfig && FLASK_API_URL) {
       try {
         const res = await fetch(`${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(productCode)}`, {
           headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' }
@@ -242,10 +197,11 @@ async function addItemToCart(orderId: string, productCode: string, quantity: num
           }
         }
       } catch (e) {
-        console.log('⚠️ Erro na API Flask durante adição ao carrinho');
+        // silencioso
       }
     }
 
+    if (!hasSupabaseConfig) return false;
     const headers = new Headers({
       'apikey': SUPABASE_ANON_KEY!,
       'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
@@ -265,47 +221,23 @@ async function addItemToCart(orderId: string, productCode: string, quantity: num
     });
     return res.ok;
   } catch (error) {
-    console.error('❌ Erro addItemToCart:', error);
     return false;
   }
 }
 
-async function salvarMensagemNoSupabase(whatsappPhoneId: string, from: string, body: string, direction: 'IN' | 'OUT'): Promise<void> {
-  try {
-    const headers = new Headers({
-      'apikey': SUPABASE_ANON_KEY!,
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      'Content-Type': 'application/json'
-    });
-    await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_messages`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ whatsapp_phone_id: whatsappPhoneId, from_number: from, message_body: body, direction })
-    });
-  } catch (error) {
-    console.error('❌ Erro salvar mensagem:', error);
-  }
-}
-
-// =========================================================================
-// FUNÇÕES DE ENVIO
-// =========================================================================
-function converterParaFormatoFuncional(numeroOriginal: string): string[] {
-  const numeroLimpo = numeroOriginal.replace(/\D/g, '');
-  let numeroConvertido = numeroLimpo;
-  if (numeroLimpo.length === 12 && numeroLimpo.startsWith('55')) {
-    const ddd = numeroLimpo.substring(2, 4);
-    const num = numeroLimpo.substring(4);
-    if (num.length === 8 && !['1','2','3','4','5'].includes(num.charAt(0))) {
-      numeroConvertido = '55' + ddd + '9' + num;
-    }
-  }
-  return ['+' + numeroConvertido, numeroConvertido];
-}
-
 async function enviarComFormatosCorretos(from: string, texto: string): Promise<boolean> {
+  if (!hasWhatsAppConfig) return false;
   try {
-    const formatos = converterParaFormatoFuncional(from);
+    const numeroLimpo = from.replace(/\D/g, '');
+    let numeroConvertido = numeroLimpo;
+    if (numeroLimpo.length === 12 && numeroLimpo.startsWith('55')) {
+      const ddd = numeroLimpo.substring(2, 4);
+      const num = numeroLimpo.substring(4);
+      if (num.length === 8 && !['1','2','3','4','5'].includes(num.charAt(0))) {
+        numeroConvertido = '55' + ddd + '9' + num;
+      }
+    }
+    const formatos = ['+' + numeroConvertido, numeroConvertido];
     for (const formato of formatos) {
       const payload = {
         messaging_product: 'whatsapp',
@@ -326,133 +258,12 @@ async function enviarComFormatosCorretos(from: string, texto: string): Promise<b
     }
     return false;
   } catch (error) {
-    console.error('❌ Erro envio WhatsApp:', error);
     return false;
   }
 }
 
-async function findFarmacyAPI(whatsappPhoneId: string) {
-  if (!hasSupabaseConfig) return null;
-  try {
-    const headers = new Headers({ 'apikey': SUPABASE_ANON_KEY!, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` });
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/client_connections?whatsapp_phone_id=eq.${whatsappPhoneId}&select=api_base_url,client_id`, { method: 'GET', headers });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data?.[0] || null;
-  } catch (error) {
-    console.error('❌ Erro findFarmacyAPI:', error);
-    return null;
-  }
-}
-
-async function consultarAPIFarmacia(apiUrl: string, termo: string) {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    const res = await fetch(`${apiUrl}/api/products/search?q=${encodeURIComponent(termo)}`, {
-      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return await res.json();
-  } catch (error) {
-    console.error('❌ Erro consultarAPIFarmacia:', error);
-    throw error;
-  }
-}
-
-async function buscarEOferecerProdutos(from: string, whatsappPhoneId: string, termoBusca: string): Promise<void> {
-  let resposta = `🔍 *Resultados da busca por "${termoBusca}":*\n\n`;
-
-  try {
-    const farmacia = await findFarmacyAPI(whatsappPhoneId);
-    if (farmacia?.api_base_url) {
-      const data = await consultarAPIFarmacia(farmacia.api_base_url, termoBusca);
-      if (data?.data?.length > 0) {
-        for (const p of data.data.slice(0, 5)) {
-          const price = p.preco_final_venda;
-          const discount = p.desconto_percentual > 0 ? ` (🔻${p.desconto_percentual.toFixed(1)}% OFF)` : '';
-          resposta += `▪️ *${p.nome_produto}*\n`;
-          resposta += `   💊 ${p.nom_laboratorio}\n`;
-          resposta += `   💰 ${price}${discount}\n`;
-          resposta += `   📦 Estoque: ${p.qtd_estoque}\n`;
-          resposta += `   📋 Código: ${p.cod_reduzido}\n`;
-          resposta += `   Para comprar: *COMPRAR ${p.cod_reduzido}*\n\n`;
-          saveProductToCache(p.cod_reduzido, p.nome_produto, parseFloat(price.replace(/[^\d,]/g, '').replace(',', '.')) || 0).catch(() => {});
-        }
-        if (data.data.length > 5) {
-          resposta += `_Mostrando 5 de ${data.data.length} resultados. Refine sua busca._\n`;
-        }
-      } else {
-        resposta += 'Nenhum produto encontrado. Tente outro termo.\n';
-      }
-    } else {
-      resposta += '⚠️ API da farmácia não disponível. Tente novamente mais tarde.\n';
-    }
-  } catch (error) {
-    resposta += '⚠️ Erro ao buscar produtos. Use *ATENDENTE* para ajuda humana.\n';
-  }
-
-  await enviarComFormatosCorretos(from, resposta);
-  await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT');
-}
-
-async function verCarrinho(from: string, whatsappPhoneId: string, customerId: string): Promise<void> {
-  const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
-  if (!orderId) {
-    const msg = '⚠️ Erro ao carregar carrinho.';
-    await enviarComFormatosCorretos(from, msg);
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return;
-  }
-  const items = await getOrderItems(orderId);
-  let total = 0;
-  let resposta = `🛒 *SEU CARRINHO* (ID: ${orderId.substring(0, 8)})\n\n`;
-  if (items.length === 0) {
-    resposta += 'Seu carrinho está vazio! Envie o nome de um produto para começar.';
-  } else {
-    for (const item of items) {
-      const unit = parseFloat(item.unit_price);
-      const sub = item.quantity * unit;
-      total += sub;
-      resposta += `▪️ *${item.product_name}* (${item.product_api_id})\n`;
-      resposta += `   Qtd: ${item.quantity} × R$${unit.toFixed(2)} = R$${sub.toFixed(2)}\n`;
-    }
-    resposta += `\n-------------------------------\n`;
-    resposta += `💰 **TOTAL: R$${total.toFixed(2)}**\n`;
-    resposta += `-------------------------------\n\n`;
-    resposta += `*FINALIZAR* para concluir ou *MENU* para voltar.`;
-  }
-  await enviarComFormatosCorretos(from, resposta);
-  await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT');
-  if (items.length > 0) await updateOrderTotal(orderId, total);
-}
-
-async function finalizarPedido(from: string, whatsappPhoneId: string, customerId: string): Promise<void> {
-  const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
-  if (!orderId) {
-    await enviarComFormatosCorretos(from, '⚠️ Carrinho vazio ou erro.');
-    return;
-  }
-  try {
-    const headers = new Headers({ 'apikey': SUPABASE_ANON_KEY!, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' });
-    await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${orderId}`, {
-      method: 'PATCH',
-      headers,
-      body: JSON.stringify({ status: 'PENDING', checkout_at: new Date().toISOString() })
-    });
-    const msg = `🎉 *PEDIDO FINALIZADO!*\n\nSeu pedido (ID: ${orderId.substring(0, 8)}) foi recebido. Em breve entraremos em contato para confirmar pagamento e entrega.`;
-    await enviarComFormatosCorretos(from, msg);
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-  } catch (error) {
-    await enviarComFormatosCorretos(from, '⚠️ Erro ao finalizar. Tente novamente ou fale com *ATENDENTE*.');
-    console.error('❌ Erro finalizar pedido:', error);
-  }
-}
-
 // =========================================================================
-// INTEGRAÇÃO COM GEMINI + GOOGLE CSE FALLBACK
+// INTEGRAÇÃO COM GEMINI + FALLBACK GOOGLE
 // =========================================================================
 async function interpretarComGemini(mensagem: string): Promise<{ resposta: string; usarCSE: boolean }> {
   if (!hasGeminiConfig) {
@@ -464,7 +275,7 @@ async function interpretarComGemini(mensagem: string): Promise<{ resposta: strin
     const model = genAI.getGenerativeModel({
       model: 'gemini-1.5-flash',
       safetySettings: [
-        { category: 'HARM_CATEGORY_MEDICAL', threshold: 'BLOCK_NONE' },
+        { category: HarmCategory.HARM_CATEGORY_MEDICAL, threshold: HarmBlockThreshold.BLOCK_NONE },
       ]
     });
 
@@ -477,17 +288,16 @@ Mensagem: "${mensagem}"`;
 
     const safetyRatings = response.candidates?.[0]?.safetyRatings || [];
     const isMedicalBlocked = safetyRatings.some(r =>
-      r.category === 'HARM_CATEGORY_MEDICAL' &&
+      r.category === HarmCategory.HARM_CATEGORY_MEDICAL &&
       (r.probability === 'HIGH' || r.probability === 'VERY_HIGH')
     );
 
-    if (isMedicalBlocked || response.text?.trim() === '') {
+    if (isMedicalBlocked || !response.text?.trim()) {
       return { resposta: '', usarCSE: true };
     }
 
     return { resposta: response.text, usarCSE: false };
   } catch (error) {
-    console.error('❌ Erro Gemini:', error);
     return { resposta: '', usarCSE: true };
   }
 }
@@ -498,23 +308,17 @@ Mensagem: "${mensagem}"`;
 async function processarMensagemCompleta(from: string, whatsappPhoneId: string, messageText: string) {
   const customerId = await getOrCreateCustomer(from, whatsappPhoneId);
   if (!customerId) return;
-  await salvarMensagemNoSupabase(whatsappPhoneId, from, messageText, 'IN');
 
   const comprarMatch = messageText.match(/^comprar\s+(\d+)/i);
   if (comprarMatch) {
     const code = comprarMatch[1];
     const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
     if (orderId && await addItemToCart(orderId, code, 1, whatsappPhoneId)) {
-      const msg = `✅ Produto *${code}* adicionado ao carrinho.\n\nDigite *CARRINHO* ou *FINALIZAR*.`;
-      await enviarComFormatosCorretos(from, msg);
-      await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-      return;
+      await enviarComFormatosCorretos(from, `✅ Produto *${code}* adicionado ao carrinho.\n\nDigite *CARRINHO* ou *FINALIZAR*.`);
     } else {
-      const msg = `❌ Produto *${code}* não encontrado. Verifique o código.`;
-      await enviarComFormatosCorretos(from, msg);
-      await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-      return;
+      await enviarComFormatosCorretos(from, `❌ Produto *${code}* não encontrado.`);
     }
+    return;
   }
 
   const { resposta, usarCSE } = await interpretarComGemini(messageText);
@@ -522,24 +326,53 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
   if (usarCSE) {
     const fallback = await googleFallbackSearch(messageText);
     await enviarComFormatosCorretos(from, fallback);
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, fallback, 'OUT');
     return;
   }
 
   if (resposta.trim() !== '') {
     await enviarComFormatosCorretos(from, resposta);
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT');
     return;
   }
 
   const termo = messageText.trim();
-  if (termo.length >= 2) {
-    await buscarEOferecerProdutos(from, whatsappPhoneId, termo);
-  } else {
-    const msg = '*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nDigite:\n*1.* Buscar produtos\n*2.* Ver carrinho\n*3.* Falar com atendente\nOu envie o nome de um medicamento/produto.';
-    await enviarComFormatosCorretos(from, msg);
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
+  if (termo.length >= 2 && hasFlaskConfig && FLASK_API_URL) {
+    // Buscar na API da farmácia (sem fallback local)
+    try {
+      const res = await fetch(`${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(termo)}`, {
+        headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' }
+      });
+      let resposta = `🔍 *Resultados da busca por "${termo}":*\n\n`;
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.data?.length > 0) {
+          for (const p of data.data.slice(0, 5)) {
+            const price = p.preco_final_venda;
+            const discount = p.desconto_percentual > 0 ? ` (🔻${p.desconto_percentual.toFixed(1)}% OFF)` : '';
+            resposta += `▪️ *${p.nome_produto}*\n`;
+            resposta += `   💊 ${p.nom_laboratorio}\n`;
+            resposta += `   💰 ${price}${discount}\n`;
+            resposta += `   📦 Estoque: ${p.qtd_estoque}\n`;
+            resposta += `   📋 Código: ${p.cod_reduzido}\n`;
+            resposta += `   Para comprar: *COMPRAR ${p.cod_reduzido}*\n\n`;
+            saveProductToCache(p.cod_reduzido, p.nome_produto, parseFloat(price.replace(/[^\d,]/g, '').replace(',', '.')) || 0).catch(() => {});
+          }
+          if (data.data.length > 5) {
+            resposta += `_Mostrando 5 de ${data.data.length} resultados._\n`;
+          }
+        } else {
+          resposta += 'Nenhum produto encontrado.\n';
+        }
+      } else {
+        resposta += '⚠️ Erro ao buscar produtos. Tente novamente.\n';
+      }
+      await enviarComFormatosCorretos(from, resposta);
+    } catch (e) {
+      await enviarComFormatosCorretos(from, '⚠️ Erro ao buscar produtos. Use *ATENDENTE* para ajuda.');
+    }
+    return;
   }
+
+  await enviarComFormatosCorretos(from, '*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nDigite o nome de um produto ou *MENU* para opções.');
 }
 
 // =========================================================================
@@ -568,7 +401,6 @@ export async function POST(req: NextRequest) {
               const from = message.from;
               const whatsappPhoneId = change.value.metadata.phone_number_id;
               const messageText = message.text?.body || message.button?.text || '';
-
               if (message.type === 'text' || message.type === 'button') {
                 await processarMensagemCompleta(from, whatsappPhoneId, messageText);
               } else {
@@ -581,7 +413,6 @@ export async function POST(req: NextRequest) {
     }
     return new NextResponse('EVENT_RECEIVED', { status: 200 });
   } catch (error) {
-    console.error('❌ Erro webhook:', error);
     return new NextResponse('OK', { status: 200 });
   }
 }
