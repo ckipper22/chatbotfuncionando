@@ -1,12 +1,13 @@
 // src/app/api/whatsapp/webhook/route.ts
-
+// ====================================================================================
+// WEBHOOK CORRIGIDO - SEM BASE LOCAL, SÓ API + GOOGLE CSE FALLBACK
+// ====================================================================================
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 
 // =========================================================================
 // CONFIGURAÇÃO DAS VARIÁVEIS DE AMBIENTE
 // =========================================================================
-
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -14,161 +15,97 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const FLASK_API_URL = process.env.FLASK_API_URL;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GOOGLE_CSE_KEY = process.env.CUSTOM_SEARCH_API_KEY;
+const GOOGLE_CSE_CX = process.env.CUSTOM_SEARCH_CX;
 
-// VARIÁVEIS PARA GOOGLE CUSTOM SEARCH (CSE)
-const GOOGLE_CSE_API_KEY = process.env.CUSTOM_SEARCH_API_KEY; // Usando o nome da variável do Vercel
-const GOOGLE_CSE_ID = process.env.CUSTOM_SEARCH_CX; // Usando o nome da variável do Vercel
-
-// Flags para verificar configurações disponíveis
+// Flags de configuração
 const hasWhatsAppConfig = !!(WHATSAPP_VERIFY_TOKEN && WHATSAPP_ACCESS_TOKEN && WHATSAPP_PHONE_NUMBER_ID);
 const hasSupabaseConfig = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
 const hasFlaskConfig = !!FLASK_API_URL;
 const hasGeminiConfig = !!GEMINI_API_KEY;
-const hasCustomSearchConfig = !!(GOOGLE_CSE_API_KEY && GOOGLE_CSE_ID);
+const hasGoogleCSE = !!(GOOGLE_CSE_KEY && GOOGLE_CSE_CX);
 
-// Log de status das configurações (apenas warnings, sem throw)
-if (!hasWhatsAppConfig) {
-  console.warn('⚠️ AVISO: Variáveis do WhatsApp não configuradas. O webhook não funcionará até que sejam configuradas.');
-}
-
-if (!hasSupabaseConfig) {
-  console.warn('⚠️ AVISO: Variáveis do Supabase não configuradas. Funcionalidades de CRM/Carrinho desabilitadas.');
-}
-
-if (!hasFlaskConfig) {
-  console.warn('⚠️ AVISO: Variável FLASK_API_URL não configurada. Busca de produtos desabilitada.');
-}
-
-if (!hasGeminiConfig) {
-  console.warn('⚠️ AVISO: Variável GEMINI_API_KEY não configurada. IA Gemini desabilitada.');
-}
-
-if (!hasCustomSearchConfig) {
-  console.warn('⚠️ AVISO: Variáveis do Custom Search (Google CSE) não configuradas. A busca de bulas será feita apenas via Gemini (se disponível).');
-}
-
-// Inicialização do Gemini (se configurado)
-let ai: GoogleGenerativeAI | undefined;
-if (hasGeminiConfig) {
-  try {
-    ai = new GoogleGenerativeAI(GEMINI_API_KEY!);
-  } catch (e) {
-    console.error('❌ ERRO ao inicializar Gemini:', e);
-    // @ts-ignore
-    ai = undefined;
-  }
-}
+if (!hasWhatsAppConfig) console.warn('⚠️ WhatsApp não configurado');
+if (!hasSupabaseConfig) console.warn('⚠️ Supabase não configurado');
+if (!hasFlaskConfig) console.warn('⚠️ Flask API não configurada');
+if (!hasGeminiConfig) console.warn('⚠️ Gemini API não configurada');
+if (!hasGoogleCSE) console.warn('⚠️ Google CSE não configurado');
 
 // =========================================================================
-// GATILHOS E AUXILIARES DE INTENÇÃO
+// GATILHOS
 // =========================================================================
+const TRIGGERS_BUSCA = ['buscar', 'produto', 'consulta', 'preço', 'preco', 'estoque', 'achar', 'encontrar', 'ver se tem', 'quanto custa', 'me veja', 'me passe', 'quero', 'tem', 'procurar'];
+const TRIGGERS_CARRINHO = ['adicionar', 'carrinho', 'comprar', 'levar', 'mais um', 'pegue'];
+const NOISE_WORDS = new Set([...TRIGGERS_BUSCA, ...TRIGGERS_CARRINHO, 'qual', 'o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'por', 'um', 'uma', 'pra', 'eh', 'e', 'me', 'nele', 'dele', 'dela', 'em', 'para', 'na', 'no', 'favor', 'porfavor', 'porgentileza', 'o produto', 'o item']);
 
-const TRIGGERS_BUSCA = [
-  'buscar', 'produto', 'consulta', 'preço', 'preco', 'estoque',
-  'achar', 'encontrar', 'ver se tem', 'quanto custa', 'me veja', 'me passe',
-  'quero', 'tem', 'procurar'
-];
-
-const TRIGGERS_CARRINHO = [
-  'adicionar', 'carrinho', 'comprar', 'levar', 'mais um', 'pegue'
-];
-
-const NOISE_WORDS = new Set([
-  ...TRIGGERS_BUSCA,
-  ...TRIGGERS_CARRINHO,
-  'qual', 'o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'por', 'um', 'uma',
-  'pra', 'eh', 'e', 'me', 'nele', 'dele', 'dela', 'em', 'para', 'na', 'no', 'favor', 'porfavor', 'porgentileza',
-  'o produto', 'o item'
-]);
-
-// =========================================================================
-// FUNÇÕES AUXILIARES DE PROCESSAMENTO DE TEXTO
-// =========================================================================
-
+// Funções de extração
 function extrairTermoBusca(mensagem: string): string | null {
   const lowerMsg = mensagem.toLowerCase();
   const isSearchIntent = TRIGGERS_BUSCA.some(trigger => lowerMsg.includes(trigger));
-
-  if (!isSearchIntent) {
-    return null;
-  }
-
+  if (!isSearchIntent) return null;
   const tokens = lowerMsg.split(/\s+/).filter(Boolean);
   const filteredTokens = tokens.filter(token => !NOISE_WORDS.has(token));
   const termo = filteredTokens.join(' ').trim();
-
-  if (termo.length >= 2) {
-    return termo;
-  }
-
-  return null;
-}
-
-function extrairIntencaoCarrinho(mensagem: string): { quantity: number; productCode: string } | null {
-  const lowerMsg = mensagem.toLowerCase();
-  const isCartIntent = TRIGGERS_CARRINHO.some(trigger => lowerMsg.includes(trigger));
-  // Regex para código de produto (pelo menos 6 dígitos)
-  const regexCode = /(\d{6,})/i;
-  const matchCode = lowerMsg.match(regexCode);
-
-  if (!isCartIntent && !matchCode) {
-    return null;
-  }
-
-  if (matchCode) {
-    const productCode = matchCode[1];
-    let quantity = 1;
-
-    // Tentar extrair a quantidade
-    // Busca por um número que não é o código de produto
-    const regexQuantity = /(?:^|\s)(\d+)(?:\s+(?:do|o|item))?/i;
-    const matchQuantity = lowerMsg.match(regexQuantity);
-
-    // Evitar que o código do produto seja confundido com a quantidade se aparecer primeiro
-    // CORREÇÃO: Uso do operador de asserção non-null (!) para resolver o erro de tipagem em Vercel/TS.
-    if (matchQuantity && matchQuantity[1] !== productCode && matchCode.index! > matchQuantity.index!) {
-        quantity = parseInt(matchQuantity[1], 10);
-        if (isNaN(quantity) || quantity < 1) quantity = 1;
-    }
-
-    return { quantity, productCode };
-  }
-
-  return null;
+  return termo.length >= 2 ? termo : null;
 }
 
 function deveFazerBuscaDireta(mensagem: string): boolean {
   const texto = mensagem.toLowerCase().trim();
-
-  // Se já foi identificado como intenção de busca explícita, não fazer busca direta
   if (extrairTermoBusca(mensagem)) return false;
-
-  // Se é um comando numérico do menu
   if (/^[1-4]$/.test(texto)) return false;
-
-  // Se é um comando conhecido
-  const comandosConhecidos = ['menu', 'finalizar', 'carrinho', 'atendente', 'ajuda', 'voltar', 'oi', 'ola', 'ok', 'sim', 'nao', 'obrigado', 'obrigada'];
+  const comandosConhecidos = ['menu', 'finalizar', 'carrinho', 'atendente', 'ajuda', 'voltar'];
   if (comandosConhecidos.includes(texto)) return false;
-
-  // Se parece ser um código de produto (apenas números) - deve ser tratado como busca
-  if (/^\d{6,}$/.test(texto)) return true;
-
-  // Se tem características de pergunta sobre medicamento (será tratado pelo Gemini/CSE)
-  const termosMedicamento = ['posologia', 'efeito', 'contraindicacao', 'bula', 'dose', 'como usar', 'que serve'];
+  if (/^\d{6,}$/.test(texto)) return false;
+  const termosMedicamento = ['posologia', 'efeito', 'contraindicacao', 'bula', 'dose', 'como usar'];
   if (termosMedicamento.some(termo => texto.includes(termo))) return false;
-
-  // Se é muito curto (provavelmente não é um produto)
   if (texto.length < 3) return false;
-
-  return true;
+  const palavrasComuns = ['oi', 'ola', 'ok', 'sim', 'nao', 'obrigado', 'obrigada'];
+  return !palavrasComuns.includes(texto);
 }
 
 // =========================================================================
-// FUNÇÕES DE CACHE DE PRODUTOS
+// GOOGLE CUSTOM SEARCH FALLBACK
 // =========================================================================
+async function googleFallbackSearch(query: string): Promise<string> {
+  if (!hasGoogleCSE) {
+    return '⚠️ Busca de backup indisponível no momento. Tente novamente mais tarde.';
+  }
+  try {
+    const url = new URL('https://www.googleapis.com/customsearch/v1');
+    url.searchParams.set('key', GOOGLE_CSE_KEY!);
+    url.searchParams.set('cx', GOOGLE_CSE_CX!);
+    url.searchParams.set('q', query);
+    url.searchParams.set('num', '3');
 
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error(`CSE error: ${res.status}`);
+    const data = await res.json();
+
+    if (!data.items || data.items.length === 0) {
+      return '🔍 Não encontrei resultados relevantes na busca. Tente reformular sua pergunta.';
+    }
+
+    let resposta = `ℹ️ A IA está com restrição para responder sobre saúde. Abaixo, resultados confiáveis da web:
+`;
+    for (const item of data.items.slice(0, 3)) {
+      resposta += `• **${item.title}**
+  ${item.link}
+  ${item.snippet}
+
+`;
+    }
+    resposta += '_Consulte sempre um profissional de saúde para orientações médicas._';
+    return resposta;
+  } catch (error) {
+    console.error('❌ Erro no fallback Google CSE:', error);
+    return '⚠️ Não foi possível buscar informações no momento. Por favor, tente mais tarde.';
+  }
+}
+
+// =========================================================================
+// CACHE E SUPABASE (mantido igual, apenas ajustes mínimos)
+// =========================================================================
 async function saveProductToCache(productCode: string, productName: string, unitPrice: number): Promise<void> {
-  if (!hasSupabaseConfig) return;
   try {
     const insertUrl = `${SUPABASE_URL}/rest/v1/product_cache?on_conflict=product_code`;
     const headers = new Headers({
@@ -177,56 +114,31 @@ async function saveProductToCache(productCode: string, productName: string, unit
       'Content-Type': 'application/json',
       'Prefer': 'resolution=merge-duplicates'
     });
-
-    const payload = {
-      product_code: productCode,
-      product_name: productName,
-      unit_price: unitPrice,
-      updated_at: new Date().toISOString()
-    };
-
     await fetch(insertUrl, {
       method: 'POST',
-      headers: headers,
-      body: JSON.stringify(payload)
+      headers,
+      body: JSON.stringify({ product_code: productCode, product_name: productName, unit_price: unitPrice, updated_at: new Date().toISOString() })
     });
   } catch (error) {
-    console.log(`⚠️ Erro ao salvar produto no cache:`, error);
+    console.log(`⚠️ Erro ao salvar no cache:`, error);
   }
 }
 
 async function getProductFromCache(productCode: string): Promise<{ name: string; price: number } | null> {
-  if (!hasSupabaseConfig) return null;
   try {
     const selectUrl = `${SUPABASE_URL}/rest/v1/product_cache?product_code=eq.${productCode}`;
-    const headers = new Headers({
-      'apikey': SUPABASE_ANON_KEY!,
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-    });
-
+    const headers = new Headers({ 'apikey': SUPABASE_ANON_KEY!, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` });
     const response = await fetch(selectUrl, { method: 'GET', headers });
     if (!response.ok) return null;
-
     const data = await response.json();
-    if (data && data.length > 0) {
-      return {
-        name: data[0].product_name,
-        price: data[0].unit_price
-      };
-    }
-    return null;
+    return data?.[0] ? { name: data[0].product_name, price: data[0].unit_price } : null;
   } catch (error) {
-    console.log(`⚠️ Erro ao buscar produto do cache:`, error);
+    console.log(`⚠️ Erro ao buscar do cache:`, error);
     return null;
   }
 }
 
-// =========================================================================
-// FUNÇÕES AUXILIARES DE SUPABASE (CLIENTES, PEDIDOS, ITENS)
-// =========================================================================
-
 async function getOrCreateCustomer(from: string, whatsappPhoneId: string): Promise<string | null> {
-  if (!hasSupabaseConfig) return null;
   try {
     const headers = new Headers({
       'apikey': SUPABASE_ANON_KEY!,
@@ -234,57 +146,28 @@ async function getOrCreateCustomer(from: string, whatsappPhoneId: string): Promi
       'Content-Type': 'application/json',
       'Prefer': 'return=representation'
     });
-
     const selectUrl = `${SUPABASE_URL}/rest/v1/customers?whatsapp_phone_number=eq.${from}&select=id`;
-    let selectResponse = await fetch(selectUrl, { method: 'GET', headers });
+    let res = await fetch(selectUrl, { method: 'GET', headers });
+    if (!res.ok) throw new Error(`Erro cliente: ${res.status}`);
+    let data = await res.json();
+    if (data?.[0]?.id) return data[0].id;
 
-    if (!selectResponse.ok) {
-      throw new Error(`Status de busca de cliente: ${selectResponse.status} - ${await selectResponse.text()}`);
-    }
-
-    let data = await selectResponse.json();
-
-    if (data && data.length > 0) {
-      const customerId = data[0].id;
-      return customerId;
-    }
-
-    const insertUrl = `${SUPABASE_URL}/rest/v1/customers`;
-    const insertPayload = {
-      whatsapp_phone_number: from,
-      client_connection_id: whatsappPhoneId,
-    };
-
-    const insertResponse = await fetch(insertUrl, {
+    await fetch(`${SUPABASE_URL}/rest/v1/customers`, {
       method: 'POST',
-      headers: headers,
-      body: JSON.stringify(insertPayload)
+      headers,
+      body: JSON.stringify({ whatsapp_phone_number: from, client_connection_id: whatsappPhoneId })
     });
 
-    if (!insertResponse.ok) {
-      console.error('❌ ERRO ao inserir novo cliente:', await insertResponse.text());
-      return null;
-    }
-
-    // Busca novamente para pegar o ID gerado (prática comum em APIs REST simples)
-    selectResponse = await fetch(selectUrl, { method: 'GET', headers });
-    data = await selectResponse.json();
-
-    if (data && data.length > 0) {
-      const newCustomerId = data[0].id;
-      return newCustomerId;
-    }
-
-    return null;
-
+    res = await fetch(selectUrl, { method: 'GET', headers });
+    data = await res.json();
+    return data?.[0]?.id || null;
   } catch (error) {
-    console.error('❌ Erro crítico no CRM:', error);
+    console.error('❌ Erro CRM:', error);
     return null;
   }
 }
 
 async function getOrCreateCartOrder(customerId: string, whatsappPhoneId: string): Promise<string | null> {
-  if (!hasSupabaseConfig) return null;
   try {
     const headers = new Headers({
       'apikey': SUPABASE_ANON_KEY!,
@@ -292,782 +175,423 @@ async function getOrCreateCartOrder(customerId: string, whatsappPhoneId: string)
       'Content-Type': 'application/json',
       'Prefer': 'return=representation'
     });
-
     const selectUrl = `${SUPABASE_URL}/rest/v1/orders?customer_id=eq.${customerId}&status=eq.CART&select=id`;
-    let selectResponse = await fetch(selectUrl, { method: 'GET', headers });
+    let res = await fetch(selectUrl, { method: 'GET', headers });
+    if (!res.ok) throw new Error(`Erro carrinho: ${res.status}`);
+    let data = await res.json();
+    if (data?.[0]?.id) return data[0].id;
 
-    if (!selectResponse.ok) {
-      throw new Error(`Status de busca de pedido: ${selectResponse.status} - ${await selectResponse.text()}`);
-    }
-
-    let data = await selectResponse.json();
-
-    if (data && data.length > 0) {
-      const orderId = data[0].id;
-      return orderId;
-    }
-
-    const insertUrl = `${SUPABASE_URL}/rest/v1/orders`;
-    const insertPayload = {
-      customer_id: customerId,
-      client_connection_id: whatsappPhoneId,
-      status: 'CART',
-      total_amount: 0.00
-    };
-
-    const insertResponse = await fetch(insertUrl, {
+    await fetch(`${SUPABASE_URL}/rest/v1/orders`, {
       method: 'POST',
-      headers: headers,
-      body: JSON.stringify(insertPayload)
+      headers,
+      body: JSON.stringify({ customer_id: customerId, client_connection_id: whatsappPhoneId, status: 'CART', total_amount: 0.00 })
     });
 
-    if (!insertResponse.ok) {
-      console.error('❌ ERRO ao criar novo pedido:', await insertResponse.text());
-      return null;
-    }
-
-    // Busca novamente para pegar o ID gerado
-    selectResponse = await fetch(selectUrl, { method: 'GET', headers });
-    data = await selectResponse.json();
-
-    if (data && data.length > 0) {
-      const newOrderId = data[0].id;
-      return newOrderId;
-    }
-
-    return null;
-
+    res = await fetch(selectUrl, { method: 'GET', headers });
+    data = await res.json();
+    return data?.[0]?.id || null;
   } catch (error) {
-    console.error('❌ Erro crítico no Carrinho:', error);
+    console.error('❌ Erro Carrinho:', error);
     return null;
   }
 }
 
 async function getOrderItems(orderId: string): Promise<any[]> {
-  if (!hasSupabaseConfig) return [];
+  try {
+    const headers = new Headers({ 'apikey': SUPABASE_ANON_KEY!, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` });
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/order_items?order_id=eq.${orderId}&select=*`, { method: 'GET', headers });
+    return res.ok ? (await res.json()) : [];
+  } catch (error) {
+    console.error('❌ Erro itens pedido:', error);
+    return [];
+  }
+}
+
+async function updateOrderTotal(orderId: string, newTotal: number): Promise<void> {
   try {
     const headers = new Headers({
       'apikey': SUPABASE_ANON_KEY!,
       'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
       'Content-Type': 'application/json'
     });
-
-    const selectUrl = `${SUPABASE_URL}/rest/v1/order_items?order_id=eq.${orderId}&select=*`;
-    const selectResponse = await fetch(selectUrl, { method: 'GET', headers });
-
-    if (!selectResponse.ok) {
-      console.error('❌ ERRO ao buscar itens do pedido:', await selectResponse.text());
-      return [];
-    }
-
-    const data = await selectResponse.json();
-    return data || [];
-
-  } catch (error) {
-    console.error('❌ Erro crítico ao buscar itens do pedido:', error);
-    return [];
-  }
-}
-
-async function updateOrderTotal(orderId: string, newTotal: number): Promise<void> {
-  if (!hasSupabaseConfig) return;
-  try {
-    const updateUrl = `${SUPABASE_URL}/rest/v1/orders?id=eq.${orderId}`;
-    const headers = new Headers({
-      'apikey': SUPABASE_ANON_KEY!,
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal'
-    });
-
-    const updatePayload = {
-      total_amount: newTotal
-    };
-
-    const response = await fetch(updateUrl, {
+    await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${orderId}`, {
       method: 'PATCH',
-      headers: headers,
-      body: JSON.stringify(updatePayload)
+      headers,
+      body: JSON.stringify({ total_amount: newTotal })
     });
-
-    if (!response.ok) {
-      console.error('❌ ERRO ao atualizar total do pedido:', await response.text());
-    }
   } catch (error) {
-    console.error('❌ Erro crítico ao atualizar total do pedido:', error);
+    console.error('❌ Erro update total:', error);
   }
 }
 
-async function recalcularTotalCarrinho(orderId: string): Promise<void> {
-  if (!hasSupabaseConfig) return;
-  const items = await getOrderItems(orderId);
-  const newTotal = items.reduce((acc, item) => acc + (item.total_price || 0), 0);
-  await updateOrderTotal(orderId, newTotal);
-}
-
-async function addItemToCart(
-  orderId: string,
-  productCode: string,
-  quantity: number,
-  whatsappPhoneId: string
-): Promise<boolean> {
-  if (!hasSupabaseConfig) return false;
+async function addItemToCart(orderId: string, productCode: string, quantity: number, whatsappPhoneId: string): Promise<boolean> {
   try {
-    console.log(`🛒 Adicionando produto ${productCode} ao carrinho (ordem: ${orderId})`);
-
     let productName = `Produto ${productCode}`;
     let unitPrice = 0;
 
-    // 💾 PRIMEIRO: Tentar buscar do CACHE
-    const cachedProduct = await getProductFromCache(productCode);
-
-    if (cachedProduct) {
-      productName = cachedProduct.name;
-      unitPrice = cachedProduct.price;
-      console.log(`✅ ENCONTRADO NO CACHE: ${productName} - R$ ${unitPrice}`);
-    } else {
-      // 🔍 SE NÃO ESTIVER NO CACHE: Tentar buscar produto pela API (opcional)
-      if (FLASK_API_URL) {
-        try {
-          const searchUrl = `${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(productCode)}`;
-
-          const searchResponse = await fetch(searchUrl, {
-            headers: {
-              'Content-Type': 'application/json',
-              'ngrok-skip-browser-warning': 'true',
-              'User-Agent': 'WhatsAppWebhook/1.0'
-            }
-          });
-
-          if (searchResponse.ok) {
-            const searchData = await searchResponse.json();
-            // Buscar pelo código exato
-            const product = searchData.data?.find((p: any) => String(p.cod_reduzido) === productCode);
-
-            if (product) {
-              productName = product.nome_produto;
-              const priceStr = product.preco_final_venda.replace(/[^\d,]/g, '').replace(',', '.');
-              unitPrice = parseFloat(priceStr) || 0;
-              console.log(`✅ Encontrado na API: ${productName} - R$ ${unitPrice}`);
-              // Salvar no cache para próxima vez
-              await saveProductToCache(productCode, productName, unitPrice);
-            } else {
-              console.log(`⚠️ Produto não encontrado na API`);
-            }
-          } else {
-            console.log(`⚠️ API retornou erro ${searchResponse.status}`);
+    const cached = await getProductFromCache(productCode);
+    if (cached) {
+      productName = cached.name;
+      unitPrice = cached.price;
+    } else if (FLASK_API_URL) {
+      try {
+        const res = await fetch(`${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(productCode)}`, {
+          headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const product = data.data?.find((p: any) => String(p.cod_reduzido) === productCode);
+          if (product) {
+            productName = product.nome_produto;
+            unitPrice = parseFloat(product.preco_final_venda.replace(/[^\d,]/g, '').replace(',', '.')) || 0;
+            saveProductToCache(productCode, productName, unitPrice).catch(() => {});
           }
-        } catch (apiError) {
-          console.log(`⚠️ Erro ao consultar API Flask: ${apiError}`);
         }
+      } catch (e) {
+        console.log('⚠️ Erro na API Flask durante adição ao carrinho');
       }
     }
-
-    const totalPrice = unitPrice * quantity;
-
-    // 📝 Inserir item no Supabase
-    const insertUrl = `${SUPABASE_URL}/rest/v1/order_items`;
-    const headers = new Headers({
-      'apikey': SUPABASE_ANON_KEY!,
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal'
-    });
-
-    const insertPayload = {
-      order_id: orderId,
-      product_api_id: productCode,
-      product_name: productName,
-      quantity: quantity,
-      unit_price: unitPrice,
-      total_price: totalPrice
-    };
-
-    const insertResponse = await fetch(insertUrl, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(insertPayload)
-    });
-
-    if (!insertResponse.ok) {
-      const errorText = await insertResponse.text();
-      console.error('❌ ERRO ao inserir item no carrinho:', errorText);
-      return false;
-    }
-
-    // 💰 Recalcular total do pedido
-    await recalcularTotalCarrinho(orderId);
-
-    console.log(`✅ Produto adicionado ao carrinho com sucesso!`);
-    return true;
-
-  } catch (error) {
-    console.error('❌ Erro crítico ao adicionar item ao carrinho:', error);
-    return false;
-  }
-}
-
-async function salvarMensagemNoSupabase(
-  whatsappPhoneId: string,
-  from: string,
-  body: string,
-  direction: 'IN' | 'OUT'
-): Promise<void> {
-  if (!hasSupabaseConfig) return;
-  try {
-    const url = `${SUPABASE_URL}/rest/v1/whatsapp_messages`;
 
     const headers = new Headers({
       'apikey': SUPABASE_ANON_KEY!,
       'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal'
+      'Content-Type': 'application/json'
     });
-
-    const payload = {
-      whatsapp_phone_id: whatsappPhoneId,
-      from_number: from,
-      message_body: body,
-      direction: direction,
-    };
-
-    const response = await fetch(url, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/order_items`, {
       method: 'POST',
-      headers: headers,
-      body: JSON.stringify(payload)
+      headers,
+      body: JSON.stringify({
+        order_id: orderId,
+        product_api_id: productCode,
+        product_name: productName,
+        quantity,
+        unit_price: unitPrice,
+        total_price: unitPrice * quantity
+      })
     });
-
-    if (!response.ok) {
-      console.error(`❌ ERRO ao salvar mensagem no Supabase:`, await response.text());
-    }
-
+    return res.ok;
   } catch (error) {
-    console.error(`❌ Erro crítico ao salvar mensagem:`, error);
-  }
-}
-
-// =========================================================================
-// FUNÇÕES AUXILIARES DE INTEGRAÇÃO (WHATSAPP API)
-// =========================================================================
-
-async function enviarComFormatosCorretos(to: string, text: string): Promise<boolean> {
-  if (!hasWhatsAppConfig) {
-    console.error('❌ WhatsApp API não configurada. Não é possível enviar a mensagem.');
-    return false;
-  }
-  const apiUrl = `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
-  const headers = {
-    'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-    'Content-Type': 'application/json'
-  };
-  const body = {
-    messaging_product: 'whatsapp',
-    to: to,
-    type: 'text',
-    text: { body: text }
-  };
-
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-      console.error('❌ ERRO ao enviar mensagem:', response.status, await response.text());
-      return false;
-    }
-    return true;
-  } catch (error) {
-    console.error('❌ Erro de rede/fetch ao enviar mensagem:', error);
+    console.error('❌ Erro addItemToCart:', error);
     return false;
   }
 }
 
-async function enviarMenuInicial(from: string, whatsappPhoneId: string): Promise<boolean> {
-  const texto = '*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\\n\\n' +
-    'Como posso te ajudar hoje?\\n\\n' +
-    'Digite o *número* da opção desejada, ou digite o nome do produto/medicamento:\\n' +
-    '*1.* 🔍 Buscar Preços e Estoque de Produtos\\n' +
-    '*2.* 💊 Consultar Informações de Medicamentos (Bula)\\n' +
-    '*3.* 🛒 Ver/Finalizar Carrinho\\n' +
-    '*4.* 👩‍💻 Falar com um Atendente (Horário Comercial)\\n';
-
-  const result = await enviarComFormatosCorretos(from, texto);
-  if (result && hasSupabaseConfig) {
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, texto, 'OUT');
-  }
-  return result;
-}
-
-// =========================================================================
-// FUNÇÕES DE BUSCA DE BULA (GOOGLE CSE)
-// =========================================================================
-
-async function handleGoogleCustomSearch(query: string): Promise<string | null> {
-    if (!hasCustomSearchConfig) return null;
-
-    // Adapta a query para buscar bulas
-    const fullQuery = `bula posologia ${query}`; 
-    console.log(`🔍 Buscando informações de bula via Google CSE para: "${fullQuery}"`);
-
-    try {
-        const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_CSE_API_KEY}&cx=${GOOGLE_CSE_ID}&q=${encodeURIComponent(fullQuery)}`;
-
-        const response = await fetch(searchUrl, {
-            headers: {
-                'Content-Type': 'application/json',
-                'User-Agent': 'WhatsAppBulaBot/1.0'
-            }
-        });
-
-        if (!response.ok) {
-            console.error(`❌ Google CSE API retornou erro ${response.status}: ${await response.text()}`);
-            return null;
-        }
-
-        const data = await response.json();
-        const items = data.items || [];
-
-        if (items.length === 0) {
-            return null;
-        }
-
-        let searchResults = `📚 *Bula e Informações sobre ${query} (Fonte Externa)*:\n\n`;
-        
-        // Limita a 3 resultados
-        items.slice(0, 3).forEach((item: any, index: number) => {
-            const title = item.title || 'Resultado Sem Título';
-            // Limpeza básica do snippet
-            const snippet = item.snippet ? item.snippet.replace(/\n/g, ' ').trim() : 'Sem resumo disponível.';
-            const link = item.link || '#';
-
-            searchResults += `*${index + 1}. ${title}*\n`;
-            searchResults += `_${snippet.substring(0, 200)}..._\n`; // Trunca o snippet
-            searchResults += `[Clique para ver a fonte completa](${link})\n\n`;
-        });
-
-        searchResults += '⚠️ _Aviso: Consulte sempre um médico ou farmacêutico para obter orientações específicas de saúde._';
-        return searchResults;
-
-    } catch (error) {
-        console.error('❌ Erro ao consultar a API do Google Custom Search:', error);
-        return null;
-    }
-}
-
-
-// =========================================================================
-// FUNÇÕES DE MANIPULAÇÃO DE INTENÇÕES
-// =========================================================================
-
-async function handleProductSearch(
-  from: string,
-  whatsappPhoneId: string,
-  searchTerm: string
-): Promise<boolean> {
-  const isCode = /^\d{6,}$/.test(searchTerm);
-  console.log(`🔎 Processando busca: "${searchTerm}" (É código? ${isCode})`);
-
-  if (!hasFlaskConfig) {
-    const msg = `⚠️ Desculpe, a busca por produtos está indisponível no momento. Por favor, tente mais tarde ou digite *4* para falar com um atendente.`;
-    const sent = await enviarComFormatosCorretos(from, msg);
-    if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return sent;
-  }
-
+async function salvarMensagemNoSupabase(whatsappPhoneId: string, from: string, body: string, direction: 'IN' | 'OUT'): Promise<void> {
   try {
-    const searchUrl = `${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(searchTerm)}`;
-    const response = await fetch(searchUrl, {
-      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true', 'User-Agent': 'WhatsAppWebhook/1.0' }
-    });
-
-    if (!response.ok) {
-      throw new Error(`API status: ${response.status}`);
-    }
-
-    const searchData = await response.json();
-    const products = searchData.data || [];
-
-    if (products.length === 0) {
-      const msg = `❌ Nenhum produto encontrado para "${searchTerm}". Tente refinar sua busca.`;
-      const sent = await enviarComFormatosCorretos(from, msg);
-      if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-      return sent;
-    }
-
-    // Limitar a 5 resultados
-    const topProducts = products.slice(0, 5);
-
-    let reply = `✅ Encontrei ${topProducts.length} produtos para "${searchTerm}":\n\n`;
-    reply += topProducts.map((p: any, index: number) => {
-      const priceStr = p.preco_final_venda.replace(/[^\d,]/g, '').replace(',', '.');
-      const unitPrice = parseFloat(priceStr) || 0;
-      const priceFormatted = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(unitPrice);
-
-      // Salvar no cache assincronamente
-      if (hasSupabaseConfig) {
-        saveProductToCache(String(p.cod_reduzido), p.nome_produto, unitPrice);
-      }
-
-      return `*${index + 1}.* ${p.nome_produto} (${p.cod_reduzido}) - *${priceFormatted}*\n   _Para adicionar, digite: adicionar ${p.cod_reduzido}_`;
-    }).join('\n\n');
-
-    reply += '\n\nDigite o nome ou código de outro produto para continuar buscando, ou *MENU* para voltar.';
-
-    const sent = await enviarComFormatosCorretos(from, reply);
-    if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, reply, 'OUT');
-    return sent;
-
-  } catch (error) {
-    console.error('❌ Erro na busca de produtos:', error);
-    const msg = `⚠️ Desculpe, houve um erro ao processar sua busca. Tente novamente mais tarde.`;
-    const sent = await enviarComFormatosCorretos(from, msg);
-    if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return sent;
-  }
-}
-
-async function handleAddToCart(
-  from: string,
-  whatsappPhoneId: string,
-  quantity: number,
-  productCode: string
-): Promise<boolean> {
-  if (!hasSupabaseConfig) {
-    const msg = `⚠️ Desculpe, a funcionalidade de carrinho está temporariamente indisponível. Por favor, digite *4* para falar com um atendente.`;
-    const sent = await enviarComFormatosCorretos(from, msg);
-    if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return sent;
-  }
-
-  const customerId = await getOrCreateCustomer(from, whatsappPhoneId);
-  if (!customerId) {
-    const msg = `❌ Não foi possível identificar seu cadastro. Tente novamente mais tarde.`;
-    const sent = await enviarComFormatosCorretos(from, msg);
-    if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return sent;
-  }
-
-  const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
-  if (!orderId) {
-    const msg = `❌ Não foi possível criar seu carrinho. Tente novamente mais tarde.`;
-    const sent = await enviarComFormatosCorretos(from, msg);
-    if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return sent;
-  }
-
-  const added = await addItemToCart(orderId, productCode, quantity, whatsappPhoneId);
-
-  if (added) {
-    const msg = `✅ *${quantity} unidade(s)* do produto (cód: ${productCode}) adicionada(s) ao seu carrinho! Digite *CARRINHO* para ver o total ou *MENU* para continuar.`;
-    const sent = await enviarComFormatosCorretos(from, msg);
-    if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return sent;
-  } else {
-    const msg = `❌ Não foi possível adicionar o produto (cód: ${productCode}) ao carrinho. Verifique se o código está correto ou se a API de busca está disponível.`;
-    const sent = await enviarComFormatosCorretos(from, msg);
-    if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return sent;
-  }
-}
-
-async function handleViewCart(from: string, whatsappPhoneId: string): Promise<boolean> {
-  if (!hasSupabaseConfig) {
-    const msg = `⚠️ Desculpe, a funcionalidade de carrinho está indisponível.`;
-    const sent = await enviarComFormatosCorretos(from, msg);
-    if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return sent;
-  }
-
-  const customerId = await getOrCreateCustomer(from, whatsappPhoneId);
-  if (!customerId) return false;
-
-  const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
-  if (!orderId) {
-    const msg = `🛒 Seu carrinho está vazio! Comece buscando produtos no *MENU*.`;
-    const sent = await enviarComFormatosCorretos(from, msg);
-    if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return sent;
-  }
-
-  const items = await getOrderItems(orderId);
-  await recalcularTotalCarrinho(orderId);
-
-  if (items.length === 0) {
-    const msg = `🛒 Seu carrinho está vazio! Comece buscando produtos no *MENU*.`;
-    const sent = await enviarComFormatosCorretos(from, msg);
-    if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return sent;
-  }
-
-  const total = items.reduce((sum, item) => sum + item.total_price, 0);
-  const totalFormatted = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total);
-
-  let cartSummary = `🛒 *Seu Carrinho de Compras* (Total: ${totalFormatted}):\n\n`;
-  cartSummary += items.map((item, index) => {
-    const unitPriceFormatted = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.unit_price);
-    const totalPriceFormatted = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.total_price);
-    return `*${index + 1}.* ${item.product_name}\n   - Qtd: ${item.quantity} x ${unitPriceFormatted} = ${totalPriceFormatted}`;
-  }).join('\n\n');
-
-  cartSummary += '\n\nPara *finalizar* seu pedido e ser atendido, digite *FINALIZAR*.';
-
-  const sent = await enviarComFormatosCorretos(from, cartSummary);
-  if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, cartSummary, 'OUT');
-  return sent;
-}
-
-async function handleFinalizeOrder(from: string, whatsappPhoneId: string): Promise<boolean> {
-    if (!hasSupabaseConfig) {
-        const msg = `⚠️ Desculpe, a finalização de pedido está indisponível. Por favor, ligue para (XX) XXXX-XXXX.`;
-        const sent = await enviarComFormatosCorretos(from, msg);
-        if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-        return sent;
-    }
-
-    const customerId = await getOrCreateCustomer(from, whatsappPhoneId);
-    const orderId = customerId ? await getOrCreateCartOrder(customerId, whatsappPhoneId) : null;
-    if (!orderId) {
-        const msg = `❌ Seu carrinho está vazio. Não há pedido para finalizar.`;
-        const sent = await enviarComFormatosCorretos(from, msg);
-        if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-        return sent;
-    }
-    
-    // Verifique se o carrinho tem itens antes de finalizar
-    const items = await getOrderItems(orderId);
-    if (items.length === 0) {
-        const msg = `❌ Seu carrinho está vazio. Adicione produtos antes de finalizar.`;
-        const sent = await enviarComFormatosCorretos(from, msg);
-        if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-        return sent;
-    }
-
     const headers = new Headers({
-        'apikey': SUPABASE_ANON_KEY!,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal'
+      'apikey': SUPABASE_ANON_KEY!,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json'
     });
-    
-    // Atualizar status para PENDING_REVIEW
-    const updateUrl = `${SUPABASE_URL}/rest/v1/orders?id=eq.${orderId}`;
-    const updatePayload = { status: 'PENDING_REVIEW' };
-    const response = await fetch(updateUrl, { method: 'PATCH', headers, body: JSON.stringify(updatePayload) });
-
-    if (!response.ok) {
-        console.error('❌ Erro ao finalizar pedido:', await response.text());
-        const msg = `❌ Ocorreu um erro ao finalizar seu pedido. Por favor, digite *4* para falar com um atendente.`;
-        const sent = await enviarComFormatosCorretos(from, msg);
-        if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-        return sent;
-    }
-
-    const msg = `🎉 *PEDIDO FINALIZADO!* 🎉\n\nSeu pedido foi registrado e um de nossos atendentes irá entrar em contato em breve para confirmar a entrega e o pagamento.\n\nNúmero do seu pedido: *${orderId.substring(0, 8)}*.\n\nObrigado por comprar conosco! Digite *MENU* para recomeçar.`;
-    const sent = await enviarComFormatosCorretos(from, msg);
-    if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return sent;
+    await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_messages`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ whatsapp_phone_id: whatsappPhoneId, from_number: from, message_body: body, direction })
+    });
+  } catch (error) {
+    console.error('❌ Erro salvar mensagem:', error);
+  }
 }
 
-async function handleGemini(
-  from: string,
-  whatsappPhoneId: string,
-  message: string
-): Promise<boolean> {
-  console.log(`🧠 Processando consulta de medicamento: "${message}"`);
-  
-  let replyMsg = '';
-
-  // 1. TENTA USAR A BUSCA CUSTOMIZADA (GOOGLE CSE) PARA INFORMAÇÕES DE BULA
-  if (hasCustomSearchConfig) {
-    const searchResult = await handleGoogleCustomSearch(message);
-    if (searchResult) {
-      replyMsg = searchResult;
+// =========================================================================
+// FUNÇÕES DE ENVIO E INTEGRAÇÃO
+// =========================================================================
+function converterParaFormatoFuncional(numeroOriginal: string): string[] {
+  const numeroLimpo = numeroOriginal.replace(/\D/g, '');
+  let numeroConvertido = numeroLimpo;
+  if (numeroLimpo.length === 12 && numeroLimpo.startsWith('55')) {
+    const ddd = numeroLimpo.substring(2, 4);
+    const num = numeroLimpo.substring(4);
+    if (num.length === 8 && !['1','2','3','4','5'].includes(num.charAt(0))) {
+      numeroConvertido = '55' + ddd + '9' + num;
     }
   }
+  return ['+' + numeroConvertido, numeroConvertido];
+}
 
-  // 2. SE A BUSCA FALHOU OU NÃO ESTÁ CONFIGURADA, USA GEMINI COMO FALLBACK
-  if (!replyMsg) {
-    if (!hasGeminiConfig || !ai) {
-        // Se a busca e o Gemini falharam
-        replyMsg = `⚠️ Desculpe, não consegui encontrar informações detalhadas sobre "${message}" no momento. Por favor, tente a busca de produtos (opção 1) ou fale com um atendente (opção 4).`;
+async function enviarComFormatosCorretos(from: string, texto: string): Promise<boolean> {
+  try {
+    const formatos = converterParaFormatoFuncional(from);
+    for (const formato of formatos) {
+      const payload = {
+        messaging_product: 'whatsapp',
+        to: formato,
+        type: 'text',
+        text: { body: texto.substring(0, 4096).replace(/\\n/g, '\n') }
+      };
+      const res = await fetch(`https://graph.facebook.com/v19.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) return true;
+      await new Promise(r => setTimeout(r, 300));
+    }
+    return false;
+  } catch (error) {
+    console.error('❌ Erro envio WhatsApp:', error);
+    return false;
+  }
+}
+
+async function findFarmacyAPI(whatsappPhoneId: string) {
+  if (!hasSupabaseConfig) return null;
+  try {
+    const headers = new Headers({ 'apikey': SUPABASE_ANON_KEY!, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` });
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/client_connections?whatsapp_phone_id=eq.${whatsappPhoneId}&select=api_base_url,client_id`, { method: 'GET', headers });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.[0] || null;
+  } catch (error) {
+    console.error('❌ Erro findFarmacyAPI:', error);
+    return null;
+  }
+}
+
+async function consultarAPIFarmacia(apiUrl: string, termo: string) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(`${apiUrl}/api/products/search?q=${encodeURIComponent(termo)}`, {
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    return await res.json();
+  } catch (error) {
+    console.error('❌ Erro consultarAPIFarmacia:', error);
+    throw error;
+  }
+}
+
+async function buscarEOferecerProdutos(from: string, whatsappPhoneId: string, termoBusca: string): Promise<void> {
+  let resposta = `🔍 *Resultados da busca por "${termoBusca}":*\n\n`;
+
+  try {
+    const farmacia = await findFarmacyAPI(whatsappPhoneId);
+    if (farmacia?.api_base_url) {
+      const data = await consultarAPIFarmacia(farmacia.api_base_url, termoBusca);
+      if (data?.data?.length > 0) {
+        for (const p of data.data.slice(0, 5)) {
+          const price = p.preco_final_venda;
+          const discount = p.desconto_percentual > 0 ? ` (🔻${p.desconto_percentual.toFixed(1)}% OFF)` : '';
+          resposta += `▪️ *${p.nome_produto}*\n`;
+          resposta += `   💊 ${p.nom_laboratorio}\n`;
+          resposta += `   💰 ${price}${discount}\n`;
+          resposta += `   📦 Estoque: ${p.qtd_estoque}\n`;
+          resposta += `   📋 Código: ${p.cod_reduzido}\n`;
+          resposta += `   Para comprar: *COMPRAR ${p.cod_reduzido}*\n\n`;
+          saveProductToCache(p.cod_reduzido, p.nome_produto, parseFloat(price.replace(/[^\d,]/g, '').replace(',', '.')) || 0).catch(() => {});
+        }
+        if (data.data.length > 5) {
+          resposta += `_Mostrando 5 de ${data.data.length} resultados. Refine sua busca._\n`;
+        }
+      } else {
+        resposta += 'Nenhum produto encontrado. Tente outro termo.\n';
+      }
     } else {
-        // Usa Gemini
-        try {
-            const model = ai.getGenerativeModel({ model: "gemini-2.5-flash" });
-            const prompt = `Você é um assistente virtual de uma farmácia brasileira. Responda à pergunta do usuário sobre medicamentos, saúde ou produtos de forma profissional e informativa. *ATENÇÃO*: Não faça diagnósticos, não prescreva tratamentos. Sempre inclua um aviso como: "Consulte um médico ou farmacêutico para obter orientações específicas." O usuário perguntou: "${message}"`;
-            
-            const result = await model.generateContent(prompt);
-            replyMsg = result.text.trim();
+      resposta += '⚠️ API da farmácia não disponível. Tente novamente mais tarde.\n';
+    }
+  } catch (error) {
+    resposta += '⚠️ Erro ao buscar produtos. Use *ATENDENTE* para ajuda humana.\n';
+  }
 
-            // Adicionar aviso de segurança se não houver
-            if (!replyMsg.toLowerCase().includes('consulte') && !replyMsg.toLowerCase().includes('médico') && !replyMsg.toLowerCase().includes('farmacêutico')) {
-                replyMsg += '\n\n⚠️ _Lembre-se: Consulte sempre um médico ou farmacêutico para orientações específicas de saúde._';
-            }
+  await enviarComFormatosCorretos(from, resposta);
+  await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT');
+}
 
-        } catch (error) {
-            console.error('❌ Erro no Gemini:', error);
-            replyMsg = `⚠️ Desculpe, houve um erro ao consultar as informações. Tente novamente mais tarde.`;
-        }
+async function verCarrinho(from: string, whatsappPhoneId: string, customerId: string): Promise<void> {
+  const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
+  if (!orderId) {
+    const msg = '⚠️ Erro ao carregar carrinho.';
+    await enviarComFormatosCorretos(from, msg);
+    await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
+    return;
+  }
+  const items = await getOrderItems(orderId);
+  let total = 0;
+  let resposta = `🛒 *SEU CARRINHO* (ID: ${orderId.substring(0, 8)})\n\n`;
+  if (items.length === 0) {
+    resposta += 'Seu carrinho está vazio! Envie o nome de um produto para começar.';
+  } else {
+    for (const item of items) {
+      const unit = parseFloat(item.unit_price);
+      const sub = item.quantity * unit;
+      total += sub;
+      resposta += `▪️ *${item.product_name}* (${item.product_api_id})\n`;
+      resposta += `   Qtd: ${item.quantity} × R$${unit.toFixed(2)} = R$${sub.toFixed(2)}\n`;
+    }
+    resposta += `\n-------------------------------\n`;
+    resposta += `💰 **TOTAL: R$${total.toFixed(2)}**\n`;
+    resposta += `-------------------------------\n\n`;
+    resposta += `*FINALIZAR* para concluir ou *MENU* para voltar.`;
+  }
+  await enviarComFormatosCorretos(from, resposta);
+  await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT');
+  if (items.length > 0) await updateOrderTotal(orderId, total);
+}
+
+async function finalizarPedido(from: string, whatsappPhoneId: string, customerId: string): Promise<void> {
+  const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
+  if (!orderId) {
+    await enviarComFormatosCorretos(from, '⚠️ Carrinho vazio ou erro.');
+    return;
+  }
+  try {
+    const headers = new Headers({ 'apikey': SUPABASE_ANON_KEY!, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' });
+    await fetch(`${SUPABASE_URL}/rest/v1/orders?id=eq.${orderId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ status: 'PENDING', checkout_at: new Date().toISOString() })
+    });
+    const msg = `🎉 *PEDIDO FINALIZADO!*\n\nSeu pedido (ID: ${orderId.substring(0, 8)}) foi recebido. Em breve entraremos em contato para confirmar pagamento e entrega.`;
+    await enviarComFormatosCorretos(from, msg);
+    await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
+  } catch (error) {
+    await enviarComFormatosCorretos(from, '⚠️ Erro ao finalizar. Tente novamente ou fale com *ATENDENTE*.');
+    console.error('❌ Erro finalizar pedido:', error);
+  }
+}
+
+// =========================================================================
+// INTEGRAÇÃO COM GEMINI + GOOGLE CSE FALLBACK
+// =========================================================================
+async function interpretarComGemini(mensagem: string): Promise<{ resposta: string; usarCSE: boolean }> {
+  if (!hasGeminiConfig) {
+    return { resposta: 'IA desativada. Digite *MENU* para opções.', usarCSE: false };
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY!);
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_MEDICAL, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ]
+    });
+
+    const prompt = `Você é um assistente de farmácia. Responda com clareza, mas NUNCA dê conselhos médicos.
+Se a pergunta for sobre posologia, efeitos colaterais, contraindicações, etc., responda: "Sou um assistente virtual e não posso fornecer orientações médicas. Consulte um farmacêutico."
+Mensagem: "${mensagem}"`;
+
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+
+    // Verifica se foi bloqueado por conteúdo médico
+    const safetyRatings = response.candidates?.[0]?.safetyRatings || [];
+    const isMedicalBlocked = safetyRatings.some(r =>
+      r.category === HarmCategory.HARM_CATEGORY_MEDICAL &&
+      (r.probability === 'HIGH' || r.probability === 'VERY_HIGH')
+    );
+
+    if (isMedicalBlocked || response.text?.trim() === '') {
+      return { resposta: '', usarCSE: true };
+    }
+
+    return { resposta: response.text, usarCSE: false };
+  } catch (error) {
+    console.error('❌ Erro Gemini:', error);
+    return { resposta: '', usarCSE: true };
+  }
+}
+
+// =========================================================================
+// PROCESSAMENTO PRINCIPAL
+// =========================================================================
+async function processarMensagemCompleta(from: string, whatsappPhoneId: string, messageText: string) {
+  const customerId = await getOrCreateCustomer(from, whatsappPhoneId);
+  if (!customerId) return;
+  await salvarMensagemNoSupabase(whatsappPhoneId, from, messageText, 'IN');
+
+  // Comando "COMPRAR"
+  const comprarMatch = messageText.match(/^comprar\s+(\d+)/i);
+  if (comprarMatch) {
+    const code = comprarMatch[1];
+    const orderId = await getOrCreateCartOrder(customerId, whatsappPhoneId);
+    if (orderId && await addItemToCart(orderId, code, 1, whatsappPhoneId)) {
+      const msg = `✅ Produto *${code}* adicionado ao carrinho.\n\nDigite *CARRINHO* ou *FINALIZAR*.`;
+      await enviarComFormatosCorretos(from, msg);
+      await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
+      return;
+    } else {
+      const msg = `❌ Produto *${code}* não encontrado. Verifique o código.`;
+      await enviarComFormatosCorretos(from, msg);
+      await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
+      return;
     }
   }
 
+  // Interpretar com IA
+  const { resposta, usarCSE } = await interpretarComGemini(messageText);
 
-  const sent = await enviarComFormatosCorretos(from, replyMsg);
-  if (sent && hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, replyMsg, 'OUT');
-  return sent;
+  if (usarCSE) {
+    const fallback = await googleFallbackSearch(messageText);
+    await enviarComFormatosCorretos(from, fallback);
+    await salvarMensagemNoSupabase(whatsappPhoneId, from, fallback, 'OUT');
+    return;
+  }
+
+  if (resposta.trim() !== '') {
+    await enviarComFormatosCorretos(from, resposta);
+    await salvarMensagemNoSupabase(whatsappPhoneId, from, resposta, 'OUT');
+    return;
+  }
+
+  // Fallback: tentar busca de produto
+  const termo = messageText.trim();
+  if (termo.length >= 2) {
+    await buscarEOferecerProdutos(from, whatsappPhoneId, termo);
+  } else {
+    const msg = '*OLÁ! SOU SEU ASSISTENTE VIRTUAL DA FARMÁCIA.*\n\nDigite:\n*1.* Buscar produtos\n*2.* Ver carrinho\n*3.* Falar com atendente\nOu envie o nome de um medicamento/produto.';
+    await enviarComFormatosCorretos(from, msg);
+    await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
+  }
 }
 
 // =========================================================================
-// HANDLER PRINCIPAL DE MENSAGENS
+// HANDLERS
 // =========================================================================
-
-async function handleWhatsAppMessage(body: any): Promise<NextResponse> {
-  const changes = body.entry?.[0]?.changes?.[0];
-  const messageData = changes?.value?.messages?.[0];
-  const whatsappPhoneId = changes?.value?.metadata?.phone_number_id;
-
-  if (!messageData || messageData.type !== 'text') {
-    return NextResponse.json({ status: 'Mensagem ignorada (não é texto ou notificação)' }, { status: 200 });
-  }
-
-  const { from, text } = messageData;
-  const incomingMessage = text.body;
-  const lowerCaseMsg = incomingMessage.toLowerCase().trim();
-
-  console.log(`📥 Nova mensagem de ${from}: "${incomingMessage}"`);
-
-  // Salvar mensagem de entrada no Supabase (se configurado)
-  if (hasSupabaseConfig) {
-    await salvarMensagemNoSupabase(whatsappPhoneId, from, incomingMessage, 'IN');
-  }
-
-  // 1. **Comandos Diretos e Menu**
-  if (['menu', 'ajuda', 'olá', 'oi', 'voltar'].includes(lowerCaseMsg) || lowerCaseMsg === '0' || lowerCaseMsg.length < 3) {
-    await enviarMenuInicial(from, whatsappPhoneId);
-    return NextResponse.json({ status: 'Menu enviado' }, { status: 200 });
-  }
-
-  // Opção 1: Intenção de Buscar Produtos
-  if (lowerCaseMsg === '1') {
-    const msg = '🔍 Por favor, digite o *nome* ou *código* do produto que você deseja consultar o preço e estoque.';
-    await enviarComFormatosCorretos(from, msg);
-    if (hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return NextResponse.json({ status: 'Intenção de Busca confirmada' }, { status: 200 });
-  }
-
-  // Opção 2: Intenção de Consultar Medicamentos
-  if (lowerCaseMsg === '2') {
-    const msg = '💊 Por favor, digite o *nome do medicamento* sobre o qual você gostaria de saber mais (ex: posologia, efeitos, etc.).';
-    await enviarComFormatosCorretos(from, msg);
-    if (hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    return NextResponse.json({ status: 'Intenção de Bula confirmada' }, { status: 200 });
-  }
-
-  // Opção 3: Ver Carrinho
-  if (lowerCaseMsg === '3' || lowerCaseMsg === 'carrinho') {
-    await handleViewCart(from, whatsappPhoneId);
-    return NextResponse.json({ status: 'Carrinho visualizado' }, { status: 200 });
-  }
-
-  // Finalizar Pedido
-  if (lowerCaseMsg === 'finalizar') {
-    await handleFinalizeOrder(from, whatsappPhoneId);
-    return NextResponse.json({ status: 'Pedido finalizado' }, { status: 200 });
-  }
-
-  // Opção 4: Falar com Atendente
-  if (lowerCaseMsg === '4' || lowerCaseMsg === 'atendente') {
-    const msg = '👩‍💻 Certo! Estou transferindo seu atendimento para um de nossos atendentes. Eles continuarão a conversa por aqui em breve. Por favor, aguarde.';
-    await enviarComFormatosCorretos(from, msg);
-    if (hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, msg, 'OUT');
-    // **TODO:** Adicionar lógica de transferência/flag de atendimento humano no Supabase.
-    return NextResponse.json({ status: 'Transferido para atendente' }, { status: 200 });
-  }
-
-  // 2. **Intenção de Adicionar ao Carrinho (Comando Expresso)**
-  const cartIntent = extrairIntencaoCarrinho(incomingMessage);
-  if (cartIntent) {
-    await handleAddToCart(from, whatsappPhoneId, cartIntent.quantity, cartIntent.productCode);
-    return NextResponse.json({ status: 'Adicionar ao Carrinho processado' }, { status: 200 });
-  }
-
-  // 3. **Intenção de Busca de Produto (Comando Expresso)**
-  const explicitSearchTerm = extrairTermoBusca(incomingMessage);
-  if (explicitSearchTerm) {
-    await handleProductSearch(from, whatsappPhoneId, explicitSearchTerm);
-    return NextResponse.json({ status: 'Busca de Produto processada' }, { status: 200 });
-  }
-
-  // 4. **Busca Direta (Usuário digitou o nome do produto/código sem trigger)**
-  if (deveFazerBuscaDireta(incomingMessage)) {
-    await handleProductSearch(from, whatsappPhoneId, incomingMessage);
-    return NextResponse.json({ status: 'Busca Direta processada' }, { status: 200 });
-  }
-  
-  // 5. **Consulta de Bula/Medicamentos (CSE / Gemini - Fallback)**
-  // Se não foi capturado por nenhuma intenção de e-commerce e tem mais de 3 caracteres, assume-se que é uma consulta de saúde.
-  if (incomingMessage.length >= 3 && !['oi', 'ola'].includes(lowerCaseMsg)) {
-      await handleGemini(from, whatsappPhoneId, incomingMessage);
-      return NextResponse.json({ status: 'Consulta Gemini/CSE processada' }, { status: 200 });
-  }
-
-
-  // 6. **Fallback (Resposta Genérica)**
-  const fallbackMsg = 'Desculpe, não entendi sua mensagem. Digite *MENU* para ver as opções disponíveis.';
-  await enviarComFormatosCorretos(from, fallbackMsg);
-  if (hasSupabaseConfig) await salvarMensagemNoSupabase(whatsappPhoneId, from, fallbackMsg, 'OUT');
-  return NextResponse.json({ status: 'Fallback' }, { status: 200 });
-}
-
-// =========================================================================
-// MÉTODOS HTTP (GET e POST)
-// =========================================================================
-
-/**
- * Manipula a requisição GET para verificação do Webhook do WhatsApp.
- * @param req 
- * @returns 
- */
-export async function GET(req: NextRequest): Promise<NextResponse> {
-  const searchParams = req.nextUrl.searchParams;
+export async function GET(req: NextRequest) {
+  const { searchParams } = req.nextUrl;
   const mode = searchParams.get('hub.mode');
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
   if (mode === 'subscribe' && token === WHATSAPP_VERIFY_TOKEN) {
-    console.log('✅ Webhook verificado com sucesso!');
     return new NextResponse(challenge, { status: 200 });
-  } else {
-    console.error('❌ Falha na verificação do Webhook.');
-    return new NextResponse('Falha na Verificação.', { status: 403 });
   }
+  return new NextResponse('Verification failed', { status: 403 });
 }
 
-/**
- * Manipula a requisição POST para receber dados do Webhook do WhatsApp.
- * @param req 
- * @returns 
- */
-export async function POST(req: NextRequest): Promise<NextResponse> {
-  if (!hasWhatsAppConfig) {
-    console.error('❌ ERRO: Variáveis do WhatsApp não configuradas para POST.');
-    return NextResponse.json({ status: 'Erro de configuração' }, { status: 500 });
-  }
-  
+export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log('Recebendo POST do Webhook:', JSON.stringify(body, null, 2));
+    if (body.object === 'whatsapp_business_account' && body.entry) {
+      for (const entry of body.entry) {
+        for (const change of entry.changes) {
+          if (change.field === 'messages' && change.value?.messages) {
+            for (const message of change.value.messages) {
+              const from = message.from;
+              const whatsappPhoneId = change.value.metadata.phone_number_id;
+              const messageText = message.text?.body || message.button?.text || '';
 
-    if (body.object === 'whatsapp_business_account') {
-      return await handleWhatsAppMessage(body);
+              if (message.type === 'text' || message.type === 'button') {
+                await processarMensagemCompleta(from, whatsappPhoneId, messageText);
+              } else {
+                await enviarComFormatosCorretos(from, 'Envie uma mensagem de texto.');
+              }
+            }
+          }
+        }
+      }
     }
-
-    return NextResponse.json({ status: 'Evento ignorado' }, { status: 200 });
+    return new NextResponse('EVENT_RECEIVED', { status: 200 });
   } catch (error) {
-    console.error('❌ ERRO ao processar requisição POST:', error);
-    return NextResponse.json({ status: 'Erro interno no servidor' }, { status: 500 });
+    console.error('❌ Erro webhook:', error);
+    return new NextResponse('OK', { status: 200 });
   }
 }
