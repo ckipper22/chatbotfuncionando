@@ -1,9 +1,9 @@
 // src/app/api/whatsapp/webhook/route.ts
 // ====================================================================================
-// WEBHOOK CORRIGIDO - SEM BASE LOCAL, SÓ API + GOOGLE CSE FALLBACK
+// WEBHOOK FINAL - SEM BASE LOCAL, SÓ API + GOOGLE CSE FALLBACK (MEDICAL BLOCK)
 // ====================================================================================
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // =========================================================================
 // CONFIGURAÇÃO DAS VARIÁVEIS DE AMBIENTE
@@ -38,7 +38,6 @@ const TRIGGERS_BUSCA = ['buscar', 'produto', 'consulta', 'preço', 'preco', 'est
 const TRIGGERS_CARRINHO = ['adicionar', 'carrinho', 'comprar', 'levar', 'mais um', 'pegue'];
 const NOISE_WORDS = new Set([...TRIGGERS_BUSCA, ...TRIGGERS_CARRINHO, 'qual', 'o', 'a', 'os', 'as', 'de', 'do', 'da', 'dos', 'das', 'por', 'um', 'uma', 'pra', 'eh', 'e', 'me', 'nele', 'dele', 'dela', 'em', 'para', 'na', 'no', 'favor', 'porfavor', 'porgentileza', 'o produto', 'o item']);
 
-// Funções de extração
 function extrairTermoBusca(mensagem: string): string | null {
   const lowerMsg = mensagem.toLowerCase();
   const isSearchIntent = TRIGGERS_BUSCA.some(trigger => lowerMsg.includes(trigger));
@@ -68,7 +67,7 @@ function deveFazerBuscaDireta(mensagem: string): boolean {
 // =========================================================================
 async function googleFallbackSearch(query: string): Promise<string> {
   if (!hasGoogleCSE) {
-    return '⚠️ Busca de backup indisponível no momento. Tente novamente mais tarde.';
+    return '⚠️ Busca de backup indisponível. Tente novamente mais tarde.';
   }
   try {
     const url = new URL('https://www.googleapis.com/customsearch/v1');
@@ -82,17 +81,12 @@ async function googleFallbackSearch(query: string): Promise<string> {
     const data = await res.json();
 
     if (!data.items || data.items.length === 0) {
-      return '🔍 Não encontrei resultados relevantes na busca. Tente reformular sua pergunta.';
+      return '🔍 Não encontrei resultados relevantes. Tente reformular sua pergunta.';
     }
 
-    let resposta = `ℹ️ A IA está com restrição para responder sobre saúde. Abaixo, resultados confiáveis da web:
-`;
+    let resposta = `ℹ️ A IA está com restrição para responder sobre saúde. Abaixo, resultados confiáveis da web:\n\n`;
     for (const item of data.items.slice(0, 3)) {
-      resposta += `• **${item.title}**
-  ${item.link}
-  ${item.snippet}
-
-`;
+      resposta += `• **${item.title}**\n  ${item.link}\n  ${item.snippet}\n\n`;
     }
     resposta += '_Consulte sempre um profissional de saúde para orientações médicas._';
     return resposta;
@@ -103,7 +97,7 @@ async function googleFallbackSearch(query: string): Promise<string> {
 }
 
 // =========================================================================
-// CACHE E SUPABASE (mantido igual, apenas ajustes mínimos)
+// CACHE E SUPABASE
 // =========================================================================
 async function saveProductToCache(productCode: string, productName: string, unitPrice: number): Promise<void> {
   try {
@@ -294,7 +288,7 @@ async function salvarMensagemNoSupabase(whatsappPhoneId: string, from: string, b
 }
 
 // =========================================================================
-// FUNÇÕES DE ENVIO E INTEGRAÇÃO
+// FUNÇÕES DE ENVIO
 // =========================================================================
 function converterParaFormatoFuncional(numeroOriginal: string): string[] {
   const numeroLimpo = numeroOriginal.replace(/\D/g, '');
@@ -468,11 +462,11 @@ async function interpretarComGemini(mensagem: string): Promise<{ resposta: strin
   try {
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY!);
     const model = genAI.getGenerativeModel({
-  model: 'gemini-1.5-flash',
-  safetySettings: [
-    { category: 'HARM_CATEGORY_MEDICAL', threshold: 'BLOCK_NONE' },
-  ]
-});
+      model: 'gemini-1.5-flash',
+      safetySettings: [
+        { category: 'HARM_CATEGORY_MEDICAL', threshold: 'BLOCK_NONE' },
+      ]
+    });
 
     const prompt = `Você é um assistente de farmácia. Responda com clareza, mas NUNCA dê conselhos médicos.
 Se a pergunta for sobre posologia, efeitos colaterais, contraindicações, etc., responda: "Sou um assistente virtual e não posso fornecer orientações médicas. Consulte um farmacêutico."
@@ -481,10 +475,9 @@ Mensagem: "${mensagem}"`;
     const result = await model.generateContent(prompt);
     const response = result.response;
 
-    // Verifica se foi bloqueado por conteúdo médico
     const safetyRatings = response.candidates?.[0]?.safetyRatings || [];
     const isMedicalBlocked = safetyRatings.some(r =>
-      r.category === HarmCategory.HARM_CATEGORY_MEDICAL &&
+      r.category === 'HARM_CATEGORY_MEDICAL' &&
       (r.probability === 'HIGH' || r.probability === 'VERY_HIGH')
     );
 
@@ -507,7 +500,6 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
   if (!customerId) return;
   await salvarMensagemNoSupabase(whatsappPhoneId, from, messageText, 'IN');
 
-  // Comando "COMPRAR"
   const comprarMatch = messageText.match(/^comprar\s+(\d+)/i);
   if (comprarMatch) {
     const code = comprarMatch[1];
@@ -525,7 +517,6 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
     }
   }
 
-  // Interpretar com IA
   const { resposta, usarCSE } = await interpretarComGemini(messageText);
 
   if (usarCSE) {
@@ -541,7 +532,6 @@ async function processarMensagemCompleta(from: string, whatsappPhoneId: string, 
     return;
   }
 
-  // Fallback: tentar busca de produto
   const termo = messageText.trim();
   if (termo.length >= 2) {
     await buscarEOferecerProdutos(from, whatsappPhoneId, termo);
