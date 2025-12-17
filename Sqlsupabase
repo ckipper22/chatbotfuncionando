@@ -1,0 +1,77 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.client_connections (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  client_id uuid,
+  db_host character varying NOT NULL,
+  db_name character varying NOT NULL,
+  db_user character varying NOT NULL,
+  db_password_encrypted text NOT NULL,
+  api_base_url text,
+  api_auth_token text,
+  whatsapp_phone_id text UNIQUE,
+  CONSTRAINT client_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT client_connections_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.clients(id)
+);
+CREATE TABLE public.clients (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name character varying NOT NULL,
+  whatsapp_phone_id character varying UNIQUE,
+  created_at timestamp with time zone DEFAULT now(),
+  cod_rede integer,
+  cod_filial integer,
+  api_base_url text,
+  CONSTRAINT clients_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.customers (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  whatsapp_phone_number text NOT NULL UNIQUE,
+  full_name text,
+  email text,
+  client_connection_id text,
+  CONSTRAINT customers_pkey PRIMARY KEY (id),
+  CONSTRAINT customers_client_connection_id_fkey FOREIGN KEY (client_connection_id) REFERENCES public.client_connections(whatsapp_phone_id)
+);
+CREATE TABLE public.order_items (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  order_id uuid,
+  product_api_id text NOT NULL,
+  product_name text NOT NULL,
+  quantity integer NOT NULL DEFAULT 1,
+  unit_price numeric NOT NULL,
+  total_price numeric NOT NULL,
+  CONSTRAINT order_items_pkey PRIMARY KEY (id),
+  CONSTRAINT order_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id)
+);
+CREATE TABLE public.orders (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  customer_id uuid,
+  client_connection_id text,
+  status text NOT NULL DEFAULT 'CART'::text,
+  total_amount numeric NOT NULL DEFAULT 0.00,
+  observation text,
+  CONSTRAINT orders_pkey PRIMARY KEY (id),
+  CONSTRAINT orders_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id),
+  CONSTRAINT orders_client_connection_id_fkey FOREIGN KEY (client_connection_id) REFERENCES public.client_connections(whatsapp_phone_id)
+);
+CREATE TABLE public.product_cache (
+  id integer NOT NULL DEFAULT nextval('product_cache_id_seq'::regclass),
+  product_code character varying NOT NULL UNIQUE,
+  product_name character varying NOT NULL,
+  unit_price numeric,
+  created_at timestamp without time zone DEFAULT now(),
+  updated_at timestamp without time zone DEFAULT now(),
+  CONSTRAINT product_cache_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.whatsapp_messages (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  whatsapp_phone_id text NOT NULL,
+  from_number text NOT NULL,
+  message_body text,
+  direction text NOT NULL,
+  CONSTRAINT whatsapp_messages_pkey PRIMARY KEY (id)
+);
