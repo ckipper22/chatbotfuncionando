@@ -10,7 +10,6 @@ const {
     NEXT_PUBLIC_SUPABASE_ANON_KEY: SUPABASE_ANON_KEY
 } = process.env;
 
-// Inicialização corrigida para satisfazer o tipo WhatsAppConfig
 const whatsapp = new WhatsAppAPI({
     access_token: WHATSAPP_ACCESS_TOKEN || '',
     phone_number_id: WHATSAPP_PHONE_NUMBER_ID || '',
@@ -20,31 +19,53 @@ const whatsapp = new WhatsAppAPI({
 });
 
 // =========================================================================
-// REGISTRO DE HISTÓRICO (Conforme seu schema public.whatsapp_messages)
+// 1. SEUS DETECTORES ORIGINAIS (RESTAURADOS LINHA POR LINHA)
 // =========================================================================
-async function salvarNoHistorico(phoneId: string, from: string, body: string, direction: 'IN' | 'OUT') {
-    try {
-        await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_messages`, {
-            method: 'POST',
-            headers: { 
-                'apikey': SUPABASE_ANON_KEY!, 
-                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ 
-                whatsapp_phone_id: phoneId, 
-                from_number: from, 
-                message_body: body, 
-                direction: direction 
-            })
-        });
-    } catch (e) {
-        console.error("[DB ERROR] Falha ao salvar mensagem:", e);
+const SAUDACOES = ['olá', 'ola', 'oi', 'hey', 'hello', 'hi', 'eae', 'opa', 'menu', 'inicio', 'início'];
+
+function ehSaudacao(mensagem: string): boolean {
+    const msgLimpa = mensagem.toLowerCase().replace(/[?!.,]/g, '').trim();
+    return SAUDACOES.includes(msgLimpa);
+}
+
+function ehPerguntaMedicaOuMedicamento(mensagem: string): boolean {
+    const msgMin = mensagem.toLowerCase();
+    const palavrasChave = ['posologia', 'dosagem', 'dose', 'para que serve', 'efeito colateral', 'como tomar', 'contraindicação'];
+    return palavrasChave.some(p => msgMin.includes(p));
+}
+
+function extrairTermoBuscaInteligente(mensagem: string): { buscar: boolean, termo: string } {
+    let msgMin = mensagem.toLowerCase().trim();
+    const stopWords = ['tem', 'gostaria', 'quero', 'preciso', 'buscar', 'preço', 'valor'];
+    msgMin = msgMin.replace(/[?!.,]*$/, '');
+    
+    for (const word of stopWords) {
+        if (msgMin.startsWith(word + ' ')) msgMin = msgMin.substring(word.length).trim();
     }
+    
+    if (ehSaudacao(msgMin) || ehPerguntaMedicaOuMedicamento(msgMin)) return { buscar: false, termo: '' };
+    
+    const palavras = msgMin.split(' ');
+    // Se for curto (nome de remédio), buscar no estoque
+    if (palavras.length > 0 && palavras.length < 5) return { buscar: true, termo: msgMin };
+    return { buscar: false, termo: '' };
 }
 
 // =========================================================================
-// HANDLER WEBHOOK
+// 2. HISTÓRICO E BANCO (RESTAURADOS)
+// =========================================================================
+async function registrarNoBanco(phoneId: string, from: string, msg: string, dir: 'IN' | 'OUT') {
+    try {
+        await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_messages`, {
+            method: 'POST',
+            headers: { 'apikey': SUPABASE_ANON_KEY!, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ whatsapp_phone_id: phoneId, from_number: from, message_body: msg, direction: dir })
+        });
+    } catch (e) { console.error("[DB ERROR]", e); }
+}
+
+// =========================================================================
+// 3. FLUXO PRINCIPAL (HÍBRIDO: LÓGICA MASTER + BOTÕES)
 // =========================================================================
 export async function POST(req: NextRequest) {
     try {
@@ -57,77 +78,80 @@ export async function POST(req: NextRequest) {
 
         const from = msg.from;
         const buttonReply = msg.interactive?.button_reply;
-        const textoUsuario = buttonReply ? buttonReply.title : (msg.text?.body || "");
+        const textoOriginal = msg.text?.body || "";
+        const textoParaProcessar = buttonReply ? buttonReply.title : textoOriginal;
 
-        console.log(`\n🚀 [RECEBIDO] De: ${from} | Msg: ${textoUsuario}`);
-        await salvarNoHistorico(phoneId, from, textoUsuario, 'IN');
+        // Registro de entrada
+        await registrarNoBanco(phoneId, from, textoParaProcessar, 'IN');
 
-        // 1. BUSCA FARMÁCIA (MULTITENANT)
+        // Busca Farmácia (Multitenant)
         const resDB = await fetch(`${SUPABASE_URL}/rest/v1/client_connections?whatsapp_phone_id=eq.${phoneId}&select=*`, {
             headers: { 'apikey': SUPABASE_ANON_KEY!, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
         });
         const farmacia = (await resDB.json())?.[0];
-        
-        if (!farmacia) {
-            console.error(`[DB ERROR] Farmácia não cadastrada.`);
-            return NextResponse.json({ status: 'not_found' });
-        }
+        if (!farmacia) return NextResponse.json({ status: 'error' });
 
-        // 2. TRATAMENTO DE CLIQUE EM BOTÃO "COMPRAR"
+        // LÓGICA DE DECISÃO
+        
+        // A) Clique em Botão de Compra
         if (buttonReply?.id.startsWith('buy_')) {
             const cod = buttonReply.id.replace('buy_', '');
-            const confirm = `🛒 Perfeito! Produto #${cod} selecionado na ${farmacia.db_name || 'loja'}. Como você prefere receber?`;
+            const confirm = `🛒 *Pedido em Andamento!*\n\nReservamos o item #${cod} na unidade ${farmacia.name || farmacia.db_name}. Como prefere finalizar?`;
             await whatsapp.sendTextMessage(from, confirm);
-            await salvarNoHistorico(phoneId, from, confirm, 'OUT');
+            await registrarNoBanco(phoneId, from, confirm, 'OUT');
             return NextResponse.json({ status: 'ok' });
         }
 
-        // 3. BUSCA DE PRODUTO NO ESTOQUE (IP FIXO)
-        if (textoUsuario.trim().split(' ').length <= 2 && textoUsuario.length > 2) {
-            try {
-                const resEstoque = await fetch(`${farmacia.api_base_url}/api/products/search?q=${encodeURIComponent(textoUsuario)}`);
-                const estoque = await resEstoque.json();
+        // B) Saudação
+        if (ehSaudacao(textoParaProcessar)) {
+            const boasVindas = `Olá! Bem-vindo à ${farmacia.name || 'nossa farmácia'}. Como posso ajudar hoje?`;
+            await whatsapp.sendTextMessage(from, boasVindas);
+            await registrarNoBanco(phoneId, from, boasVindas, 'OUT');
+            return NextResponse.json({ status: 'ok' });
+        }
 
-                if (estoque?.data?.length > 0) {
-                    const p = estoque.data[0];
+        // C) Busca de Estoque (Usa sua extração inteligente)
+        const { buscar, termo } = extrairTermoBuscaInteligente(textoParaProcessar);
+        if (buscar) {
+            try {
+                const resEst = await fetch(`${farmacia.api_base_url}/api/products/search?q=${encodeURIComponent(termo)}`);
+                const estData = await resEst.json();
+
+                if (estData?.data?.length > 0) {
+                    const p = estData.data[0];
                     const msgEstoque = `📦 *${p.nome_produto}*\n💰 R$ ${p.preco_final_venda}\n✅ Estoque: ${p.qtd_estoque}`;
                     
                     await whatsapp.sendInteractiveButtons(from, msgEstoque, [
                         { id: `buy_${p.cod_reduzido}`, title: "🛒 Comprar" },
-                        { id: `voltar`, title: "🏠 Menu Principal" }
+                        { id: `menu`, title: "🏠 Menu Principal" }
                     ]);
-                    await salvarNoHistorico(phoneId, from, `Oferta: ${p.nome_produto}`, 'OUT');
+                    await registrarNoBanco(phoneId, from, `Ofertado: ${p.nome_produto}`, 'OUT');
                     return NextResponse.json({ status: 'ok' });
                 }
-            } catch (e) { console.warn("[ESTOQUE] API local inacessível."); }
+            } catch (e) { console.warn("API Local offline"); }
         }
 
-        // 4. FALLBACK: GEMINI (REGRAS ANCESTRAIS)
-        const promptAncestral = `
-        Você é um assistente de saúde da farmácia ${farmacia.db_name}. 
-        Use as seguintes regras para responder sobre alimentos:
-        - Para ROSÁCEA (Dieta Restauração Ancestral):
-          * Melhor CONSUMIR: Carne vermelha gordurosa, fígado, caldo de osso, arroz branco, tapioca, abacate e limão.
-          * Melhor NÃO CONSUMIR: Grãos, feijão, vegetais, saladas, castanhas, leite comum, café e frutas (exceto abacate/limão).
-        - Para ÁCIDO ÚRICO: Evite frutose alta e alimentos inflamatórios.
-        
-        Pergunta do cliente: ${textoUsuario}`;
+        // D) IA Especialista (Rosácea, Ácido Úrico e Geral)
+        const promptIA = `Você é o assistente da farmácia ${farmacia.name}. 
+        REGRAS DE ALIMENTAÇÃO:
+        - Rosácea: Foco Ancestral. Sim: carne gorda, fígado, caldo osso, arroz branco, abacate, limão. Não: grãos, leite, café, frutas doces.
+        - Ácido Úrico: Cuidado com frutose e inflamatórios.
+        Pergunta: ${textoParaProcessar}`;
 
         const resG = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: promptAncestral }] }] })
+            body: JSON.stringify({ contents: [{ parts: [{ text: promptIA }] }] })
         });
         const dataG = await resG.json();
-        const respostaIA = dataG.candidates?.[0]?.content?.parts?.[0]?.text || "Como posso ajudar?";
+        const respIA = dataG.candidates?.[0]?.content?.parts?.[0]?.text || "Pode repetir?";
 
-        await whatsapp.sendTextMessage(from, respostaIA);
-        await salvarNoHistorico(phoneId, from, respostaIA, 'OUT');
+        await whatsapp.sendTextMessage(from, respIA);
+        await registrarNoBanco(phoneId, from, respIA, 'OUT');
 
         return NextResponse.json({ status: 'ok' });
 
     } catch (e) {
-        console.error("[CRITICAL]", e);
         return NextResponse.json({ status: 'error' }, { status: 500 });
     }
 }
