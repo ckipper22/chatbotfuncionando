@@ -10,11 +10,13 @@ const {
     NEXT_PUBLIC_SUPABASE_ANON_KEY: SUPABASE_ANON_KEY
 } = process.env;
 
+// Inicialização corrigida para satisfazer o tipo WhatsAppConfig
 const whatsapp = new WhatsAppAPI({
     access_token: WHATSAPP_ACCESS_TOKEN || '',
     phone_number_id: WHATSAPP_PHONE_NUMBER_ID || '',
     webhook_verify_token: WHATSAPP_VERIFY_TOKEN || '',
-    is_active: true
+    is_active: true,
+    webhook_url: '' 
 });
 
 // =========================================================================
@@ -27,8 +29,7 @@ async function salvarNoHistorico(phoneId: string, from: string, body: string, di
             headers: { 
                 'apikey': SUPABASE_ANON_KEY!, 
                 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 
-                'Content-Type': 'application/json',
-                'Prefer': 'return=minimal'
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({ 
                 whatsapp_phone_id: phoneId, 
@@ -37,9 +38,8 @@ async function salvarNoHistorico(phoneId: string, from: string, body: string, di
                 direction: direction 
             })
         });
-        console.log(`[HISTÓRICO] ✅ ${direction}: ${body.substring(0, 30)}...`);
     } catch (e) {
-        console.error("[HISTÓRICO ERROR] Falha ao salvar mensagem:", e);
+        console.error("[DB ERROR] Falha ao salvar mensagem:", e);
     }
 }
 
@@ -59,41 +59,33 @@ export async function POST(req: NextRequest) {
         const buttonReply = msg.interactive?.button_reply;
         const textoUsuario = buttonReply ? buttonReply.title : (msg.text?.body || "");
 
-        console.log(`\n--- MENSAGEM RECEBIDA ---`);
-        console.log(`[LOG] De: ${from} | Texto: ${textoUsuario}`);
-        
-        // 1. SALVAR ENTRADA NO HISTÓRICO
+        console.log(`\n🚀 [RECEBIDO] De: ${from} | Msg: ${textoUsuario}`);
         await salvarNoHistorico(phoneId, from, textoUsuario, 'IN');
 
-        // 2. IDENTIFICAR FARMÁCIA (MULTITENANT via client_connections)
+        // 1. BUSCA FARMÁCIA (MULTITENANT)
         const resDB = await fetch(`${SUPABASE_URL}/rest/v1/client_connections?whatsapp_phone_id=eq.${phoneId}&select=*`, {
             headers: { 'apikey': SUPABASE_ANON_KEY!, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
         });
         const farmacia = (await resDB.json())?.[0];
         
         if (!farmacia) {
-            console.error(`[DB ERROR] ID ${phoneId} não encontrado em client_connections.`);
+            console.error(`[DB ERROR] Farmácia não cadastrada.`);
             return NextResponse.json({ status: 'not_found' });
         }
-        console.log(`[TENANT] ✅ Farmácia: ${farmacia.db_name}`);
 
-        // 3. TRATAMENTO DE CLIQUE EM BOTÃO "COMPRAR"
+        // 2. TRATAMENTO DE CLIQUE EM BOTÃO "COMPRAR"
         if (buttonReply?.id.startsWith('buy_')) {
             const cod = buttonReply.id.replace('buy_', '');
-            const confirm = `🛒 Ótima escolha! O produto #${cod} foi pré-reservado na ${farmacia.db_name}. Como você prefere receber?`;
-            
+            const confirm = `🛒 Perfeito! Produto #${cod} selecionado na ${farmacia.db_name || 'loja'}. Como você prefere receber?`;
             await whatsapp.sendTextMessage(from, confirm);
             await salvarNoHistorico(phoneId, from, confirm, 'OUT');
             return NextResponse.json({ status: 'ok' });
         }
 
-        // 4. LÓGICA DE BUSCA NO ESTOQUE (IP FIXO)
-        // Se for uma busca curta (produto), consulta API Flask
+        // 3. BUSCA DE PRODUTO NO ESTOQUE (IP FIXO)
         if (textoUsuario.trim().split(' ').length <= 2 && textoUsuario.length > 2) {
             try {
-                const resEstoque = await fetch(`${farmacia.api_base_url}/api/products/search?q=${encodeURIComponent(textoUsuario)}`, {
-                    signal: AbortSignal.timeout(5000)
-                });
+                const resEstoque = await fetch(`${farmacia.api_base_url}/api/products/search?q=${encodeURIComponent(textoUsuario)}`);
                 const estoque = await resEstoque.json();
 
                 if (estoque?.data?.length > 0) {
@@ -104,22 +96,27 @@ export async function POST(req: NextRequest) {
                         { id: `buy_${p.cod_reduzido}`, title: "🛒 Comprar" },
                         { id: `voltar`, title: "🏠 Menu Principal" }
                     ]);
-                    
                     await salvarNoHistorico(phoneId, from, `Oferta: ${p.nome_produto}`, 'OUT');
                     return NextResponse.json({ status: 'ok' });
                 }
-            } catch (e) {
-                console.warn("[ESTOQUE] ⚠️ API local inacessível.");
-            }
+            } catch (e) { console.warn("[ESTOQUE] API local inacessível."); }
         }
 
-        // 5. FALLBACK: GEMINI (Perguntas sobre Rosácea, Ácido Úrico, etc)
+        // 4. FALLBACK: GEMINI (REGRAS ANCESTRAIS)
+        const promptAncestral = `
+        Você é um assistente de saúde da farmácia ${farmacia.db_name}. 
+        Use as seguintes regras para responder sobre alimentos:
+        - Para ROSÁCEA (Dieta Restauração Ancestral):
+          * Melhor CONSUMIR: Carne vermelha gordurosa, fígado, caldo de osso, arroz branco, tapioca, abacate e limão.
+          * Melhor NÃO CONSUMIR: Grãos, feijão, vegetais, saladas, castanhas, leite comum, café e frutas (exceto abacate/limão).
+        - Para ÁCIDO ÚRICO: Evite frutose alta e alimentos inflamatórios.
+        
+        Pergunta do cliente: ${textoUsuario}`;
+
         const resG = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: `Você é um assistente da farmácia ${farmacia.db_name}. Responda: ${textoUsuario}` }] }]
-            })
+            body: JSON.stringify({ contents: [{ parts: [{ text: promptAncestral }] }] })
         });
         const dataG = await resG.json();
         const respostaIA = dataG.candidates?.[0]?.content?.parts?.[0]?.text || "Como posso ajudar?";
@@ -130,7 +127,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ status: 'ok' });
 
     } catch (e) {
-        console.error("[WEBHOOK FATAL]", e);
+        console.error("[CRITICAL]", e);
         return NextResponse.json({ status: 'error' }, { status: 500 });
     }
 }
