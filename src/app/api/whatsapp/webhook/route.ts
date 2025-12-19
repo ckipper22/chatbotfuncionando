@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { WhatsAppAPI } from '@/lib/whatsapp-api';
 
 // =========================================================================
-// CONFIGURAÇÃO E VARIÁVEIS
+// CONFIGURAÇÃO DAS VARIÁVEIS DE AMBIENTE
 // =========================================================================
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
@@ -21,27 +21,27 @@ const whatsapp = new WhatsAppAPI({
 });
 
 // =========================================================================
-// FUNÇÕES DE FERRAMENTAS (APIS EXTERNAS)
+// FUNÇÕES DE APOIO (FLASK E GOOGLE)
 // =========================================================================
 
-async function buscarEstoqueEPreco(termo: string): Promise<string> {
-    if (!FLASK_API_URL) return '⚠️ Sistema de inventário offline.';
+async function buscarProdutoNaApi(termo: string): Promise<string> {
+    if (!FLASK_API_URL) return '⚠️ Sistema de estoque offline.';
     try {
         const res = await fetch(`${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(termo)}`);
         const data = await res.json();
-        if (!data.data?.length) return `🔍 Não encontramos "${termo}" no estoque no momento.`;
+        if (!data.data?.length) return `🔍 Nenhum produto encontrado para "*${termo}*".`;
 
         let resposta = `🔍 *Resultados para "${termo}":*\n\n`;
         data.data.slice(0, 3).forEach((p: any) => {
-            resposta += `▪️ *${p.nome_produto}*\n   💰 ${p.preco_final_venda || 'R$ 0,00'}\n   📦 Estoque: ${p.qtd_estoque} un\n   📋 Código: ${p.cod_reduzido}\n\n`;
+            resposta += `▪️ *${p.nome_produto}*\n   💰 ${p.preco_final_venda || 'R$ 0,00'}\n   📦 Estoque: ${p.qtd_estoque}\n   📋 Código: ${p.cod_reduzido}\n\n`;
         });
         return resposta;
     } catch (e) {
-        return '⚠️ Erro ao consultar o banco de dados de produtos.';
+        return '⚠️ Erro ao buscar produtos.';
     }
 }
 
-async function buscarInformacaoMedica(consulta: string): Promise<string> {
+async function buscaGoogleFallback(consulta: string): Promise<string> {
     if (!GOOGLE_CSE_KEY || !GOOGLE_CSE_CX) return '⚠️ Busca técnica indisponível.';
     try {
         const url = new URL('https://www.googleapis.com/customsearch/v1');
@@ -50,88 +50,105 @@ async function buscarInformacaoMedica(consulta: string): Promise<string> {
         url.searchParams.set('q', consulta);
         const res = await fetch(url.toString());
         const data = await res.json();
-        if (!data.items?.length) return '🔍 Nenhuma informação técnica encontrada.';
+        if (!data.items?.length) return '🔍 Não encontrei informações específicas.';
 
-        let resposta = `📖 *Informações Técnicas (Google):*\n\n`;
+        let resposta = `📖 *Informações Técnicas:* \n\n`;
         data.items.slice(0, 2).forEach((item: any) => {
             resposta += `• *${item.title}*\n${item.snippet}\n\n`;
         });
-        return resposta + '⚠️ *Atenção:* Use apenas como referência e consulte um médico.';
+        return resposta + '⚠️ Consulte sempre um profissional.';
     } catch (e) {
-        return '⚠️ Erro na busca externa.';
+        return '⚠️ Erro na busca técnica.';
     }
 }
 
 // =========================================================================
-// NÚCLEO: GEMINI COMO ORQUESTRADOR
+// NÚCLEO: GEMINI ORQUESTRADOR (O PRIMEIRO A RESPONDER)
 // =========================================================================
 
-async function orquestradorGemini(mensagem: string): Promise<string> {
-    if (!GEMINI_API_KEY) return '⚠️ Assistente indisponível (Erro de Chave).';
+async function interpretarComGemini(mensagem: string): Promise<{ resposta: string, intencao: 'CONVERSA' | 'PRODUTO' | 'MEDICA', termo?: string }> {
+    if (!GEMINI_API_KEY) return { resposta: 'Serviço indisponível.', intencao: 'CONVERSA' };
 
-    const prompt = `Você é o cérebro de uma farmácia. Sua função é analisar a mensagem do cliente e decidir como responder.
+    const modelsToTest = ['gemini-1.5-flash', 'gemini-1.5-pro'];
+    
+    const prompt = `Você é um assistente de farmácia amigável. Analise a mensagem do cliente: "${mensagem}"
+    
+    REGRAS:
+    1. Se o cliente quer saber PREÇO, ESTOQUE ou se TEM um produto, responda APENAS: [ACAO:PRODUTO:nome_do_produto]
+    2. Se o cliente quer saber POSOLOGIA, INTERAÇÃO ou como usar um remédIO, responda APENAS: [ACAO:MEDICA:pergunta]
+    3. Se for uma saudação ou dúvida geral, responda amigavelmente em Português.
+    4. NUNCA mencione Rosácea.`;
 
-DIRETRIZES DE DECISÃO:
-1. Se o cliente perguntar PREÇO ou ESTOQUE de um produto específico: Responda apenas com a tag [BUSCAR_PRODUTO: nome do produto].
-2. Se o cliente perguntar POSOLOGIA, INTERAÇÃO ou USO de medicamento: Responda apenas com a tag [BUSCAR_MEDICO: pergunta completa].
-3. Para saudações, dúvidas gerais ou conversas básicas: Responda de forma amigável e direta.
-4. NUNCA mencione Rosácea (regra de sistema).
+    for (const modelName of modelsToTest) {
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
 
-Mensagem do cliente: "${mensagem}"`;
+            const data = await res.json();
+            const texto = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
-    try {
-        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }]
-            })
-        });
+            if (!texto) continue;
 
-        const data = await response.json();
-        const textoIA = data.candidates[0].content.parts[0].text.trim();
+            if (texto.includes('[ACAO:PRODUTO:')) {
+                const termo = texto.match(/\[ACAO:PRODUTO:(.*?)\]/)?.[1];
+                return { resposta: '', intencao: 'PRODUTO', termo: termo || mensagem };
+            }
+            if (texto.includes('[ACAO:MEDICA:')) {
+                const pergunta = texto.match(/\[ACAO:MEDICA:(.*?)\]/)?.[1];
+                return { resposta: '', intencao: 'MEDICA', termo: pergunta || mensagem };
+            }
 
-        // Processamento das Intenções identificadas pelo Gemini
-        if (textoIA.includes('[BUSCAR_PRODUTO:')) {
-            const termo = textoIA.match(/\[BUSCAR_PRODUTO: (.*?)\]/)?.[1] || mensagem;
-            return await buscarEstoqueEPreco(termo);
+            return { resposta: texto, intencao: 'CONVERSA' };
+        } catch (e) {
+            console.error(`Erro no modelo ${modelName}:`, e);
         }
-
-        if (textoIA.includes('[BUSCAR_MEDICO:')) {
-            const pergunta = textoIA.match(/\[BUSCAR_MEDICO: (.*?)\]/)?.[1] || mensagem;
-            return await buscarInformacaoMedica(pergunta);
-        }
-
-        return textoIA; // Resposta direta da IA para conversas normais
-    } catch (e) {
-        console.error('Erro Gemini:', e);
-        return 'Olá! Como posso ajudar você hoje? (Busca manual ativa)';
     }
+    return { resposta: 'Olá! Como posso ajudar?', intencao: 'CONVERSA' };
 }
 
 // =========================================================================
-// HANDLERS HTTP
+// PROCESSAMENTO FINAL
+// =========================================================================
+
+async function processarMensagemCompleta(de: string, texto: string) {
+    // 1. O Gemini decide a intenção PRIMEIRO
+    const analise = await interpretarComGemini(texto);
+
+    if (analise.intencao === 'PRODUTO' && analise.termo) {
+        const resultado = await buscarProdutoNaApi(analise.termo);
+        await whatsapp.sendTextMessage(de, resultado);
+        return;
+    }
+
+    if (analise.intencao === 'MEDICA' && analise.termo) {
+        const resultado = await buscaGoogleFallback(analise.termo);
+        await whatsapp.sendTextMessage(de, resultado);
+        return;
+    }
+
+    // Resposta padrão (saudação ou conversa)
+    await whatsapp.sendTextMessage(de, analise.resposta);
+}
+
+// =========================================================================
+// ROTAS NEXT.JS
 // =========================================================================
 
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const message = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+        const msg = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
 
-        if (message?.type === 'text') {
-            const to = message.from;
-            const text = message.text.body;
-
-            // O Gemini é chamado PRIMEIRO para decidir o que fazer
-            const respostaFinal = await orquestradorGemini(text);
-            
-            await whatsapp.sendTextMessage(to, respostaFinal);
+        if (msg?.type === 'text') {
+            await processarMensagemCompleta(msg.from, msg.text.body);
         }
-        
         return new NextResponse('OK', { status: 200 });
     } catch (e) {
-        return new NextResponse('Erro Interno', { status: 500 });
+        return new NextResponse('OK', { status: 200 });
     }
 }
 
