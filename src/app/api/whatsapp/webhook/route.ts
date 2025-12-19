@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WhatsAppAPI } from '@/lib/whatsapp-api';
 
+// --- CONFIGURAÇÃO DE AMBIENTE ---
 const {
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: WHATSAPP_VERIFY_TOKEN,
     WHATSAPP_ACCESS_TOKEN,
@@ -20,117 +21,129 @@ const whatsapp = new WhatsAppAPI({
     webhook_url: '' 
 });
 
-// =========================================================================
-// AUXILIARES
-// =========================================================================
-const SAUDACOES = ['olá', 'ola', 'oi', 'hey', 'bom dia', 'boa tarde', 'boa noite', 'tudo bem', 'como vai', 'menu'];
 const TERMOS_TECNICOS = ['posologia', 'dosagem', 'como tomar', 'interação', 'interacao', 'efeito', 'contraindicação', 'serve para'];
+const SAUDACOES = ['olá', 'ola', 'oi', 'bom dia', 'boa tarde', 'boa noite', 'tudo bem', 'menu'];
 
-async function salvarHistorico(phoneId: string, from: string, msg: string, dir: 'IN' | 'OUT') {
+// --- TELEMETRIA SUPABASE ---
+async function logger(phoneId: string, from: string, msg: string, dir: 'IN' | 'OUT') {
+    console.log(`[SUPABASE] 💾 Registrando histórico (${dir})...`);
     try {
         await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_messages`, {
             method: 'POST',
             headers: { 'apikey': SUPABASE_ANON_KEY!, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ whatsapp_phone_id: phoneId, from_number: from, message_body: msg, direction: dir })
         });
-    } catch (e) { console.error("[DB ERROR]", e); }
+        console.log(`[SUPABASE] ✅ Log ${dir} salvo.`);
+    } catch (e) { console.error("[SUPABASE ERROR]", e); }
 }
 
-function extrairTermoBusca(msg: string) {
-    let t = msg.toLowerCase().trim().replace(/[?!.,]/g, '');
-    const stopWords = ['tem', 'quero', 'preço', 'estoque', 'valor', 'buscar', 'vocês têm'];
-    for (const w of stopWords) { if (t.startsWith(w + ' ')) t = t.substring(w.length).trim(); }
-    return t;
-}
-
-// =========================================================================
-// FLUXO DE RESPOSTA (ORDEM DE PRECEDÊNCIA: 1. GEMINI | 2. GOOGLE | 3. FLASK)
-// =========================================================================
+// --- LOGICA PRINCIPAL ---
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const value = body.entry?.[0]?.changes?.[0]?.value;
-        const msg = value?.messages?.[0];
-        const phoneId = value?.metadata?.phone_number_id;
+        const val = body.entry?.[0]?.changes?.[0]?.value;
+        const msg = val?.messages?.[0];
+        const phoneId = val?.metadata?.phone_number_id;
 
         if (!msg) return NextResponse.json({ status: 'ok' });
 
         const from = msg.from;
-        const textoOriginal = msg.text?.body || "";
+        const textoOriginal = msg.text?.body || msg.interactive?.button_reply?.title || "";
+        const buttonId = msg.interactive?.button_reply?.id;
         const msgMin = textoOriginal.toLowerCase();
 
-        console.log(`\n🚀 [RECEBIDO] De: ${from} | Texto: ${textoOriginal}`);
-        await salvarHistorico(phoneId, from, textoOriginal, 'IN');
+        console.log(`\n🚀 [NOVA MENSAGEM] De: ${from} | Texto: ${textoOriginal}`);
+        await logger(phoneId, from, textoOriginal, 'IN');
 
-        // BUSCA DADOS DA FARMÁCIA (MULTITENANT)
+        // 1. BUSCA TENANT (SUPABASE)
         const resDB = await fetch(`${SUPABASE_URL}/rest/v1/client_connections?whatsapp_phone_id=eq.${phoneId}&select=*,clients(name)`, {
             headers: { 'apikey': SUPABASE_ANON_KEY!, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
         });
         const conn = (await resDB.json())?.[0];
-        if (!conn) return NextResponse.json({ status: 'not_found' });
+        if (!conn) {
+            console.error("[TENANT] ❌ Farmácia não encontrada.");
+            return NextResponse.json({ status: 'not_found' });
+        }
         const nomeFarmacia = conn.clients?.name || "Nossa Farmácia";
+        console.log(`[TENANT] ✅ Atendendo por: ${nomeFarmacia}`);
 
-        let respostaAcumulada = "";
+        // 2. CAPTURA DE CLIQUE NO CARRINHO
+        if (buttonId?.startsWith('buy_')) {
+            const cod = buttonId.replace('buy_', '');
+            const confirmacao = `🛒 Excelente! O item #${cod} foi adicionado ao seu carrinho na ${nomeFarmacia}. Como deseja finalizar?`;
+            await whatsapp.sendTextMessage(from, confirmacao);
+            await logger(phoneId, from, confirmacao, 'OUT');
+            return NextResponse.json({ status: 'ok' });
+        }
 
-        // 1. SEMPRE O PRIMEIRO A RESPONDER: GEMINI
-        console.log(`[IA] 🤖 Gemini processando...`);
+        let respostaIA = "";
+
+        // --- 3. PRIORIDADE 1: GEMINI (SEMPRE PRIMEIRO) ---
+        console.log(`[GEMINI] 🤖 Consultando IA...`);
         try {
-            const prompt = `Você é o assistente virtual amigável da ${nomeFarmacia}. 
-            Responda de forma prestativa ao cliente: "${textoOriginal}". 
-            Não dê diagnósticos médicos, apenas orientações gerais de farmácia.`;
-
             const resG = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                body: JSON.stringify({ contents: [{ parts: [{ text: `Você é o atendente da ${nomeFarmacia}. Responda: ${textoOriginal}` }] }] })
             });
             const dataG = await resG.json();
-            respostaAcumulada = dataG.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        } catch (e) { console.error("Falha Gemini"); }
+            respostaIA = dataG.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        } catch (e) { console.error("[GEMINI] Falha na IA."); }
 
-        // 2. SE PEDIREM POSOLOGIA OU INTERAÇÃO: GOOGLE SEARCH
+        // --- 4. PRIORIDADE 2: GOOGLE (POSOLOGIA / INTERAÇÃO) ---
         if (TERMOS_TECNICOS.some(t => msgMin.includes(t))) {
-            console.log(`[GOOGLE] 🔍 Buscando dados técnicos de bula...`);
+            console.log(`[GOOGLE] 🔍 Buscando dados técnicos...`);
             try {
                 const resS = await fetch(`https://www.googleapis.com/customsearch/v1?key=${GOOGLE_CSE_KEY}&cx=${GOOGLE_CSE_CX}&q=${encodeURIComponent(textoOriginal)}`);
                 const dataS = await resS.json();
                 if (dataS.items?.[0]) {
-                    respostaAcumulada += `\n\n📖 *Informação Técnica (Bula):*\n${dataS.items[0].snippet}`;
+                    respostaIA += `\n\n📌 *Bula/Informação Técnica:*\n${dataS.items[0].snippet}`;
                 }
-            } catch (e) { console.error("Falha Google"); }
+            } catch (e) { console.error("[GOOGLE] Erro na busca."); }
         }
 
-        // 3. ESTOQUE E PREÇO: API FLASK
-        const termo = extrairTermoBusca(textoOriginal);
+        // --- 5. PRIORIDADE 3: FLASK (ESTOQUE E PREÇO + CARRINHO) ---
         const ehSaudacao = SAUDACOES.some(s => msgMin.includes(s));
-        
-        if (termo.length > 2 && !ehSaudacao && !TERMOS_TECNICOS.some(t => msgMin.includes(t))) {
-            console.log(`[FLASK] 📡 Consultando estoque para: ${termo}`);
+        // Se a mensagem for curta (1-3 palavras) e não for saudação, busca produto
+        if (textoOriginal.split(' ').length <= 3 && !ehSaudacao && !TERMOS_TECNICOS.some(t => msgMin.includes(t))) {
+            console.log(`[FLASK] 📡 Consultando estoque...`);
             try {
-                const resEst = await fetch(`${conn.api_base_url}/api/products/search?q=${encodeURIComponent(termo)}`);
-                const estData = await resEst.json();
-                if (estData?.data?.length > 0) {
-                    const p = estData.data[0];
-                    const infoEstoque = `\n\n📦 *Consulta de Estoque na ${nomeFarmacia}:*\nProduto: ${p.nome_produto}\nPreço: R$ ${p.preco_final_venda}\nDisponibilidade: ${p.qtd_estoque} unidades.`;
-                    respostaAcumulada += infoEstoque;
+                const resF = await fetch(`${conn.api_base_url}/api/products/search?q=${encodeURIComponent(textoOriginal)}`);
+                const dataF = await resF.json();
+                
+                if (dataF.data?.[0]) {
+                    const p = dataF.data[0];
+                    const infoEstoque = `\n\n📦 *Estoque e Preço na ${nomeFarmacia}:*\nProduto: ${p.nome_produto}\nValor: R$ ${p.preco_final_venda}\nStatus: ${p.qtd_estoque} em estoque.`;
+                    
+                    const msgFinalComBotao = (respostaIA || "Encontrei o produto que você procurava:") + infoEstoque;
+                    
+                    await whatsapp.sendInteractiveButtons(from, msgFinalComBotao, [
+                        { id: `buy_${p.cod_reduzido}`, title: "🛒 Adicionar ao Carrinho" },
+                        { id: `menu`, title: "🏠 Menu Principal" }
+                    ]);
+                    await logger(phoneId, from, `Oferta: ${p.nome_produto}`, 'OUT');
+                    return NextResponse.json({ status: 'ok' });
                 }
-            } catch (e) { console.warn("Flask Offline"); }
+            } catch (e) { console.warn("[FLASK] Offline ou erro na API."); }
         }
 
-        // ENVIO FINAL
-        const msgFinal = respostaAcumulada || "Como posso ajudar você hoje?";
+        // ENVIO FINAL (Caso não tenha disparado botões de estoque)
+        const msgFinal = respostaIA || "Olá! Como posso ajudar você hoje?";
         await whatsapp.sendTextMessage(from, msgFinal);
-        await salvarHistorico(phoneId, from, msgFinal, 'OUT');
+        await logger(phoneId, from, msgFinal, 'OUT');
 
         return NextResponse.json({ status: 'ok' });
 
     } catch (e) {
+        console.error("[CRITICAL]", e);
         return NextResponse.json({ status: 'error' }, { status: 500 });
     }
 }
 
 export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl;
-    if (searchParams.get('hub.verify_token') === WHATSAPP_VERIFY_TOKEN) return new NextResponse(searchParams.get('hub.challenge'), { status: 200 });
-    return new NextResponse('Erro', { status: 403 });
+    if (searchParams.get('hub.verify_token') === WHATSAPP_VERIFY_TOKEN) {
+        return new NextResponse(searchParams.get('hub.challenge'), { status: 200 });
+    }
+    return new NextResponse('Erro de Token', { status: 403 });
 }
