@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WhatsAppAPI } from '@/lib/whatsapp-api';
 
-// =========================================================================
-// CONFIGURAÇÃO
-// =========================================================================
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -21,7 +18,7 @@ const whatsapp = new WhatsAppAPI({
 });
 
 // =========================================================================
-// UTILITÁRIOS E APIS EXTERNAS
+// AUXILIARES
 // =========================================================================
 
 function limparNumero(remoteJid: string): string {
@@ -34,15 +31,12 @@ async function buscarProdutoNaApi(termo: string): Promise<string> {
         const res = await fetch(`${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(termo)}`);
         const data = await res.json();
         if (!data.data?.length) return `🔍 Nenhum produto encontrado para "*${termo}*".`;
-
         let resposta = `🔍 *Resultados para "${termo}":*\n\n`;
         data.data.slice(0, 3).forEach((p: any) => {
             resposta += `▪️ *${p.nome_produto}*\n   💰 ${p.preco_final_venda || 'R$ 0,00'}\n   📦 Estoque: ${p.qtd_estoque}\n   📋 Código: ${p.cod_reduzido}\n\n`;
         });
         return resposta;
-    } catch (e) {
-        return '⚠️ Erro ao buscar produtos.';
-    }
+    } catch (e) { return '⚠️ Erro ao buscar produtos.'; }
 }
 
 async function buscaGoogleFallback(consulta: string): Promise<string> {
@@ -55,82 +49,91 @@ async function buscaGoogleFallback(consulta: string): Promise<string> {
         const res = await fetch(url.toString());
         const data = await res.json();
         if (!data.items?.length) return '🔍 Não encontrei informações técnicas.';
-
         let resposta = `📖 *Informações Técnicas:* \n\n`;
         data.items.slice(0, 2).forEach((item: any) => {
             resposta += `• *${item.title}*\n${item.snippet}\n\n`;
         });
         return resposta + '⚠️ Consulte sempre um médico.';
-    } catch (e) {
-        return '⚠️ Erro na busca técnica.';
-    }
+    } catch (e) { return '⚠️ Erro na busca técnica.'; }
 }
 
 // =========================================================================
-// NÚCLEO: GEMINI ORQUESTRADOR (VERSÃO V1BETA)
+// GEMINI COM FILTROS DE SEGURANÇA DESATIVADOS
 // =========================================================================
 
 async function interpretarComGemini(mensagem: string): Promise<{ resposta: string, intencao: 'CONVERSA' | 'PRODUTO' | 'MEDICA', termo?: string }> {
-    console.log(`🤖 [GEMINI] Analisando mensagem: "${mensagem}"`);
-    
+    console.log(`🤖 [GEMINI] Analisando: "${mensagem}"`);
     if (!GEMINI_API_KEY) return { resposta: 'Olá! Como posso ajudar?', intencao: 'CONVERSA' };
 
-    // Modelos corretos para a versão v1beta
-    const modelsToTest = ['gemini-1.5-flash', 'gemini-1.5-pro'];
+    const prompt = `Você é um assistente de farmácia amigável. Analise a mensagem do cliente e classifique.
     
-    const prompt = `Você é um assistente de farmácia útil. Analise: "${mensagem}"
-    REGRAS:
-    1. Para PREÇO, ESTOQUE ou DISPONIBILIDADE de produto, responda APENAS: [ACAO:PRODUTO:nome_do_produto]
-    2. Para POSOLOGIA, INTERAÇÃO ou COMO USAR, responda APENAS: [ACAO:MEDICA:pergunta]
-    3. Para saudações ou dúvidas gerais, responda amigavelmente.
-    4. Proibido citar Rosácea.`;
+    DIRETRIZES:
+    - Se o cliente quer saber PREÇO, ESTOQUE ou DISPONIBILIDADE de um produto: responda apenas [ACAO:PRODUTO:nome_do_produto].
+    - Se o cliente tem dúvidas sobre POSOLOGIA, COMO USAR ou INTERAÇÃO: responda apenas [ACAO:MEDICA:pergunta_completa].
+    - Caso contrário, responda como um humano amigável.
+    - Regra absoluta: NUNCA fale sobre Rosácea.
+    
+    Mensagem do cliente: "${mensagem}"`;
 
-    for (const modelName of modelsToTest) {
-        try {
-            // Alterado para v1beta para suportar gemini-1.5
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
-            
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-            });
+    const modelName = 'gemini-1.5-flash';
+    try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                // DESATIVANDO FILTROS DE SEGURANÇA PARA EVITAR RESPOSTA VAZIA
+                safetySettings: [
+                    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                ],
+                generationConfig: { temperature: 0.4, maxOutputTokens: 500 }
+            })
+        });
 
-            const data = await res.json();
-            const texto = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        const data = await response.json();
 
-            if (!texto) {
-                console.warn(`⚠️ [GEMINI] Modelo ${modelName} falhou ou retornou vazio.`);
-                continue;
-            }
-
-            console.log(`✅ [GEMINI] Resposta: ${texto}`);
-
-            if (texto.includes('[ACAO:PRODUTO:')) {
-                const termo = texto.match(/\[ACAO:PRODUTO:(.*?)\]/)?.[1];
-                return { resposta: '', intencao: 'PRODUTO', termo: termo || mensagem };
-            }
-            if (texto.includes('[ACAO:MEDICA:')) {
-                const pergunta = texto.match(/\[ACAO:MEDICA:(.*?)\]/)?.[1];
-                return { resposta: '', intencao: 'MEDICA', termo: pergunta || mensagem };
-            }
-
-            return { resposta: texto, intencao: 'CONVERSA' };
-        } catch (e) {
-            console.error(`❌ [GEMINI] Erro no modelo ${modelName}`);
+        // LOG DE DIAGNÓSTICO CASO CONTINUE FALHANDO
+        if (data.promptFeedback?.blockReason) {
+            console.error(`🚫 [GEMINI BLOCK] Bloqueado por: ${data.promptFeedback.blockReason}`);
         }
+
+        const textoIA = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+        if (!textoIA) {
+            console.warn(`⚠️ [GEMINI EMPTY] Resposta sem texto. Payload:`, JSON.stringify(data));
+            return { resposta: 'Olá! Sou seu assistente de farmácia. Como posso te ajudar?', intencao: 'CONVERSA' };
+        }
+
+        console.log(`✅ [GEMINI SUCCESS] Texto: ${textoIA}`);
+
+        if (textoIA.includes('[ACAO:PRODUTO:')) {
+            const termo = textoIA.match(/\[ACAO:PRODUTO:(.*?)\]/)?.[1];
+            return { resposta: '', intencao: 'PRODUTO', termo: termo || mensagem };
+        }
+        if (textoIA.includes('[ACAO:MEDICA:')) {
+            const pergunta = textoIA.match(/\[ACAO:MEDICA:(.*?)\]/)?.[1];
+            return { resposta: '', intencao: 'MEDICA', termo: pergunta || mensagem };
+        }
+
+        return { resposta: textoIA, intencao: 'CONVERSA' };
+
+    } catch (e: any) {
+        console.error(`❌ [GEMINI ERROR]`, e.message);
+        return { resposta: 'Olá! Como posso ajudar?', intencao: 'CONVERSA' };
     }
-    return { resposta: 'Olá! Como posso ajudar você hoje?', intencao: 'CONVERSA' };
 }
 
 // =========================================================================
-// PROCESSAMENTO E ROTAS
+// FLUXO PRINCIPAL
 // =========================================================================
 
 async function processarMensagemCompleta(deRaw: string, texto: string) {
     const de = limparNumero(deRaw);
-    
-    // 1. O Gemini sempre avalia primeiro
     const analise = await interpretarComGemini(texto);
 
     if (analise.intencao === 'PRODUTO' && analise.termo) {
@@ -148,14 +151,11 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
         const msg = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
-
         if (msg?.type === 'text') {
             await processarMensagemCompleta(msg.from, msg.text.body);
         }
         return new NextResponse('OK', { status: 200 });
-    } catch (e) {
-        return new NextResponse('OK', { status: 200 });
-    }
+    } catch (e) { return new NextResponse('OK', { status: 200 }); }
 }
 
 export async function GET(req: NextRequest) {
