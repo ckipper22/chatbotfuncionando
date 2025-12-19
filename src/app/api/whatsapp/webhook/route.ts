@@ -21,15 +21,30 @@ const whatsapp = new WhatsAppAPI({
 });
 
 // =========================================================================
+// UTILITÁRIOS
+// =========================================================================
+
+// Limpa o número para garantir que tenha apenas dígitos (ex: remove @s.whatsapp.net)
+function limparNumero(remoteJid: string): string {
+    const limpo = remoteJid.replace(/\D/g, '');
+    console.log(`[WHATSAPP] Número original: ${remoteJid} -> Limpo: ${limpo}`);
+    return limpo;
+}
+
+// =========================================================================
 // FUNÇÕES DE APOIO (FLASK E GOOGLE)
 // =========================================================================
 
 async function buscarProdutoNaApi(termo: string): Promise<string> {
+    console.log(`[FLASK] Buscando produto: "${termo}"`);
     if (!FLASK_API_URL) return '⚠️ Sistema de estoque offline.';
     try {
         const res = await fetch(`${FLASK_API_URL}/api/products/search?q=${encodeURIComponent(termo)}`);
         const data = await res.json();
-        if (!data.data?.length) return `🔍 Nenhum produto encontrado para "*${termo}*".`;
+        if (!data.data?.length) {
+            console.log(`[FLASK] Nenhum resultado para "${termo}"`);
+            return `🔍 Nenhum produto encontrado para "*${termo}*".`;
+        }
 
         let resposta = `🔍 *Resultados para "${termo}":*\n\n`;
         data.data.slice(0, 3).forEach((p: any) => {
@@ -37,11 +52,13 @@ async function buscarProdutoNaApi(termo: string): Promise<string> {
         });
         return resposta;
     } catch (e) {
+        console.error('[FLASK ERROR]', e);
         return '⚠️ Erro ao buscar produtos.';
     }
 }
 
 async function buscaGoogleFallback(consulta: string): Promise<string> {
+    console.log(`[GOOGLE CSE] Buscando informação médica: "${consulta}"`);
     if (!GOOGLE_CSE_KEY || !GOOGLE_CSE_CX) return '⚠️ Busca técnica indisponível.';
     try {
         const url = new URL('https://www.googleapis.com/customsearch/v1');
@@ -58,40 +75,58 @@ async function buscaGoogleFallback(consulta: string): Promise<string> {
         });
         return resposta + '⚠️ Consulte sempre um profissional.';
     } catch (e) {
+        console.error('[GOOGLE ERROR]', e);
         return '⚠️ Erro na busca técnica.';
     }
 }
 
 // =========================================================================
-// NÚCLEO: GEMINI ORQUESTRADOR (O PRIMEIRO A RESPONDER)
+// NÚCLEO: GEMINI ORQUESTRADOR
 // =========================================================================
 
 async function interpretarComGemini(mensagem: string): Promise<{ resposta: string, intencao: 'CONVERSA' | 'PRODUTO' | 'MEDICA', termo?: string }> {
-    if (!GEMINI_API_KEY) return { resposta: 'Serviço indisponível.', intencao: 'CONVERSA' };
+    console.log(`[GEMINI] Analisando: "${mensagem}"`);
+    
+    if (!GEMINI_API_KEY) {
+        console.error('[GEMINI ERROR] API KEY não configurada!');
+        return { resposta: 'Erro de configuração.', intencao: 'CONVERSA' };
+    }
 
-    const modelsToTest = ['gemini-1.5-flash', 'gemini-1.5-pro'];
+    const modelsToTest = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
     
-    const prompt = `Você é um assistente de farmácia amigável. Analise a mensagem do cliente: "${mensagem}"
-    
+    const prompt = `Você é um assistente de farmácia amigável. Analise a mensagem: "${mensagem}"
     REGRAS:
-    1. Se o cliente quer saber PREÇO, ESTOQUE ou se TEM um produto, responda APENAS: [ACAO:PRODUTO:nome_do_produto]
-    2. Se o cliente quer saber POSOLOGIA, INTERAÇÃO ou como usar um remédIO, responda APENAS: [ACAO:MEDICA:pergunta]
-    3. Se for uma saudação ou dúvida geral, responda amigavelmente em Português.
-    4. NUNCA mencione Rosácea.`;
+    1. Se o cliente quer saber PREÇO, ESTOQUE ou DISPONIBILIDADE, responda apenas: [ACAO:PRODUTO:nome_produto]
+    2. Se o cliente quer saber POSOLOGIA, INTERAÇÃO ou COMO USAR, responda apenas: [ACAO:MEDICA:pergunta]
+    3. Para saudações ou conversas comuns, responda amigavelmente.
+    4. JAMAIS mencione Rosácea.`;
 
     for (const modelName of modelsToTest) {
         try {
+            console.log(`[GEMINI] Tentando chamada API - Modelo: ${modelName}`);
             const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
+            
             const res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
 
+            if (!res.ok) {
+                const errText = await res.text();
+                console.warn(`[GEMINI] Erro na resposta (${modelName}): ${res.status} - ${errText}`);
+                continue;
+            }
+
             const data = await res.json();
             const texto = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
-            if (!texto) continue;
+            if (!texto) {
+                console.warn(`[GEMINI] Payload vazio para ${modelName}`);
+                continue;
+            }
+
+            console.log(`[GEMINI SUCCESS] Resposta final: "${texto}"`);
 
             if (texto.includes('[ACAO:PRODUTO:')) {
                 const termo = texto.match(/\[ACAO:PRODUTO:(.*?)\]/)?.[1];
@@ -103,39 +138,44 @@ async function interpretarComGemini(mensagem: string): Promise<{ resposta: strin
             }
 
             return { resposta: texto, intencao: 'CONVERSA' };
-        } catch (e) {
-            console.error(`Erro no modelo ${modelName}:`, e);
+        } catch (e: any) {
+            console.error(`[GEMINI FATAL ERROR] Loop ${modelName}:`, e.message);
         }
     }
-    return { resposta: 'Olá! Como posso ajudar?', intencao: 'CONVERSA' };
+    
+    return { resposta: 'Olá! Sou seu assistente de farmácia. Como posso ajudar?', intencao: 'CONVERSA' };
 }
 
 // =========================================================================
 // PROCESSAMENTO FINAL
 // =========================================================================
 
-async function processarMensagemCompleta(de: string, texto: string) {
-    // 1. O Gemini decide a intenção PRIMEIRO
-    const analise = await interpretarComGemini(texto);
+async function processarMensagemCompleta(deRaw: string, texto: string) {
+    const de = limparNumero(deRaw);
+    console.log(`[FLOW] Iniciando processamento para ${de}`);
 
-    if (analise.intencao === 'PRODUTO' && analise.termo) {
-        const resultado = await buscarProdutoNaApi(analise.termo);
-        await whatsapp.sendTextMessage(de, resultado);
-        return;
+    try {
+        const analise = await interpretarComGemini(texto);
+        let respostaFinal = '';
+
+        if (analise.intencao === 'PRODUTO' && analise.termo) {
+            respostaFinal = await buscarProdutoNaApi(analise.termo);
+        } else if (analise.intencao === 'MEDICA' && analise.termo) {
+            respostaFinal = await buscaGoogleFallback(analise.termo);
+        } else {
+            respostaFinal = analise.resposta;
+        }
+
+        console.log(`[FLOW] Enviando mensagem final para ${de}`);
+        await whatsapp.sendTextMessage(de, respostaFinal);
+    } catch (err) {
+        console.error('[FLOW ERROR]', err);
+        await whatsapp.sendTextMessage(de, 'Tive um problema ao processar sua mensagem. Pode repetir?');
     }
-
-    if (analise.intencao === 'MEDICA' && analise.termo) {
-        const resultado = await buscaGoogleFallback(analise.termo);
-        await whatsapp.sendTextMessage(de, resultado);
-        return;
-    }
-
-    // Resposta padrão (saudação ou conversa)
-    await whatsapp.sendTextMessage(de, analise.resposta);
 }
 
 // =========================================================================
-// ROTAS NEXT.JS
+// HANDLERS HTTP
 // =========================================================================
 
 export async function POST(req: NextRequest) {
@@ -147,7 +187,8 @@ export async function POST(req: NextRequest) {
             await processarMensagemCompleta(msg.from, msg.text.body);
         }
         return new NextResponse('OK', { status: 200 });
-    } catch (e) {
+    } catch (e: any) {
+        console.error('[POST ERROR]', e.message);
         return new NextResponse('OK', { status: 200 });
     }
 }
