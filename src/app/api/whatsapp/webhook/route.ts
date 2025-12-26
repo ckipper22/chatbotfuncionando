@@ -27,7 +27,7 @@ const whatsapp = new WhatsAppAPI({
 // =========================================================================
 
 function formatarNumeroWhatsAppParaEnvio(numero: string): string {
-    let limpo = numero.replace(/\\\\\\D/g, ''); // Remove não-dígitos
+    let limpo = numero.replace(/\\\\\\\\\\\\\\\\D/g, ''); // Remove não-dígitos
     
     if (limpo.startsWith('55')) {
         if (limpo.length === 12 && !limpo.startsWith('559', 2)) {
@@ -91,7 +91,7 @@ async function sendWhatsappMessageAndSaveHistory(
     await saveMessageToSupabase(
         {
             whatsapp_phone_id: WHATSAPP_PHONE_NUMBER_ID || '', 
-            from_number: customerPhoneNumber,     // CORREÇÃO: Usa o número do CLIENTE para agrupar conversas
+            from_number: customerPhoneNumber,     // Usa o número do CLIENTE para agrupar conversas
             message_body: text,                             
             direction: 'outbound',
         },
@@ -123,7 +123,7 @@ async function enviarMenuBoasVindas(
         interactive: {
             type: "button",
             header: { type: "text", text: nomeFarmacia.substring(0, 60) },
-            body: { text: "Olá! Como posso ajudar você hoje?\\\\\\nEscolha uma das opções abaixo para começar:" },
+            body: { text: "Olá! Como posso ajudar você hoje?\\\\\\\\\\\\\\\\\\\nEscolha uma das opções abaixo para começar:" },
             footer: { text: "Assistente Virtual Farmacêutico" },
             action: {
                 buttons: [
@@ -149,7 +149,7 @@ async function enviarMenuBoasVindas(
         await saveMessageToSupabase(
             {
                 whatsapp_phone_id: WHATSAPP_PHONE_NUMBER_ID || '', 
-                from_number: customerPhoneNumber,     // CORREÇÃO: Usa o número do CLIENTE para agrupar conversas
+                from_number: customerPhoneNumber,     // Usa o número do CLIENTE para agrupar conversas
                 message_body: payload.interactive.body.text,     
                 direction: 'outbound',
             },
@@ -184,30 +184,30 @@ async function consultarEstoqueFlask(termo: string, apiBase: string): Promise<st
 
         if (produtos.length === 0) return `❌ Não encontrei "*${termo}*" em estoque agora.`;
 
-        let resposta = `✅ *Produtos Encontrados:*\\\\\\n\\\\\\n`;
+        let resposta = `✅ *Produtos Encontrados:*\n\n`; // Usando \n\n para blank line
         produtos.slice(0, 3).forEach((p: any) => {
             const nomeProduto = p.nome_produto || 'Produto sem nome';
             const nomLaboratorio = p.nom_laboratorio || 'Laboratório não informado';
             
             // Parsear as strings de preço recebidas do Flask para float
-            const precoBruto = parseCurrencyStringToFloat(p.vlr_venda);
-            const precoFinalVenda = parseCurrencyStringToFloat(p.preco_final_venda);
+            const precoBruto = parseCurrencyStringToFloat(p.preco_bruto); // Corrigido para preco_bruto
+            const precoFinalVenda = parseCurrencyStringToFloat(p.preco_final_venda); // Corrigido para preco_final_venda
             
             const qtdEstoque = p.qtd_estoque !== undefined ? p.qtd_estoque : '0';
             const codReduzido = p.cod_reduzido || 'N/A';
 
-            resposta += `▪️ *${nomeProduto}*\\\\\\n`;
-            resposta += `   💊 ${nomLaboratorio}\\\\\\n`;
+            resposta += `▪️ *${nomeProduto}*\n`; // \n para nova linha
+            resposta += `   💊 ${nomLaboratorio}\n`; // \n para nova linha
             
             if (precoBruto > precoFinalVenda && precoBruto > 0) {
                 const descontoPercentual = ((precoBruto - precoFinalVenda) / precoBruto) * 100;
-                resposta += `   💰 ~~R$ ${precoBruto.toFixed(2).replace('.', ',')}~~ *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}* (🔻${descontoPercentual.toFixed(1).replace('.', ',')}% OFF)\\\\\\n`;
+                resposta += `   💰 ~~R$ ${precoBruto.toFixed(2).replace('.', ',')}~~ *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}* (🔻${descontoPercentual.toFixed(1).replace('.', ',')}% OFF)\n`; // \n para nova linha
             } else {
-                resposta += `   💰 *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}*\\\\\\n`;
+                resposta += `   💰 *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}*\n`; // \n para nova linha
             }
-            resposta += `   📦 Estoque: ${qtdEstoque} unidades\\\\\\n`;
-            resposta += `   📋 Código: ${codReduzido}\\\\\\n`;
-            resposta += `\\\\\\n`;
+            resposta += `   📦 Estoque: ${qtdEstoque} unidades\n`; // \n para nova linha
+            resposta += `   📋 Código: ${codReduzido}\n`; // \n para nova linha
+            resposta += `\n`; // Espaço entre os itens (blank line)
         });
         return resposta;
     } catch (e) {
@@ -223,7 +223,7 @@ async function consultarGoogleInfo(pergunta: string): Promise<string> {
         const res = await fetch(url);
         const data = await res.json();
         if (!data.items?.length) return '🔍 Não localizei informações técnicas sobre isso.';
-        return `💊 *Informação Técnica:* \\\\\\n\\\\\\n${data.items[0].snippet}\\\\\\n\\\\\\n🔗 *Fonte:* ${data.items[0].link}`;
+        return `💊 *Informação Técnica:* \\\\\\\\\\\\\\\\\\\n\\\\\\\\\\\\\\\\\\\n${data.items[0].snippet}\\\\\\\\\\\\\\\\\\\n\\\\\\\\\\\\\\\\\\\n🔗 *Fonte:* ${data.items[0].link}`;
     } catch (e) { return '⚠️ Erro na busca técnica.'; }
 }
 
@@ -242,13 +242,13 @@ async function processarFluxoPrincipal(
     const textoLimpo = textoUsuario?.toLowerCase();
     const cliqueBotao = msg.interactive?.button_reply?.id;
 
-    console.log(`\\\\\\n[RASTREAMENTO] 📥 Msg de ${originalCustomerPhoneNumber}: ${textoUsuario || '[Botão: ' + cliqueBotao + ']'}`);
+    console.log(`\\\\\\\\\\\\\\\\\\\n[RASTREAMENTO] 📥 Msg de ${originalCustomerPhoneNumber}: ${textoUsuario || '[Botão: ' + cliqueBotao + ']'}`);
 
     if (msg) {
         await saveMessageToSupabase(
             {
                 whatsapp_phone_id: phoneId,
-                from_number: originalCustomerPhoneNumber, // Este já estava correto para inbound
+                from_number: originalCustomerPhoneNumber,
                 message_body: textoUsuario || JSON.stringify(msg), 
                 direction: 'inbound',
             },
@@ -285,10 +285,10 @@ async function processarFluxoPrincipal(
         console.log(`[ESTADO] 🎯 Usuário escolheu: ${cliqueBotao}`);
         cacheEstados.set(originalCustomerPhoneNumber, cliqueBotao);
         
-        let msgContexto = "";
-        if (cliqueBotao === 'menu_estoque') msgContexto = "📦 *Consulta de Estoque*\\\\\\n\\\\\\nPor favor, digite o *nome do produto* que deseja consultar.";
-        else if (cliqueBotao === 'menu_info') msgContexto = "📖 *Informação Médica*\\\\\\n\\\\\\nQual medicamento você quer pesquisar?";
-        else if (cliqueBotao === 'menu_outros') msgContexto = "🤖 *Assistente Virtual*\\\\\\n\\\\\\nComo posso ajudar com outros assuntos?";
+        let msgContexto = ""
+        if (cliqueBotao === 'menu_estoque') msgContexto = "📦 *Consulta de Estoque*\\\\\\\\\\\\\\\\\\\n\\\\\\\\\\\\\\\\\\\nPor favor, digite o *nome do produto* que deseja consultar."
+        else if (cliqueBotao === 'menu_info') msgContexto = "📖 *Informação Médica*\\\\\\\\\\\\\\\\\\\n\\\\\\\\\\\\\\\\\\\nQual medicamento você quer pesquisar?"
+        else if (cliqueBotao === 'menu_outros') msgContexto = "🤖 *Assistente Virtual*\\\\\\\\\\\\\\\\\\\n\\\\\\\\\\\\\\\\\\\nComo posso ajudar com outros assuntos?"
 
         await sendWhatsappMessageAndSaveHistory(originalCustomerPhoneNumber, msgContexto, supabaseUrl, supabaseAnonKey);
         return;
