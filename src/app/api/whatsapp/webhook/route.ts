@@ -123,7 +123,7 @@ async function enviarMenuBoasVindas(
         interactive: {
             type: "button",
             header: { type: "text", text: nomeFarmacia.substring(0, 60) },
-            body: { text: "Olá! Como posso ajudar você hoje?\nEscolha uma das opções abaixo para começar:" }, // AQUI
+            body: { text: "Olá! Como posso ajudar você hoje?\nEscolha uma das opções abaixo para começar:" },
             footer: { text: "Assistente Virtual Farmacêutico" },
             action: {
                 buttons: [
@@ -184,32 +184,30 @@ async function consultarEstoqueFlask(termo: string, apiBase: string): Promise<st
 
         if (produtos.length === 0) return `❌ Não encontrei "*${termo}*" em estoque agora.`;
 
-        let resposta = `✅ *Produtos Encontrados:*\n\n`; // AQUI: \n\n para linha em branco
+        let resposta = `✅ *Produtos Encontrados:*\n\n`; // Usando \n\n para blank line
         produtos.slice(0, 3).forEach((p: any) => {
             const nomeProduto = p.nome_produto || 'Produto sem nome';
             const nomLaboratorio = p.nom_laboratorio || 'Laboratório não informado';
             
             // Parsear as strings de preço recebidas do Flask para float
-            // Observação: vlr_venda e preco_final_venda vêm da sua API Flask como strings "R$ X,XX"
-            const precoBruto = parseCurrencyStringToFloat(p.vlr_venda);
-            const precoFinalVenda = parseCurrencyStringToFloat(p.preco_final_venda);
+            const precoBruto = parseCurrencyStringToFloat(p.vlr_venda); // Flask envia vlr_venda como "R$ X,XX"
+            const precoFinalVenda = parseCurrencyStringToFloat(p.preco_final_venda); // Flask envia preco_final_venda como "R$ X,XX"
             
             const qtdEstoque = p.qtd_estoque !== undefined ? p.qtd_estoque : '0';
             const codReduzido = p.cod_reduzido || 'N/A';
 
-            resposta += `▪️ *${nomeProduto}*\n`; // AQUI: \n
-            resposta += `   💊 ${nomLaboratorio}\n`; // AQUI: \n
+            resposta += `▪️ *${nomeProduto}*\n`; // Usando \n
+            resposta += `   💊 ${nomLaboratorio}\n`; // Usando \n
             
             if (precoBruto > precoFinalVenda && precoBruto > 0) {
                 const descontoPercentual = ((precoBruto - precoFinalVenda) / precoBruto) * 100;
-                resposta += `   💰 ~~R$ ${precoBruto.toFixed(2).replace('.', ',')}~~ *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}* (🔻${descontoPercentual.toFixed(1).replace('.', ',')}% OFF)\n`; // AQUI: \n
+                resposta += `   💰 ~~R$ ${precoBruto.toFixed(2).replace('.', ',')}~~ *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}* (🔻${descontoPercentual.toFixed(1).replace('.', ',')}% OFF)\n`; // Usando \n
             } else {
-                resposta += `   💰 *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}*\n`; // AQUI: \n
+                resposta += `   💰 *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}*\n`; // Usando \n
             }
-            resposta += `   📦 Estoque: ${qtdEstoque} unidades\n`; // AQUI: \n
-            resposta += `   📋 Código: ${codReduzido}\n`; // AQUI: \n
-            // REMOVIDO: A parte "Para adicionar ao carrinho, digite: *COMPRAR {cod}*"
-            resposta += `\n`; // AQUI: Linha em branco para separar itens
+            resposta += `   📦 Estoque: ${qtdEstoque} unidades\n`; // Usando \n
+            resposta += `   📋 Código: ${codReduzido}\n`; // Usando \n
+            resposta += `\n`; // Linha em branco para separar itens
         });
         return resposta;
     } catch (e) {
@@ -225,7 +223,7 @@ async function consultarGoogleInfo(pergunta: string): Promise<string> {
         const res = await fetch(url);
         const data = await res.json();
         if (!data.items?.length) return '🔍 Não localizei informações técnicas sobre isso.';
-        return `💊 *Informação Técnica:*\n\n${data.items[0].snippet}\n\n🔗 *Fonte:* ${data.items[0].link}`; // AQUI
+        return `💊 *Informação Técnica:*\n\n${data.items[0].snippet}\n\n🔗 *Fonte:* ${data.items[0].link}`;
     } catch (e) { return '⚠️ Erro na busca técnica.'; }
 }
 
@@ -244,13 +242,13 @@ async function processarFluxoPrincipal(
     const textoLimpo = textoUsuario?.toLowerCase();
     const cliqueBotao = msg.interactive?.button_reply?.id;
 
-    console.log(`\n[RASTREAMENTO] 📥 Msg de ${originalCustomerPhoneNumber}: ${textoUsuario || '[Botão: ' + cliqueBotao + ']'}`); // AQUI
+    console.log(`\n[RASTREAMENTO] 📥 Msg de ${originalCustomerPhoneNumber}: ${textoUsuario || '[Botão: ' + cliqueBotao + ']'}`);
 
     if (msg) {
         await saveMessageToSupabase(
             {
                 whatsapp_phone_id: phoneId,
-                from_number: originalCustomerPhoneNumber, // Este já estava correto para inbound
+                from_number: originalCustomerPhoneNumber,
                 message_body: textoUsuario || JSON.stringify(msg), 
                 direction: 'inbound',
             },
@@ -272,7 +270,7 @@ async function processarFluxoPrincipal(
             nomeFarmacia = farmacias[0].name || nomeFarmacia;
         }
     } catch (e) { 
-        console.error("[SUPABASE] ❌ Erro de conexão ao buscar client_connections:", e); // AQUI
+        console.error("[SUPABASE] ❌ Erro de conexão ao buscar client_connections:", e);
     }
 
     const saudacoes = ['oi', 'ola', 'olá', 'menu', 'inicio', 'bom dia', 'boa tarde', 'boa noite'];
@@ -288,9 +286,9 @@ async function processarFluxoPrincipal(
         cacheEstados.set(originalCustomerPhoneNumber, cliqueBotao);
         
         let msgContexto = "";
-        if (cliqueBotao === 'menu_estoque') msgContexto = "📦 *Consulta de Estoque*\n\nPor favor, digite o *nome do produto* que deseja consultar."; // AQUI
-        else if (cliqueBotao === 'menu_info') msgContexto = "📖 *Informação Médica*\n\nQual medicamento você quer pesquisar?"; // AQUI
-        else if (cliqueBotao === 'menu_outros') msgContexto = "🤖 *Assistente Virtual*\n\nComo posso ajudar com outros assuntos?"; // AQUI
+        if (cliqueBotao === 'menu_estoque') msgContexto = "📦 *Consulta de Estoque*\n\nPor favor, digite o *nome do produto* que deseja consultar.";
+        else if (cliqueBotao === 'menu_info') msgContexto = "📖 *Informação Médica*\n\nQual medicamento você quer pesquisar?";
+        else if (cliqueBotao === 'menu_outros') msgContexto = "🤖 *Assistente Virtual*\n\nComo posso ajudar com outros assuntos?";
 
         await sendWhatsappMessageAndSaveHistory(originalCustomerPhoneNumber, msgContexto, supabaseUrl, supabaseAnonKey);
         return;
@@ -301,7 +299,7 @@ async function processarFluxoPrincipal(
 
     if (estadoAtual === 'menu_estoque') {
         const res = await consultarEstoqueFlask(textoUsuario, apiFlask); 
-        // CORREÇÃO AQUI: NÃO APAGAR O ESTADO 'menu_estoque'
+        // CORREÇÃO AQUI: NÃO APAGAR O ESTADO 'menu_estoque' para permitir consulta contínua
         // cacheEstados.delete(originalCustomerPhoneNumber); // Removido para permitir consulta contínua
         await sendWhatsappMessageAndSaveHistory(originalCustomerPhoneNumber, res, supabaseUrl, supabaseAnonKey);
         return;
@@ -324,9 +322,9 @@ async function processarFluxoPrincipal(
         });
         const dataGemini = await resGemini.json();
         const textoIA = dataGemini.candidates?.[0]?.content?.parts?.[0]?.text;
-        await sendWhatsappMessageAndSaveHistory(originalCustomerPhoneNumber, textoIA || "Desculpe, não entendi. Digite 'menu' para ver as opções.", supabaseUrl, supabaseAnonKey); // AQUI
+        await sendWhatsappMessageAndSaveHistory(originalCustomerPhoneNumber, textoIA || "Desculpe, não entendi. Digite 'menu' para ver as opções.", supabaseUrl, supabaseAnonKey);
     } catch (e) {
-        await sendWhatsappMessageAndSaveHistory(originalCustomerPhoneNumber, "Olá! Como posso ajudar? Digite 'menu' para ver as opções principais.", supabaseUrl, supabaseAnonKey); // AQUI
+        await sendWhatsappMessageAndSaveHistory(originalCustomerPhoneNumber, "Olá! Como posso ajudar? Digite 'menu' para ver as opções principais.", supabaseUrl, supabaseAnonKey);
     }
 }
 
@@ -339,4 +337,31 @@ export async function POST(req: NextRequest) {
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey) {
-        console.error('[SUPABASE_CONFIG] ❌ NEXT_PUBLIC_SUPABASE_URL ou
+        // CORREÇÃO: Linha completa do console.error
+        console.error('[SUPABASE_CONFIG] ❌ NEXT_PUBLIC_SUPABASE_URL ou NEXT_PUBLIC_SUPABASE_ANON_KEY não configurados.'); 
+        return new NextResponse('Internal Server Error: Supabase configuration missing.', { status: 500 });
+    }
+
+    try {
+        const body = await req.json();
+        const value = body.entry?.[0]?.changes?.[0]?.value;
+        const msg = value?.messages?.[0];
+        const phoneId = value?.metadata?.phone_number_id;
+
+        if (msg) {
+            await processarFluxoPrincipal(msg.from, msg, phoneId, supabaseUrl, supabaseAnonKey);
+        }
+        return new NextResponse('OK', { status: 200 });
+    } catch (e) {
+        console.error(`[WEBHOOK] ❌ Erro fatal:`, e);
+        return new NextResponse('OK', { status: 200 });
+    }
+}
+
+export async function GET(req: NextRequest) {
+    const { searchParams } = req.nextUrl;
+    if (searchParams.get('hub.verify_token') === WHATSAPP_VERIFY_TOKEN) {
+        return new NextResponse(searchParams.get('hub.challenge'), { status: 200 });
+    }
+    return new NextResponse('Erro', { status: 403 });
+}
