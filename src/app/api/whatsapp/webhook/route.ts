@@ -27,15 +27,10 @@ const whatsapp = new WhatsAppAPI({
 // =========================================================================
 
 function formatarNumeroWhatsAppParaEnvio(numero: string): string {
-    // Esta função é para FORMATAR o número para envio à API do WhatsApp Meta.
-    // O número original do cliente DEVE ser mantido no histórico sem essa formatação.
-    let limpo = numero.replace(/\D/g, ''); // Remove não-dígitos
+    let limpo = numero.replace(/\\\D/g, ''); // Remove não-dígitos
     
-    // Tratamento para números do Brasil (55)
     if (limpo.startsWith('55')) {
-        // Se tiver 12 dígitos (Ex: 555484557096), adiciona o 9 após o DDD
-        // Garante que o 9º dígito seja adicionado para números de celular brasileiros
-        if (limpo.length === 12 && !limpo.startsWith('559', 2)) { // Verifica se já não tem o 9 no DDD
+        if (limpo.length === 12 && !limpo.startsWith('559', 2)) {
             const ddd = limpo.substring(2, 4);
             const resto = limpo.substring(4);
             limpo = `55${ddd}9${resto}`;
@@ -84,22 +79,19 @@ async function saveMessageToSupabase(
 
 // Wrapper para whatsapp.sendTextMessage que *também* salva a mensagem no histórico.
 async function sendWhatsappMessageAndSaveHistory(
-    customerPhoneNumber: string, // NÚMERO ORIGINAL DO CLIENTE
+    customerPhoneNumber: string,
     text: string,
     supabaseUrl: string,
     supabaseAnonKey: string
 ) {
-    // Formata o número SOMENTE PARA O ENVIO ao WhatsApp Meta API
     const formattedCustomerNumber = formatarNumeroWhatsAppParaEnvio(customerPhoneNumber);
 
-    // Primeiro, envia a mensagem pelo WhatsApp API
     await whatsapp.sendTextMessage(formattedCustomerNumber, text);
 
-    // Em seguida, salva a mensagem no Supabase, usando o NÚMERO ORIGINAL DO CLIENTE
     await saveMessageToSupabase(
         {
             whatsapp_phone_id: WHATSAPP_PHONE_NUMBER_ID || '', 
-            from_number: WHATSAPP_PHONE_NUMBER_ID || '',     // O bot é o remetente
+            from_number: WHATSAPP_PHONE_NUMBER_ID || '',     
             message_body: text,                             
             direction: 'outbound',
         },
@@ -110,16 +102,14 @@ async function sendWhatsappMessageAndSaveHistory(
 
 // =========================================================================
 // FUNÇÃO DO MENU INTERATIVO (O QUE O CLIENTE VÊ AO DAR "OI")
-// (Modificada apenas para salvar a mensagem no histórico)
 // =========================================================================
 
 async function enviarMenuBoasVindas(
-    customerPhoneNumber: string, // NÚMERO ORIGINAL DO CLIENTE
+    customerPhoneNumber: string,
     nomeFarmacia: string,
     supabaseUrl: string,
     supabaseAnonKey: string
 ) {
-    // Formata o número SOMENTE PARA O ENVIO ao WhatsApp Meta API
     const formattedCustomerNumber = formatarNumeroWhatsAppParaEnvio(customerPhoneNumber);
     const url = `https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
     
@@ -128,12 +118,12 @@ async function enviarMenuBoasVindas(
     const payload = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
-        to: formattedCustomerNumber, // Usa o número formatado para envio
+        to: formattedCustomerNumber,
         type: "interactive",
         interactive: {
             type: "button",
             header: { type: "text", text: nomeFarmacia.substring(0, 60) },
-            body: { text: "Olá! Como posso ajudar você hoje?\nEscolha uma das opções abaixo para começar:" },
+            body: { text: "Olá! Como posso ajudar você hoje?\\\nEscolha uma das opções abaixo para começar:" },
             footer: { text: "Assistente Virtual Farmacêutico" },
             action: {
                 buttons: [
@@ -156,11 +146,10 @@ async function enviarMenuBoasVindas(
         console.error(`[WHATSAPP API] ❌ ERRO 400 NO MENU:`, JSON.stringify(resData, null, 2));
     } else {
         console.log(`[WHATSAPP API] ✅ Menu enviado com sucesso.`);
-        // Salvar a mensagem de saída (menu) na tabela whatsapp_messages, usando o NÚMERO ORIGINAL DO CLIENTE
         await saveMessageToSupabase(
             {
                 whatsapp_phone_id: WHATSAPP_PHONE_NUMBER_ID || '', 
-                from_number: WHATSAPP_PHONE_NUMBER_ID || '',     // O bot é o remetente
+                from_number: WHATSAPP_PHONE_NUMBER_ID || '',     
                 message_body: payload.interactive.body.text,     
                 direction: 'outbound',
             },
@@ -172,8 +161,15 @@ async function enviarMenuBoasVindas(
 
 // =========================================================================
 // INTEGRAÇÕES (FLASK, GOOGLE, GEMINI)
-// (Modificado consultarEstoqueFlask para mostrar laboratório, preço bruto e desconto)
+// CORREÇÃO: consultarestqueFlask para fazer o parsing dos preços string
 // =========================================================================
+
+// Função auxiliar para parsear string "R$ X,XX" para float
+function parseCurrencyStringToFloat(currencyString: string | undefined): number {
+    if (!currencyString) return 0;
+    const cleanedString = currencyString.replace('R$', '').trim().replace(',', '.');
+    return parseFloat(cleanedString) || 0;
+}
 
 async function consultarEstoqueFlask(termo: string, apiBase: string): Promise<string> {
     console.log(`[FLASK] 🔍 Buscando: "${termo}" em ${apiBase}`);
@@ -189,24 +185,28 @@ async function consultarEstoqueFlask(termo: string, apiBase: string): Promise<st
 
         if (produtos.length === 0) return `❌ Não encontrei "*${termo}*" em estoque agora.`;
 
-        let resposta = `✅ *Produtos Encontrados:*\n\n`;
+        let resposta = `✅ *Produtos Encontrados:*\\\n\\\n`;
         produtos.slice(0, 3).forEach((p: any) => {
             const nomeProduto = p.nome_produto || 'Produto sem nome';
             const nomLaboratorio = p.nom_laboratorio || 'Laboratório não informado';
-            const precoBruto = parseFloat(p.preco_bruto) || 0;
-            const precoFinalVenda = parseFloat(p.preco_final_venda) || 0;
+            const precoBruto = parseCurrencyStringToFloat(p.vlr_venda);
+            const precoFinalVenda = parseCurrencyStringToFloat(p.preco_final_venda);
             const qtdEstoque = p.qtd_estoque !== undefined ? p.qtd_estoque : '0';
+            const codReduzido = p.cod_reduzido || 'N/A'; // Obter o código reduzido
 
-            resposta += `▪️ *${nomeProduto}*\n`;
-            resposta += `   💊 ${nomLaboratorio}\n`;
+            resposta += `▪️ *${nomeProduto}*\\\n`;
+            resposta += `   💊 ${nomLaboratorio}\\\n`;
             
             if (precoBruto > precoFinalVenda && precoBruto > 0) {
                 const descontoPercentual = ((precoBruto - precoFinalVenda) / precoBruto) * 100;
-                resposta += `   💰 De R$ ${precoBruto.toFixed(2).replace('.', ',')} por *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}* (🔻${descontoPercentual.toFixed(1).replace('.', ',')}% OFF)\n`;
+                resposta += `   💰 ~~R$ ${precoBruto.toFixed(2).replace('.', ',')}~~ *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}* (🔻${descontoPercentual.toFixed(1).replace('.', ',')}% OFF)\\\n`;
             } else {
-                resposta += `   💰 Preço: R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}\n`;
+                resposta += `   💰 *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}*\\\n`; // Formato negrito para preço único
             }
-            resposta += `   📦 Estoque: ${qtdEstoque} unidades\n\n`;
+            resposta += `   📦 Estoque: ${qtdEstoque} unidades\\\n`;
+            resposta += `   📋 Código: ${codReduzido}\\\n`; // Adicionado o código do produto
+            // REMOVIDO: A parte "Para adicionar ao carrinho, digite: *COMPRAR {cod}*"
+            resposta += `\\\n`; // Adiciona uma linha em branco para separar os produtos
         });
         return resposta;
     } catch (e) {
@@ -222,7 +222,7 @@ async function consultarGoogleInfo(pergunta: string): Promise<string> {
         const res = await fetch(url);
         const data = await res.json();
         if (!data.items?.length) return '🔍 Não localizei informações técnicas sobre isso.';
-        return `💊 *Informação Técnica:* \n\n${data.items[0].snippet}\n\n🔗 *Fonte:* ${data.items[0].link}`;
+        return `💊 *Informação Técnica:* \\\n\\\n${data.items[0].snippet}\\\n\\\n🔗 *Fonte:* ${data.items[0].link}`;
     } catch (e) { return '⚠️ Erro na busca técnica.'; }
 }
 
@@ -231,7 +231,7 @@ async function consultarGoogleInfo(pergunta: string): Promise<string> {
 // =========================================================================
 
 async function processarFluxoPrincipal(
-    originalCustomerPhoneNumber: string, // NOVO: Captura o número original aqui
+    originalCustomerPhoneNumber: string,
     msg: any,
     phoneId: string,
     supabaseUrl: string,
@@ -241,14 +241,13 @@ async function processarFluxoPrincipal(
     const textoLimpo = textoUsuario?.toLowerCase();
     const cliqueBotao = msg.interactive?.button_reply?.id;
 
-    console.log(`\n[RASTREAMENTO] 📥 Msg de ${originalCustomerPhoneNumber}: ${textoUsuario || '[Botão: ' + cliqueBotao + ']'}`);
+    console.log(`\\\n[RASTREAMENTO] 📥 Msg de ${originalCustomerPhoneNumber}: ${textoUsuario || '[Botão: ' + cliqueBotao + ']'}`);
 
-    // NOVO: Salvar mensagem de entrada na tabela whatsapp_messages (AGORA USANDO O NÚMERO ORIGINAL)
     if (msg) {
         await saveMessageToSupabase(
             {
                 whatsapp_phone_id: phoneId,
-                from_number: originalCustomerPhoneNumber, // CORREÇÃO AQUI: USA O NÚMERO ORIGINAL DO CLIENTE
+                from_number: originalCustomerPhoneNumber,
                 message_body: textoUsuario || JSON.stringify(msg), 
                 direction: 'inbound',
             },
@@ -257,7 +256,6 @@ async function processarFluxoPrincipal(
         );
     }
 
-    // 1. Identificação Multitenant via Supabase (AJUSTADO para API Flask mais robusta)
     let apiFlask: string = process.env.FLASK_API_URL || '';
     let nomeFarmacia = 'Nossa Farmácia';
 
@@ -274,36 +272,33 @@ async function processarFluxoPrincipal(
         console.error("[SUPABASE] ❌ Erro de conexão ao buscar client_connections:", e);
     }
 
-    // 2. Fluxo de Entrada (Saudações)
     const saudacoes = ['oi', 'ola', 'olá', 'menu', 'inicio', 'bom dia', 'boa tarde', 'boa noite'];
     if (textoLimpo && saudacoes.includes(textoLimpo) && !cliqueBotao) {
         console.log(`[ESTADO] 🔄 Saudação. Enviando menu.`);
-        cacheEstados.delete(originalCustomerPhoneNumber); // Usa o número original para o cache
+        cacheEstados.delete(originalCustomerPhoneNumber);
         await enviarMenuBoasVindas(originalCustomerPhoneNumber, nomeFarmacia, supabaseUrl, supabaseAnonKey);
         return;
     }
 
-    // 3. Resposta ao Clique no Botão
     if (cliqueBotao) {
         console.log(`[ESTADO] 🎯 Usuário escolheu: ${cliqueBotao}`);
-        cacheEstados.set(originalCustomerPhoneNumber, cliqueBotao); // Usa o número original para o cache
+        cacheEstados.set(originalCustomerPhoneNumber, cliqueBotao);
         
         let msgContexto = "";
-        if (cliqueBotao === 'menu_estoque') msgContexto = "📦 *Consulta de Estoque*\n\nPor favor, digite o *nome do produto* que deseja consultar.";
-        else if (cliqueBotao === 'menu_info') msgContexto = "📖 *Informação Médica*\n\nQual medicamento você quer pesquisar?";
-        else if (cliqueBotao === 'menu_outros') msgContexto = "🤖 *Assistente Virtual*\n\nComo posso ajudar com outros assuntos?";
+        if (cliqueBotao === 'menu_estoque') msgContexto = "📦 *Consulta de Estoque*\\\n\\\nPor favor, digite o *nome do produto* que deseja consultar.";
+        else if (cliqueBotao === 'menu_info') msgContexto = "📖 *Informação Médica*\\\n\\\nQual medicamento você quer pesquisar?";
+        else if (cliqueBotao === 'menu_outros') msgContexto = "🤖 *Assistente Virtual*\\\n\\\nComo posso ajudar com outros assuntos?";
 
         await sendWhatsappMessageAndSaveHistory(originalCustomerPhoneNumber, msgContexto, supabaseUrl, supabaseAnonKey);
         return;
     }
 
-    // 4. Execução baseada no Estado salvo
-    const estadoAtual = cacheEstados.get(originalCustomerPhoneNumber); // Usa o número original para o cache
+    const estadoAtual = cacheEstados.get(originalCustomerPhoneNumber);
     console.log(`[ESTADO] 🧠 Estado de ${originalCustomerPhoneNumber}: ${estadoAtual || 'Sem Estado'}`);
 
     if (estadoAtual === 'menu_estoque') {
         const res = await consultarEstoqueFlask(textoUsuario, apiFlask); 
-        cacheEstados.delete(originalCustomerPhoneNumber); // Limpa para a próxima interação ser livre
+        cacheEstados.delete(originalCustomerPhoneNumber);
         await sendWhatsappMessageAndSaveHistory(originalCustomerPhoneNumber, res, supabaseUrl, supabaseAnonKey);
         return;
     }
@@ -315,7 +310,6 @@ async function processarFluxoPrincipal(
         return;
     }
 
-    // 5. Fallback Gemini (Para mensagens soltas fora do menu)
     console.log(`[GEMINI] 🤖 Gerando resposta inteligente.`);
     try {
         const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
@@ -352,7 +346,6 @@ export async function POST(req: NextRequest) {
         const phoneId = value?.metadata?.phone_number_id;
 
         if (msg) {
-            // CORREÇÃO: Passa o número original do remetente (msg.from)
             await processarFluxoPrincipal(msg.from, msg, phoneId, supabaseUrl, supabaseAnonKey);
         }
         return new NextResponse('OK', { status: 200 });
