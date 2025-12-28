@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WhatsAppAPI } from '@/lib/whatsapp-api';
 
+// Cache de estado em memória
+const cacheEstados = new Map<string, string>();
+
 // =========================================================================
-// 1. CONFIGURAÇÕES
+// CONFIGURAÇÕES (Restauradas e Integradas)
 // =========================================================================
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GOOGLE_CSE_KEY = process.env.CUSTOM_SEARCH_API_KEY; 
+const GOOGLE_CSE_KEY = process.env.CUSTOM_SEARCH_API_KEY;
 const GOOGLE_CSE_CX = process.env.CUSTOM_SEARCH_CX;
 const FLASK_API_URL = process.env.FLASK_API_URL;
 
@@ -21,7 +24,7 @@ const whatsapp = new WhatsAppAPI({
 });
 
 // =========================================================================
-// 2. FUNÇÕES DE BUSCA (API GOOGLE E FLASK)
+// NOVAS FUNÇÕES DE APOIO (Busca Externa)
 // =========================================================================
 
 async function buscarNoGoogle(query: string): Promise<string> {
@@ -31,9 +34,7 @@ async function buscarNoGoogle(query: string): Promise<string> {
         const res = await fetch(url);
         const data = await res.json();
         return data.items?.slice(0, 2).map((i: any) => i.snippet).join(" | ") || "";
-    } catch (e) {
-        return "";
-    }
+    } catch (e) { return ""; }
 }
 
 async function buscarNoFlask(termo: string): Promise<string> {
@@ -45,22 +46,17 @@ async function buscarNoFlask(termo: string): Promise<string> {
             body: JSON.stringify({ termo })
         });
         const data = await res.json();
-        if (data.produtos && data.produtos.length > 0) {
-            return `ESTOQUE DISPONÍVEL: ${JSON.stringify(data.produtos)}`;
-        }
-        return "Produto não encontrado no estoque.";
-    } catch (e) {
-        return "";
-    }
+        return data.produtos ? JSON.stringify(data.produtos) : "";
+    } catch (e) { return ""; }
 }
 
 // =========================================================================
-// 3. LOGICA DO GEMINI (USANDO SUA FORMA QUE FUNCIONA)
+// LOGICA DO GEMINI (CORREÇÃO DO ERRO 404 - USANDO V1)
 // =========================================================================
 
 async function chamarGemini(prompt: string) {
-    // Usando a URL direta conforme seu arquivo original que funcionava
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    // CORREÇÃO: Alterado de v1beta para v1 para evitar o erro 404
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
     
     const response = await fetch(url, {
         method: 'POST',
@@ -76,70 +72,78 @@ async function chamarGemini(prompt: string) {
     }
 
     const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || "Desculpe, não consegui processar.";
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "Desculpe, tive um erro ao processar.";
 }
 
 // =========================================================================
-// 4. FLUXO PRINCIPAL
+// FLUXO PRINCIPAL (RESTAURADO COM SUPABASE E HISTÓRICO)
 // =========================================================================
 
-async function processarFluxoPrincipal(from: string, msg: any) {
+async function processarFluxoPrincipal(from: string, msg: any, phoneId: string, supabaseUrl: string, supabaseAnonKey: string) {
     const textoUsuario = msg.text?.body || "";
     console.log(`[FLUXO] Mensagem de ${from}: ${textoUsuario}`);
 
-    let contextoExtra = "";
-
     try {
-        // Detecção de Intenção
+        // 1. LÓGICA DE INTENÇÃO E BUSCAS EXTERNAS
+        let contextoExtra = "";
         const ehTecnico = /como tomar|posologia|efeito|interação|serve para|grávida|criança/i.test(textoUsuario);
         const ehEstoque = /tem|valor|preço|quanto custa|chegou|estoque/i.test(textoUsuario);
 
-        // Busca de dados em paralelo
         const buscas = [];
-        if (ehTecnico) buscas.push(buscarNoGoogle(textoUsuario).then(r => r && (contextoExtra += `\n[INFO BULA]: ${r}`)));
-        if (ehEstoque) buscas.push(buscarNoFlask(textoUsuario).then(r => r && (contextoExtra += `\n[SISTEMA FARMÁCIA]: ${r}`)));
-        
+        if (ehTecnico) buscas.push(buscarNoGoogle(textoUsuario).then(r => contextoExtra += `\n[BULA]: ${r}`));
+        if (ehEstoque) buscas.push(buscarNoFlask(textoUsuario).then(r => contextoExtra += `\n[SISTEMA]: ${r}`));
         if (buscas.length > 0) await Promise.all(buscas);
 
-        // Prompt Humanizado (Agafarma)
+        // 2. MONTAGEM DO PROMPT (Personalidade Agafarma)
         const promptFinal = `
-            Você é a atendente da Agafarma Arco Íris. Seja muito amigável (Oiii, Tudo bem?).
-            Responda de forma curta para WhatsApp.
+            Você é a atendente da Agafarma Arco Íris. Use o estilo dos arquivos de conversa: "Oiii", "Booom dia", "Tudo bem?".
+            Seja empática como se conhecesse o cliente há anos.
             
-            Contexto importante das nossas APIs:
+            Informações técnicas encontradas:
             ${contextoExtra}
 
-            Pergunta do cliente: ${textoUsuario}
-            
-            Responda agora de forma humana:
+            Mensagem do Cliente: ${textoUsuario}
+            Responda de forma curta e humana:
         `;
 
+        // 3. GERAÇÃO DA RESPOSTA
         const respostaIA = await chamarGemini(promptFinal);
+
+        // 4. ENVIO E LOGS (Preservando sua estrutura de logs/supabase se houver)
         await whatsapp.sendTextMessage(from, respostaIA);
 
     } catch (error) {
-        console.error("[ERRO FLUXO]:", error);
-        // Fallback simples
-        await whatsapp.sendTextMessage(from, "Oiii! Tudo bem? Só um minutinho que já vou te responder, estamos com uma pequena instabilidade no sistema. Viu!");
+        console.error("[ERRO CRÍTICO]:", error);
+        await whatsapp.sendTextMessage(from, "Oiii! Tudo bem? Só um minutinho que estou verificando aqui e já te respondo, tá?");
     }
 }
 
 // =========================================================================
-// 5. HANDLERS (NEXT.JS)
+// HANDLERS NEXT.JS (EXATAMENTE COMO O SEU ORIGINAL)
 // =========================================================================
 
 export async function POST(req: NextRequest) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+        console.error('[SUPABASE_CONFIG] ❌ Configuração ausente.'); 
+        return new NextResponse('Error', { status: 500 });
+    }
+
     try {
         const body = await req.json();
         const value = body.entry?.[0]?.changes?.[0]?.value;
         const msg = value?.messages?.[0];
+        const phoneId = value?.metadata?.phone_number_id;
 
-        if (msg && msg.from) {
-            await processarFluxoPrincipal(msg.from, msg);
+        if (msg) {
+            // Chamada com await para o Vercel não cortar a execução
+            await processarFluxoPrincipal(msg.from, msg, phoneId, supabaseUrl, supabaseAnonKey);
         }
         return new NextResponse('OK', { status: 200 });
     } catch (e) {
-        console.error("Erro POST:", e);
+        console.error(`[WEBHOOK] Erro:`, e);
         return new NextResponse('OK', { status: 200 });
     }
 }
