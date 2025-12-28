@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WhatsAppAPI } from '@/lib/whatsapp-api';
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // =========================================================================
-// 1. CONFIGURAÇÕES E INICIALIZAÇÃO
+// 1. CONFIGURAÇÕES
 // =========================================================================
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
@@ -12,11 +11,6 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GOOGLE_CSE_KEY = process.env.CUSTOM_SEARCH_API_KEY; 
 const GOOGLE_CSE_CX = process.env.CUSTOM_SEARCH_CX;
 const FLASK_API_URL = process.env.FLASK_API_URL;
-
-// CORREÇÃO: Inicialização robusta do Gemini
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY || "");
-// Usando 'gemini-1.5-flash' ou 'gemini-pro' conforme disponibilidade da sua chave
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 const whatsapp = new WhatsAppAPI({
     access_token: WHATSAPP_ACCESS_TOKEN || '',
@@ -27,26 +21,24 @@ const whatsapp = new WhatsAppAPI({
 });
 
 // =========================================================================
-// 2. FUNÇÕES DE SUPORTE (APIs Externas)
+// 2. FUNÇÕES DE BUSCA (API GOOGLE E FLASK)
 // =========================================================================
 
 async function buscarNoGoogle(query: string): Promise<string> {
-    if (!GOOGLE_CSE_KEY || !GOOGLE_CSE_CX) return "Busca técnica não configurada.";
+    if (!GOOGLE_CSE_KEY || !GOOGLE_CSE_CX) return "";
     try {
-        console.log(`[GOOGLE] Buscando: ${query}`);
         const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_CSE_KEY}&cx=${GOOGLE_CSE_CX}&q=${encodeURIComponent(query + " posologia bula")}`;
         const res = await fetch(url);
         const data = await res.json();
-        return data.items?.slice(0, 2).map((i: any) => i.snippet).join(" | ") || "Sem dados adicionais.";
+        return data.items?.slice(0, 2).map((i: any) => i.snippet).join(" | ") || "";
     } catch (e) {
-        return "Erro ao acessar bula online.";
+        return "";
     }
 }
 
 async function buscarNoFlask(termo: string): Promise<string> {
-    if (!FLASK_API_URL) return "Estoque não configurado.";
+    if (!FLASK_API_URL) return "";
     try {
-        console.log(`[FLASK] Buscando: ${termo}`);
         const res = await fetch(`${FLASK_API_URL}/api/chatbot/buscar-produto`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -54,21 +46,46 @@ async function buscarNoFlask(termo: string): Promise<string> {
         });
         const data = await res.json();
         if (data.produtos && data.produtos.length > 0) {
-            return `ESTOQUE: ${JSON.stringify(data.produtos)}`;
+            return `ESTOQUE DISPONÍVEL: ${JSON.stringify(data.produtos)}`;
         }
-        return "Produto não encontrado no sistema.";
+        return "Produto não encontrado no estoque.";
     } catch (e) {
-        return "Erro ao consultar sistema da farmácia.";
+        return "";
     }
 }
 
 // =========================================================================
-// 3. FLUXO PRINCIPAL (Orquestrador)
+// 3. LOGICA DO GEMINI (USANDO SUA FORMA QUE FUNCIONA)
+// =========================================================================
+
+async function chamarGemini(prompt: string) {
+    // Usando a URL direta conforme seu arquivo original que funcionava
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+        })
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(`Erro Gemini: ${JSON.stringify(error)}`);
+    }
+
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "Desculpe, não consegui processar.";
+}
+
+// =========================================================================
+// 4. FLUXO PRINCIPAL
 // =========================================================================
 
 async function processarFluxoPrincipal(from: string, msg: any) {
     const textoUsuario = msg.text?.body || "";
-    console.log(`[FLUXO] Início para ${from}: "${textoUsuario}"`);
+    console.log(`[FLUXO] Mensagem de ${from}: ${textoUsuario}`);
 
     let contextoExtra = "";
 
@@ -77,40 +94,38 @@ async function processarFluxoPrincipal(from: string, msg: any) {
         const ehTecnico = /como tomar|posologia|efeito|interação|serve para|grávida|criança/i.test(textoUsuario);
         const ehEstoque = /tem|valor|preço|quanto custa|chegou|estoque/i.test(textoUsuario);
 
-        const promessas = [];
-        if (ehTecnico) promessas.push(buscarNoGoogle(textoUsuario).then(r => contextoExtra += `\n[GOOGLE]: ${r}`));
-        if (ehEstoque) promessas.push(buscarNoFlask(textoUsuario).then(r => contextoExtra += `\n[FLASK]: ${r}`));
+        // Busca de dados em paralelo
+        const buscas = [];
+        if (ehTecnico) buscas.push(buscarNoGoogle(textoUsuario).then(r => r && (contextoExtra += `\n[INFO BULA]: ${r}`)));
+        if (ehEstoque) buscas.push(buscarNoFlask(textoUsuario).then(r => r && (contextoExtra += `\n[SISTEMA FARMÁCIA]: ${r}`)));
         
-        if (promessas.length > 0) await Promise.all(promessas);
+        if (buscas.length > 0) await Promise.all(buscas);
 
-        const promptSistema = `
-            Você é a atendente humana da Agafarma Arco Íris. 
-            Estilo: Amigável, usa "Oiii", "Booom dia", "Tudo bem com você?".
-            Use as informações das APIs abaixo para responder, mas fale de forma natural no WhatsApp.
-            Se for posologia, avise para consultar o médico.
-            Se não tiver a informação, diga que vai confirmar no balcão em 1 minuto.
-
-            DADOS DAS APIS:
+        // Prompt Humanizado (Agafarma)
+        const promptFinal = `
+            Você é a atendente da Agafarma Arco Íris. Seja muito amigável (Oiii, Tudo bem?).
+            Responda de forma curta para WhatsApp.
+            
+            Contexto importante das nossas APIs:
             ${contextoExtra}
+
+            Pergunta do cliente: ${textoUsuario}
+            
+            Responda agora de forma humana:
         `;
 
-        console.log("[GEMINI] Solicitando resposta...");
-        const result = await model.generateContent(promptSistema + "\n\nCliente disse: " + textoUsuario);
-        const response = await result.response;
-        const respostaFinal = response.text();
+        const respostaIA = await chamarGemini(promptFinal);
+        await whatsapp.sendTextMessage(from, respostaIA);
 
-        console.log("[WHATSAPP] Enviando resposta...");
-        await whatsapp.sendTextMessage(from, respostaFinal);
-
-    } catch (error: any) {
-        console.error("[ERRO CRÍTICO]", error.message);
-        // Resposta de segurança para o cliente
-        await whatsapp.sendTextMessage(from, "Oiii! Tudo bem? Só um minutinho que estou verificando aqui no sistema e já te respondo, tá? Viu!");
+    } catch (error) {
+        console.error("[ERRO FLUXO]:", error);
+        // Fallback simples
+        await whatsapp.sendTextMessage(from, "Oiii! Tudo bem? Só um minutinho que já vou te responder, estamos com uma pequena instabilidade no sistema. Viu!");
     }
 }
 
 // =========================================================================
-// 4. HANDLERS NEXT.JS
+// 5. HANDLERS (NEXT.JS)
 // =========================================================================
 
 export async function POST(req: NextRequest) {
@@ -120,11 +135,11 @@ export async function POST(req: NextRequest) {
         const msg = value?.messages?.[0];
 
         if (msg && msg.from) {
-            // Await garantindo que o Vercel processe antes de fechar a conexão
             await processarFluxoPrincipal(msg.from, msg);
         }
         return new NextResponse('OK', { status: 200 });
     } catch (e) {
+        console.error("Erro POST:", e);
         return new NextResponse('OK', { status: 200 });
     }
 }
