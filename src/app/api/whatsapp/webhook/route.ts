@@ -1,8 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WhatsAppAPI } from '@/lib/whatsapp-api';
 
-// Cache de estado em memória para persistir a intenção do usuário
-const cacheEstados = new Map<string, string>();
+// =========================================================================
+// NOVO: SUPABASE CONVERSATION STATES (ADICIONADO - NÃO SUBSTITUI O CACHE ATUAL)
+// =========================================================================
+
+// Função para salvar estado no Supabase (NOVA)
+async function saveConversationState(
+    whatsappPhoneNumber: string,
+    whatsappPhoneId: string,
+    state: string,
+    context: any = {},
+    supabaseUrl: string,
+    supabaseAnonKey: string
+) {
+    try {
+        await fetch(`${supabaseUrl}/rest/v1/conversation_states`, {
+            method: 'POST',
+            headers: {
+                'apikey': supabaseAnonKey,
+                'Authorization': `Bearer ${supabaseAnonKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                whatsapp_phone_number: whatsappPhoneNumber,
+                whatsapp_phone_id: whatsappPhoneId,
+                state: state,
+                context: context,
+                expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() // 2h
+            })
+        });
+        console.log(`[STATES] 💾 Estado "${state}" salvo para ${whatsappPhoneNumber}`);
+    } catch (e) {
+        console.error('[STATES] ❌ Erro ao salvar estado:', e);
+    }
+}
+
+// Função para buscar estado do Supabase (NOVA)
+async function getConversationState(
+    whatsappPhoneNumber: string,
+    whatsappPhoneId: string,
+    supabaseUrl: string,
+    supabaseAnonKey: string
+): Promise<string | null> {
+    try {
+        const res = await fetch(
+            `${supabaseUrl}/rest/v1/conversation_states?whatsapp_phone_number=eq.${whatsappPhoneNumber}&whatsapp_phone_id=eq.${whatsappPhoneId}&expires_at=gte.${new Date().toISOString()}&select=state`,
+            {
+                headers: {
+                    'apikey': supabaseAnonKey,
+                    'Authorization': `Bearer ${supabaseAnonKey}`
+                }
+            }
+        );
+        const states = await res.json();
+        return states?.[0]?.state || null;
+    } catch (e) {
+        console.error('[STATES] ❌ Erro ao buscar estado:', e);
+        return null;
+    }
+}
+
+// Função para limpar estado expirado (NOVA)
+async function clearConversationState(
+    whatsappPhoneNumber: string,
+    whatsappPhoneId: string,
+    supabaseUrl: string,
+    supabaseAnonKey: string
+) {
+    try {
+        await fetch(`${supabaseUrl}/rest/v1/conversation_states`, {
+            method: 'DELETE',
+            headers: {
+                'apikey': supabaseAnonKey,
+                'Authorization': `Bearer ${supabaseAnonKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                whatsapp_phone_number: whatsappPhoneNumber,
+                whatsapp_phone_id: whatsappPhoneId
+            })
+        });
+    } catch (e) {
+        console.error('[STATES] ❌ Erro ao limpar estado:', e);
+    }
+}
 
 // =========================================================================
 // CONFIGURAÇÕES (Mantidas exatamente como estavam)
@@ -17,17 +99,20 @@ const GOOGLE_CSE_CX = process.env.CUSTOM_SEARCH_CX;
 const whatsapp = new WhatsAppAPI({
     access_token: WHATSAPP_ACCESS_TOKEN || '',
     phone_number_id: WHATSAPP_PHONE_NUMBER_ID || '',
-    webhook_verify_token: WHATSAPP_VERIFY_TOKEN || '', // Usando WHATSAPP_VERIFY_TOKEN global
+    webhook_verify_token: WHATSAPP_VERIFY_TOKEN || '',
     is_active: true,
     webhook_url: ''
 });
 
+// Cache de estado em memória para persistir a intenção do usuário (MANTER ATIVO COMO FALLBACK)
+const cacheEstados = new Map<string, string>();
+
 // =========================================================================
-// UTILITÁRIOS: FORMATAÇÃO E LOGS
+// UTILITÁRIOS: FORMATAÇÃO E LOGS (INTACTO)
 // =========================================================================
 
 function formatarNumeroWhatsAppParaEnvio(numero: string): string {
-    let limpo = numero.replace(/\D/g, ''); // Remove não-dígitos
+    let limpo = numero.replace(/\D/g, '');
     
     if (limpo.startsWith('55')) {
         if (limpo.length === 12 && !limpo.startsWith('559', 2)) {
@@ -41,15 +126,15 @@ function formatarNumeroWhatsAppParaEnvio(numero: string): string {
 }
 
 // =========================================================================
-// NOVO: SUPABASE HISTORY LOGGER (AJUSTADO PARA SEU SCHEMA)
+// SUPABASE HISTORY LOGGER (INTACTO)
 // =========================================================================
 
 async function saveMessageToSupabase(
     messageData: {
-        whatsapp_phone_id: string; // ID do telefone do bot (identifica o tenant)
-        from_number: string;       // NÚMERO ORIGINAL DO REMETENTE DA CONVERSA (SEMPRE O CLIENTE)
-        message_body: string;      // Conteúdo da mensagem
-        direction: 'inbound' | 'outbound'; // Direção da mensagem
+        whatsapp_phone_id: string;
+        from_number: string;
+        message_body: string;
+        direction: 'inbound' | 'outbound';
     },
     supabaseUrl: string,
     supabaseAnonKey: string
@@ -77,9 +162,8 @@ async function saveMessageToSupabase(
     }
 }
 
-// Wrapper para whatsapp.sendTextMessage que *também* salva a mensagem no histórico.
 async function sendWhatsappMessageAndSaveHistory(
-    customerPhoneNumber: string, // Número do cliente para o FROM_NUMBER do histórico
+    customerPhoneNumber: string,
     text: string,
     supabaseUrl: string,
     supabaseAnonKey: string
@@ -91,7 +175,7 @@ async function sendWhatsappMessageAndSaveHistory(
     await saveMessageToSupabase(
         {
             whatsapp_phone_id: WHATSAPP_PHONE_NUMBER_ID || '', 
-            from_number: customerPhoneNumber,     // Usa o número do CLIENTE para agrupar conversas
+            from_number: customerPhoneNumber,
             message_body: text,                             
             direction: 'outbound',
         },
@@ -101,11 +185,11 @@ async function sendWhatsappMessageAndSaveHistory(
 }
 
 // =========================================================================
-// FUNÇÃO DO MENU INTERATIVO (O QUE O CLIENTE VÊ AO DAR "OI")
+// MENU INTERATIVO (INTACTO)
 // =========================================================================
 
 async function enviarMenuBoasVindas(
-    customerPhoneNumber: string, // Número do cliente para o FROM_NUMBER do histórico
+    customerPhoneNumber: string,
     nomeFarmacia: string,
     supabaseUrl: string,
     supabaseAnonKey: string
@@ -149,7 +233,7 @@ async function enviarMenuBoasVindas(
         await saveMessageToSupabase(
             {
                 whatsapp_phone_id: WHATSAPP_PHONE_NUMBER_ID || '', 
-                from_number: customerPhoneNumber,     // Usa o número do CLIENTE para agrupar conversas
+                from_number: customerPhoneNumber,
                 message_body: payload.interactive.body.text,     
                 direction: 'outbound',
             },
@@ -160,10 +244,9 @@ async function enviarMenuBoasVindas(
 }
 
 // =========================================================================
-// INTEGRAÇÕES (FLASK, GOOGLE, GEMINI)
+// INTEGRAÇÕES (INTACTAS)
 // =========================================================================
 
-// Função auxiliar para parsear string "R$ X,XX" para float
 function parseCurrencyStringToFloat(currencyString: string | undefined): number {
     if (!currencyString) return 0;
     const cleanedString = currencyString.replace('R$', '').trim().replace(',', '.');
@@ -184,30 +267,29 @@ async function consultarEstoqueFlask(termo: string, apiBase: string): Promise<st
 
         if (produtos.length === 0) return `❌ Não encontrei "*${termo}*" em estoque agora.`;
 
-        let resposta = `✅ *Produtos Encontrados:*\n\n`; // Usando \n\n para blank line
+        let resposta = `✅ *Produtos Encontrados:*\n\n`;
         produtos.slice(0, 3).forEach((p: any) => {
             const nomeProduto = p.nome_produto || 'Produto sem nome';
             const nomLaboratorio = p.nom_laboratorio || 'Laboratório não informado';
             
-            // Parsear as strings de preço recebidas do Flask para float
-            const precoBruto = parseCurrencyStringToFloat(p.vlr_venda); // Flask envia vlr_venda como "R$ X,XX"
-            const precoFinalVenda = parseCurrencyStringToFloat(p.preco_final_venda); // Flask envia preco_final_venda como "R$ X,XX"
+            const precoBruto = parseCurrencyStringToFloat(p.vlr_venda);
+            const precoFinalVenda = parseCurrencyStringToFloat(p.preco_final_venda);
             
             const qtdEstoque = p.qtd_estoque !== undefined ? p.qtd_estoque : '0';
             const codReduzido = p.cod_reduzido || 'N/A';
 
-            resposta += `▪️ *${nomeProduto}*\n`; // Usando \n
-            resposta += `   💊 ${nomLaboratorio}\n`; // Usando \n
+            resposta += `▪️ *${nomeProduto}*\n`;
+            resposta += `   💊 ${nomLaboratorio}\n`;
             
             if (precoBruto > precoFinalVenda && precoBruto > 0) {
                 const descontoPercentual = ((precoBruto - precoFinalVenda) / precoBruto) * 100;
-                resposta += `   💰 ~~R$ ${precoBruto.toFixed(2).replace('.', ',')}~~ *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}* (🔻${descontoPercentual.toFixed(1).replace('.', ',')}% OFF)\n`; // Usando \n
+                resposta += `   💰 ~~R$ ${precoBruto.toFixed(2).replace('.', ',')}~~ *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}* (🔻${descontoPercentual.toFixed(1).replace('.', ',')}% OFF)\n`;
             } else {
-                resposta += `   💰 *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}*\n`; // Usando \n
+                resposta += `   💰 *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}*\n`;
             }
-            resposta += `   📦 Estoque: ${qtdEstoque} unidades\n`; // Usando \n
-            resposta += `   📋 Código: ${codReduzido}\n`; // Usando \n
-            resposta += `\n`; // Linha em branco para separar itens
+            resposta += `   📦 Estoque: ${qtdEstoque} unidades\n`;
+            resposta += `   📋 Código: ${codReduzido}\n`;
+            resposta += `\n`;
         });
         return resposta;
     } catch (e) {
@@ -228,7 +310,7 @@ async function consultarGoogleInfo(pergunta: string): Promise<string> {
 }
 
 // =========================================================================
-// ORQUESTRADOR DE FLUXO (O CÉREBRO)
+// ORQUESTRADOR DE FLUXO (COM ESTADOS PERSISTENTES ADICIONADOS)
 // =========================================================================
 
 async function processarFluxoPrincipal(
@@ -276,14 +358,21 @@ async function processarFluxoPrincipal(
     const saudacoes = ['oi', 'ola', 'olá', 'menu', 'inicio', 'bom dia', 'boa tarde', 'boa noite'];
     if (textoLimpo && saudacoes.includes(textoLimpo) && !cliqueBotao) {
         console.log(`[ESTADO] 🔄 Saudação. Enviando menu.`);
+        
+        // ✅ NOVO: Limpa estado no Supabase E no cache
         cacheEstados.delete(originalCustomerPhoneNumber);
+        await clearConversationState(originalCustomerPhoneNumber, phoneId, supabaseUrl, supabaseAnonKey);
+        
         await enviarMenuBoasVindas(originalCustomerPhoneNumber, nomeFarmacia, supabaseUrl, supabaseAnonKey);
         return;
     }
 
     if (cliqueBotao) {
         console.log(`[ESTADO] 🎯 Usuário escolheu: ${cliqueBotao}`);
+        
+        // ✅ NOVO: Salva estado no Supabase E no cache
         cacheEstados.set(originalCustomerPhoneNumber, cliqueBotao);
+        await saveConversationState(originalCustomerPhoneNumber, phoneId, cliqueBotao, {}, supabaseUrl, supabaseAnonKey);
         
         let msgContexto = "";
         if (cliqueBotao === 'menu_estoque') msgContexto = "📦 *Consulta de Estoque*\n\nPor favor, digite o *nome do produto* que deseja consultar.";
@@ -294,20 +383,29 @@ async function processarFluxoPrincipal(
         return;
     }
 
+    // ✅ NOVO: Sincroniza estado do Supabase com cache (caso servidor reiniciou)
     const estadoAtual = cacheEstados.get(originalCustomerPhoneNumber);
-    console.log(`[ESTADO] 🧠 Estado de ${originalCustomerPhoneNumber}: ${estadoAtual || 'Sem Estado'}`);
+    const estadoSupabase = await getConversationState(originalCustomerPhoneNumber, phoneId, supabaseUrl, supabaseAnonKey);
+    const estadoFinal = estadoAtual || estadoSupabase;
+    
+    if (estadoSupabase && !estadoAtual) {
+        cacheEstados.set(originalCustomerPhoneNumber, estadoSupabase);
+        console.log(`[STATES] 🔄 Estado restaurado do Supabase: ${estadoSupabase}`);
+    }
+    
+    console.log(`[ESTADO] 🧠 Estado final de ${originalCustomerPhoneNumber}: ${estadoFinal || 'Sem Estado'}`);
 
-    if (estadoAtual === 'menu_estoque') {
+    if (estadoFinal === 'menu_estoque') {
         const res = await consultarEstoqueFlask(textoUsuario, apiFlask); 
-        // CORREÇÃO AQUI: NÃO APAGAR O ESTADO 'menu_estoque' para permitir consulta contínua
-        // cacheEstados.delete(originalCustomerPhoneNumber); // Removido para permitir consulta contínua
         await sendWhatsappMessageAndSaveHistory(originalCustomerPhoneNumber, res, supabaseUrl, supabaseAnonKey);
         return;
     }
 
-    if (estadoAtual === 'menu_info') {
+    if (estadoFinal === 'menu_info') {
         const res = await consultarGoogleInfo(textoUsuario);
+        // ✅ NOVO: Limpa estado após usar info médica
         cacheEstados.delete(originalCustomerPhoneNumber);
+        await clearConversationState(originalCustomerPhoneNumber, phoneId, supabaseUrl, supabaseAnonKey);
         await sendWhatsappMessageAndSaveHistory(originalCustomerPhoneNumber, res, supabaseUrl, supabaseAnonKey);
         return;
     }
@@ -329,7 +427,7 @@ async function processarFluxoPrincipal(
 }
 
 // =========================================================================
-// HANDLERS NEXT.JS
+// HANDLERS NEXT.JS (INTACTOS)
 // =========================================================================
 
 export async function POST(req: NextRequest) {
@@ -337,7 +435,6 @@ export async function POST(req: NextRequest) {
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey) {
-        // CORREÇÃO: Linha completa do console.error
         console.error('[SUPABASE_CONFIG] ❌ NEXT_PUBLIC_SUPABASE_URL ou NEXT_PUBLIC_SUPABASE_ANON_KEY não configurados.'); 
         return new NextResponse('Internal Server Error: Supabase configuration missing.', { status: 500 });
     }
@@ -349,7 +446,7 @@ export async function POST(req: NextRequest) {
         const phoneId = value?.metadata?.phone_number_id;
 
         if (msg) {
-            await processarFluxoPrincipal(msg.from, msg, phoneId, supabaseUrl, supabaseAnonKey);
+            await processarFluxoPrincipal(msg.from, msg, phoneId!, supabaseUrl, supabaseAnonKey);
         }
         return new NextResponse('OK', { status: 200 });
     } catch (e) {
