@@ -304,17 +304,19 @@ async function consultarEstoqueFlask(
       if (precoBruto > precoFinalVenda && precoBruto > 0) {
         const descontoPercentual =
           ((precoBruto - precoFinalVenda) / precoBruto) * 100;
+        // CORRIGIDO AQUI: Removido o '%' extra após o preço
         resposta += `   💰 ~~R$ ${precoBruto
           .toFixed(2)
           .replace('.', ',')}~~ *R$ ${precoFinalVenda
           .toFixed(2)
-          .replace('.', ',')}%* (🔻${descontoPercentual
+          .replace('.', ',')}* (🔻${descontoPercentual
           .toFixed(1)
           .replace('.', ',')}% OFF)\n`;
       } else {
+        // CORRIGIDO AQUI: Removido o '%' extra após o preço
         resposta += `   💰 *R$ ${precoFinalVenda
           .toFixed(2)
-          .replace('.', ',')}%*\n`;
+          .replace('.', ',')}*\n`;
       }
       resposta += `   📦 Estoque: ${qtdEstoque} unidades\n`;
       resposta += `   📋 Código: ${codReduzido}\n\n`;
@@ -480,46 +482,96 @@ async function getOrCreateCart(
   }
 }
 
+// NOVO: Função unificada para buscar detalhes do produto (cache ou Flask)
+async function getProductDetails(
+    productCode: string,
+    flaskApiUrl: string,
+    supabaseUrl: string,
+    supabaseAnonKey: string
+): Promise<any | null> {
+    let productInfo = null;
+
+    // 1. Tenta buscar do product_cache
+    try {
+        const res = await fetch(
+            `${supabaseUrl}/rest/v1/product_cache?cod_reduzido=eq.${productCode}&select=nome_produto,preco_final_venda&limit=1`,
+            { headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${supabaseAnonKey}` } }
+        );
+        const products = await res.json();
+        if (products?.[0]) {
+            console.log(`[CART] Produto ${productCode} encontrado no cache.`);
+            productInfo = {
+                nome_produto: products[0].nome_produto,
+                preco_final_venda: Number(products[0].preco_final_venda || 0)
+            };
+            // Retorna do cache se tiver preço válido
+            if (productInfo.preco_final_venda > 0) return productInfo;
+        }
+    } catch (e) {
+        console.error('[CART] ❌ Erro ao buscar produto no cache (ignorado para tentar Flask):', e);
+    }
+
+    // 2. Se não encontrou no cache ou o preço era inválido, tenta Flask API
+    console.log(`[CART] Produto ${productCode} não encontrado ou preço inválido no cache. Tentando Flask API.`);
+    try {
+        const base = flaskApiUrl.endsWith('/') ? flaskApiUrl.slice(0, -1) : flaskApiUrl;
+        const res = await fetch(`${base}/api/products/search?q=${encodeURIComponent(productCode)}`, { signal: AbortSignal.timeout(8000) });
+        const data = await res.json();
+        const productsFromFlask = data.data || [];
+
+        // Filtra por uma correspondência exata do cod_reduzido
+        const exactMatch = productsFromFlask.find((p: any) => p.cod_reduzido === productCode);
+
+        if (exactMatch) {
+            console.log(`[CART] Produto ${productCode} encontrado na Flask API.`);
+            const price = parseCurrencyStringToFloat(exactMatch.preco_final_venda) || parseCurrencyStringToFloat(exactMatch.vlr_venda);
+            if (price > 0) {
+                // Opcionalmente, você pode adicionar/atualizar o product_cache aqui para futuras buscas
+                return {
+                    nome_produto: exactMatch.nome_produto,
+                    preco_final_venda: price
+                };
+            } else {
+                console.warn(`[CART] Produto ${productCode} da Flask API tem preço inválido: ${price}`);
+            }
+        }
+    } catch (e) {
+        console.error('[CART] ❌ Erro ao buscar produto na Flask API:', e);
+    }
+
+    return null;
+}
+
+
 async function addItemToCart(
   orderId: string,
   productCode: string,
+  flaskApiUrl: string, // NOVO: Passar flaskApiUrl para a busca de produto
   supabaseUrl: string,
   supabaseAnonKey: string
 ): Promise<string> {
   try {
-    // ⚠️ ALTERAÇÃO AQUI: BUSCA PRODUTO NO CACHE E VALIDAÇÃO ROBUSTA
-    const productUrl =
-      `${supabaseUrl}/rest/v1/product_cache` +
-      `?cod_reduzido=eq.${productCode}` + // Usando cod_reduzido que é o identificador único
-      `&select=nome_produto,preco_final_venda&limit=1`; // Selecionando os campos que precisamos
-
-    const resProd = await fetch(productUrl, {
-      headers: {
-        'apikey': supabaseAnonKey,
-        'Authorization': `Bearer ${supabaseAnonKey}`
-      }
-    });
-    const prodData = await resProd.json();
-
-    if (!prodData?.[0]) {
-        console.warn(`[CART] Produto com código ${productCode} não encontrado no cache.`);
-        return `❌ Produto com código *${productCode}* não encontrado. Verifique o código e tente novamente.`;
+    const cleanProductCode = productCode.replace(/[^a-zA-Z0-9-]/g, '').toUpperCase();
+    if (!cleanProductCode) {
+        return '❌ Por favor, informe um código de produto válido para adicionar ao carrinho.';
     }
 
-    const productName = prodData[0].nome_produto || `Produto ${productCode}`;
-    const unitPrice = Number(prodData[0].preco_final_venda || 0);
-
-    if (unitPrice <= 0) {
-        console.error(`[CART] Preço inválido (0 ou negativo) para o produto ${productCode}:`, prodData[0]);
-        return `❌ O produto *${productName}* tem um preço inválido. Não foi possível adicioná-lo.`;
+    // Usar a função unificada getProductDetails
+    const productDetails = await getProductDetails(cleanProductCode, flaskApiUrl, supabaseUrl, supabaseAnonKey);
+    
+    // Validação robusta
+    if (!productDetails || productDetails.preco_final_venda <= 0) {
+        return `❌ Produto com código *${cleanProductCode}* não encontrado ou com preço inválido. Verifique o código e tente novamente.`;
     }
-    // FIM DA ALTERAÇÃO
+
+    const unitPrice = productDetails.preco_final_venda;
+    const productName = productDetails.nome_produto;
 
     const getItemUrl =
       `${supabaseUrl}/rest/v1/order_items` +
       `?order_id=eq.${orderId}` +
-      `&product_api_id=eq.${productCode}` +
-      `&select=id,quantity,unit_price,total_price&limit=1`;
+      `&product_api_id=eq.${cleanProductCode}` +
+      `&select=id,quantity&limit=1`; // Seleção simplificada
 
     const resItem = await fetch(getItemUrl, {
       headers: {
@@ -530,11 +582,9 @@ async function addItemToCart(
     const itemData = await resItem.json();
 
     if (itemData?.[0]?.id) {
-      const currentQty = itemData[0].quantity || 1;
+      const currentQty = itemData[0].quantity || 0;
       const newQty = currentQty + 1;
-      // Preço unitário deve ser pego do cache, não do itemData anterior se este for 0
-      const price = unitPrice; 
-      const newTotal = Number(price) * newQty;
+      const newTotal = unitPrice * newQty;
 
       await fetch(`${supabaseUrl}/rest/v1/order_items?id=eq.${itemData[0].id}`, {
         method: 'PATCH',
@@ -546,11 +596,10 @@ async function addItemToCart(
         body: JSON.stringify({
           quantity: newQty,
           total_price: newTotal,
-          unit_price: price // Garante que o unit_price está atualizado
+          unit_price: unitPrice // Garante que o unit_price está atualizado
         })
       });
     } else {
-      const price = unitPrice;
       await fetch(`${supabaseUrl}/rest/v1/order_items`, {
         method: 'POST',
         headers: {
@@ -560,11 +609,11 @@ async function addItemToCart(
         },
         body: JSON.stringify({
           order_id: orderId,
-          product_api_id: productCode,
+          product_api_id: cleanProductCode,
           product_name: productName,
           quantity: 1,
-          unit_price: price,
-          total_price: price
+          unit_price: unitPrice,
+          total_price: unitPrice
         })
       });
     }
@@ -696,7 +745,7 @@ async function finishCart(
     const orderId = cartData[0].id as string;
     const totalAmount = Number(cartData[0].total_amount || 0);
 
-    // Verifica se o carrinho tem itens antes de finalizar
+    // NOVO: Verifica se o carrinho tem itens antes de finalizar
     const itemsCheckRes = await fetch(`${supabaseUrl}/rest/v1/order_items?order_id=eq.${orderId}&limit=1`, {
         headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${supabaseAnonKey}` }
     });
@@ -892,8 +941,7 @@ async function processarFluxoPrincipal(
     }`
   );
 
-  // 7. ⚠️ ALTERAÇÃO AQUI: FLUXO DE CARRINHO (PRIORIDADE ALTA)
-  // ESTES COMANDOS DEVEM VIR ANTES DOS FLUXOS BASEADOS EM ESTADO (menu_estoque, menu_info)
+  // 7. FLUXO DE CARRINHO (PRIORIDADE ALTA - Corrigido para vir antes dos fluxos de estado)
   if (textoLimpo?.startsWith('comprar ') && textoUsuario) {
     const codigo = textoUsuario.substring('comprar '.length).trim();
     if (!codigo) {
@@ -938,9 +986,11 @@ async function processarFluxoPrincipal(
       return;
     }
 
+    // Corrigido: Passando apiFlask para addItemToCart
     const respCarrinho = await addItemToCart(
       cartId,
       codigo,
+      apiFlask, // Passando apiFlask aqui
       supabaseUrl,
       supabaseAnonKey
     );
@@ -1016,8 +1066,6 @@ async function processarFluxoPrincipal(
     );
     return;
   }
-  // ⚠️ FIM DA ALTERAÇÃO DO FLUXO DE CARRINHO (PRIORIDADE ALTA)
-
 
   // 8. FLUXO ESTOQUE (baseado no estado 'menu_estoque')
   if (estadoAtual === 'menu_estoque' && textoUsuario) {
@@ -1117,7 +1165,7 @@ export async function POST(req: NextRequest) {
       await processarFluxoPrincipal(
         msg.from,
         msg,
-        phoneId!, // Assumimos que phoneId sempre virá. Se não, adicione um fallback.
+        phoneId!, 
         supabaseUrl,
         supabaseAnonKey
       );
