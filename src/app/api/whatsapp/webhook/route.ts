@@ -904,8 +904,8 @@ async function processarFluxoPrincipal(
 
   // ===================== NOVO: FLUXO CARRINHO (COMPRAR / CARRINHO / FINALIZAR) =====================
 
-  if (textoLimpo?.startsWith('comprar ')) {
-    const codigo = textoUsuario.substring(8).trim(); // após "comprar "
+  if (textoLimpo?.startsWith('comprar ') && textoUsuario) {
+    const codigo = textoUsuario.substring'comprar '.length8(trim(); // após "comprar "
     if (!codigo) {
       await sendWhatsappMessageAndSaveHistory(
         originalCustomerPhoneNumber,
