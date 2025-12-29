@@ -308,13 +308,13 @@ async function consultarEstoqueFlask(
           .toFixed(2)
           .replace('.', ',')}~~ *R$ ${precoFinalVenda
           .toFixed(2)
-          .replace('.', ',')}* (🔻${descontoPercentual
+          .replace('.', ',')}%* (🔻${descontoPercentual
           .toFixed(1)
           .replace('.', ',')}% OFF)\n`;
       } else {
         resposta += `   💰 *R$ ${precoFinalVenda
           .toFixed(2)
-          .replace('.', ',')}*\n`;
+          .replace('.', ',')}%*\n`;
       }
       resposta += `   📦 Estoque: ${qtdEstoque} unidades\n`;
       resposta += `   📋 Código: ${codReduzido}\n\n`;
@@ -487,11 +487,11 @@ async function addItemToCart(
   supabaseAnonKey: string
 ): Promise<string> {
   try {
-    // Buscar dados do produto no cache (se você quiser usar product_cache)
+    // ⚠️ ALTERAÇÃO AQUI: BUSCA PRODUTO NO CACHE E VALIDAÇÃO ROBUSTA
     const productUrl =
       `${supabaseUrl}/rest/v1/product_cache` +
-      `?product_code=eq.${productCode}` +
-      `&select=product_name,unit_price&limit=1`;
+      `?cod_reduzido=eq.${productCode}` + // Usando cod_reduzido que é o identificador único
+      `&select=nome_produto,preco_final_venda&limit=1`; // Selecionando os campos que precisamos
 
     const resProd = await fetch(productUrl, {
       headers: {
@@ -501,15 +501,20 @@ async function addItemToCart(
     });
     const prodData = await resProd.json();
 
-    let productName = 'Produto';
-    let unitPrice = 0;
-
-    if (prodData?.[0]) {
-      productName = prodData[0].product_name || productName;
-      unitPrice = Number(prodData[0].unit_price || 0);
+    if (!prodData?.[0]) {
+        console.warn(`[CART] Produto com código ${productCode} não encontrado no cache.`);
+        return `❌ Produto com código *${productCode}* não encontrado. Verifique o código e tente novamente.`;
     }
 
-    // Caso não tenha no cache, ainda assim permite adicionar com valor 0
+    const productName = prodData[0].nome_produto || `Produto ${productCode}`;
+    const unitPrice = Number(prodData[0].preco_final_venda || 0);
+
+    if (unitPrice <= 0) {
+        console.error(`[CART] Preço inválido (0 ou negativo) para o produto ${productCode}:`, prodData[0]);
+        return `❌ O produto *${productName}* tem um preço inválido. Não foi possível adicioná-lo.`;
+    }
+    // FIM DA ALTERAÇÃO
+
     const getItemUrl =
       `${supabaseUrl}/rest/v1/order_items` +
       `?order_id=eq.${orderId}` +
@@ -527,7 +532,8 @@ async function addItemToCart(
     if (itemData?.[0]?.id) {
       const currentQty = itemData[0].quantity || 1;
       const newQty = currentQty + 1;
-      const price = itemData[0].unit_price || unitPrice;
+      // Preço unitário deve ser pego do cache, não do itemData anterior se este for 0
+      const price = unitPrice; 
       const newTotal = Number(price) * newQty;
 
       await fetch(`${supabaseUrl}/rest/v1/order_items?id=eq.${itemData[0].id}`, {
@@ -539,7 +545,8 @@ async function addItemToCart(
         },
         body: JSON.stringify({
           quantity: newQty,
-          total_price: newTotal
+          total_price: newTotal,
+          unit_price: price // Garante que o unit_price está atualizado
         })
       });
     } else {
@@ -588,7 +595,7 @@ async function addItemToCart(
       body: JSON.stringify({ total_amount: total })
     });
 
-    return `✅ Produto código *${productCode}* adicionado ao carrinho.\n\nDigite *CARRINHO* para ver os itens ou *FINALIZAR* para concluir o pedido.`;
+    return `✅ *${productName}* adicionado ao carrinho.\n\nDigite *CARRINHO* para ver os itens ou *FINALIZAR* para concluir o pedido.`;
   } catch (e) {
     console.error('[CART] ❌ Erro em addItemToCart:', e);
     return '⚠️ Não consegui adicionar o item ao carrinho. Tente novamente em instantes.';
@@ -624,7 +631,7 @@ async function getCartSummary(
     const totalAmount = Number(cartData[0].total_amount || 0);
 
     const itemsRes = await fetch(
-      `${supabaseUrl}/rest/v1/order_items?order_id=eq.${orderId}&select=product_api_id,product_name,quantity,total_price`,
+      `${supabaseUrl}/rest/v1/order_items?order_id=eq.${orderId}&select=product_api_id,product_name,quantity,unit_price,total_price`, // Incluir unit_price para exibição detalhada
       {
         headers: {
           'apikey': supabaseAnonKey,
@@ -642,11 +649,12 @@ async function getCartSummary(
     items.forEach((it: any) => {
       const nome = it.product_name || `Produto código ${it.product_api_id}`;
       const qtd = it.quantity || 1;
-      const total = Number(it.total_price || 0);
+      const precoUnit = Number(it.unit_price || 0); // Preço unitário
+      const totalItem = Number(it.total_price || 0); // Total do item
 
       resposta += `▪️ *${nome}*\n`;
-      resposta += `   🔢 Qtde: ${qtd}\n`;
-      resposta += `   💰 Total item: R$ ${total.toFixed(2).replace('.', ',')}\n\n`;
+      resposta += `   🔢 Qtde: ${qtd} x R$ ${precoUnit.toFixed(2).replace('.', ',')}\n`;
+      resposta += `   💰 Subtotal: R$ ${totalItem.toFixed(2).replace('.', ',')}\n\n`;
     });
 
     resposta += `*Total do carrinho:* R$ ${totalAmount
@@ -688,6 +696,15 @@ async function finishCart(
     const orderId = cartData[0].id as string;
     const totalAmount = Number(cartData[0].total_amount || 0);
 
+    // Verifica se o carrinho tem itens antes de finalizar
+    const itemsCheckRes = await fetch(`${supabaseUrl}/rest/v1/order_items?order_id=eq.${orderId}&limit=1`, {
+        headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${supabaseAnonKey}` }
+    });
+    const itemsCheckData = await itemsCheckRes.json();
+    if (!itemsCheckData || itemsCheckData.length === 0) {
+        return '🛒 Seu carrinho está vazio! Adicione itens antes de finalizar o pedido.';
+    }
+
     await fetch(`${supabaseUrl}/rest/v1/orders?id=eq.${orderId}`, {
       method: 'PATCH',
       headers: {
@@ -699,9 +716,9 @@ async function finishCart(
     });
 
     return (
-      `✅ Pedido recebido com sucesso!\n\n` +
+      `✅ Pedido *#${orderId.substring(0, 8).toUpperCase()}* recebido com sucesso!\n\n` +
       `Valor total: R$ ${totalAmount.toFixed(2).replace('.', ',')}\n\n` +
-      `Um atendente irá confirmar os detalhes e combinar o pagamento/entrega com você.`
+      `Um atendente irá confirmar os detalhes e combinar o pagamento/entrega com você. Obrigado pela preferência!`
     );
   } catch (e) {
     console.error('[CART] ❌ Erro em finishCart:', e);
@@ -710,7 +727,7 @@ async function finishCart(
 }
 
 // =========================================================================
-// ORQUESTRADOR DE FLUXO
+// ORQUESTRADOR DE FLUXO PRINCIPAL
 // =========================================================================
 
 async function processarFluxoPrincipal(
@@ -730,7 +747,7 @@ async function processarFluxoPrincipal(
     }`
   );
 
-  // RATE LIMIT antes de tudo
+  // 1. RATE LIMIT antes de tudo
   const allowed = await checkRateLimit(
     originalCustomerPhoneNumber,
     phoneId,
@@ -747,6 +764,7 @@ async function processarFluxoPrincipal(
     return;
   }
 
+  // 2. Salva mensagem de entrada no Supabase
   if (msg) {
     await saveMessageToSupabase(
       {
@@ -760,6 +778,7 @@ async function processarFluxoPrincipal(
     );
   }
 
+  // 3. Busca configuração da farmácia
   let apiFlask: string = process.env.FLASK_API_URL || '';
   let nomeFarmacia = 'Nossa Farmácia';
 
@@ -785,6 +804,7 @@ async function processarFluxoPrincipal(
     );
   }
 
+  // 4. Lida com saudações ('oi', 'menu', etc.)
   const saudacoes = [
     'oi',
     'ola',
@@ -815,6 +835,7 @@ async function processarFluxoPrincipal(
     return;
   }
 
+  // 5. Lida com cliques em botões interativos
   if (cliqueBotao) {
     console.log(`[ESTADO] 🎯 Usuário escolheu: ${cliqueBotao}`);
 
@@ -848,7 +869,7 @@ async function processarFluxoPrincipal(
     return;
   }
 
-  // Sincroniza estado Supabase + cache
+  // 6. Sincroniza estado Supabase + cache (caso servidor reiniciou)
   const estadoCache = cacheEstados.get(originalCustomerPhoneNumber);
   const estadoSupabase = await getConversationState(
     originalCustomerPhoneNumber,
@@ -871,39 +892,8 @@ async function processarFluxoPrincipal(
     }`
   );
 
-  // ===================== FLUXO ESTOQUE =====================
-  if (estadoAtual === 'menu_estoque' && textoUsuario) {
-    const res = await consultarEstoqueFlask(textoUsuario, apiFlask);
-    await sendWhatsappMessageAndSaveHistory(
-      originalCustomerPhoneNumber,
-      res,
-      supabaseUrl,
-      supabaseAnonKey
-    );
-    return;
-  }
-
-  // ===================== FLUXO INFO MÉDICA =================
-  if (estadoAtual === 'menu_info' && textoUsuario) {
-    const res = await consultarGoogleInfo(textoUsuario);
-    cacheEstados.delete(originalCustomerPhoneNumber);
-    await clearConversationState(
-      originalCustomerPhoneNumber,
-      phoneId,
-      supabaseUrl,
-      supabaseAnonKey
-    );
-    await sendWhatsappMessageAndSaveHistory(
-      originalCustomerPhoneNumber,
-      res,
-      supabaseUrl,
-      supabaseAnonKey
-    );
-    return;
-  }
-
-  // ===================== NOVO: FLUXO CARRINHO (COMPRAR / CARRINHO / FINALIZAR) =====================
-
+  // 7. ⚠️ ALTERAÇÃO AQUI: FLUXO DE CARRINHO (PRIORIDADE ALTA)
+  // ESTES COMANDOS DEVEM VIR ANTES DOS FLUXOS BASEADOS EM ESTADO (menu_estoque, menu_info)
   if (textoLimpo?.startsWith('comprar ') && textoUsuario) {
     const codigo = textoUsuario.substring('comprar '.length).trim();
     if (!codigo) {
@@ -1026,8 +1016,41 @@ async function processarFluxoPrincipal(
     );
     return;
   }
+  // ⚠️ FIM DA ALTERAÇÃO DO FLUXO DE CARRINHO (PRIORIDADE ALTA)
 
-  // ===================== GEMINI (FALLBACK) =====================
+
+  // 8. FLUXO ESTOQUE (baseado no estado 'menu_estoque')
+  if (estadoAtual === 'menu_estoque' && textoUsuario) {
+    const res = await consultarEstoqueFlask(textoUsuario, apiFlask);
+    await sendWhatsappMessageAndSaveHistory(
+      originalCustomerPhoneNumber,
+      res,
+      supabaseUrl,
+      supabaseAnonKey
+    );
+    return;
+  }
+
+  // 9. FLUXO INFO MÉDICA (baseado no estado 'menu_info')
+  if (estadoAtual === 'menu_info' && textoUsuario) {
+    const res = await consultarGoogleInfo(textoUsuario);
+    cacheEstados.delete(originalCustomerPhoneNumber);
+    await clearConversationState(
+      originalCustomerPhoneNumber,
+      phoneId,
+      supabaseUrl,
+      supabaseAnonKey
+    );
+    await sendWhatsappMessageAndSaveHistory(
+      originalCustomerPhoneNumber,
+      res,
+      supabaseUrl,
+      supabaseAnonKey
+    );
+    return;
+  }
+
+  // 10. GEMINI (FALLBACK - se nenhuma das condições anteriores for atendida)
   console.log(`[GEMINI] 🤖 Gerando resposta inteligente.`);
   try {
     const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
@@ -1094,7 +1117,7 @@ export async function POST(req: NextRequest) {
       await processarFluxoPrincipal(
         msg.from,
         msg,
-        phoneId,
+        phoneId!, // Assumimos que phoneId sempre virá. Se não, adicione um fallback.
         supabaseUrl,
         supabaseAnonKey
       );
