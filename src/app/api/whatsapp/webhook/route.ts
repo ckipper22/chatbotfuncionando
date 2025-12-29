@@ -110,7 +110,7 @@ const cacheEstados = new Map<string, string>();
 // =========================================================================
 
 function formatarNumeroWhatsAppParaEnvio(numero: string): string {
-  let limpo = numero.replace(/\\\D/g, '');
+  let limpo = numero.replace(/\D/g, '');
 
   if (limpo.startsWith('55')) {
     if (limpo.length === 12 && !limpo.startsWith('559', 2)) {
@@ -211,7 +211,7 @@ async function enviarMenuBoasVindas(
       type: 'button',
       header: { type: 'text', text: nomeFarmacia.substring(0, 60) },
       body: {
-        text: 'Olá! Como posso ajudar você hoje?\\\\\\nEscolha uma das opções abaixo para começar:'
+        text: 'Olá! Como posso ajudar você hoje?\nEscolha uma das opções abaixo para começar:' // FIXED: \\n to \n
       },
       footer: { text: 'Assistente Virtual Farmacêutico' },
       action: {
@@ -329,7 +329,7 @@ async function consultarEstoqueFlask(
     if (produtos.length === 0)
       return `❌ Não encontrei "*${termo}*" em estoque agora.`;
 
-    let resposta = `✅ *Produtos Encontrados:*\\\\\\n\\\\\\n`;
+    let resposta = `✅ *Produtos Encontrados:*\n\n`; // FIXED: \\n to \n
     produtos.forEach((p: any) => {
       const nomeProduto = p.nome_produto || 'Produto sem nome';
       const nomLaboratorio = p.nom_laboratorio || 'Laboratório não informado';
@@ -340,8 +340,8 @@ async function consultarEstoqueFlask(
       const qtdEstoque = p.qtd_estoque !== undefined ? p.qtd_estoque : '0';
       const codReduzido = p.cod_reduzido || 'N/A';
 
-      resposta += `▪️ *${nomeProduto}*\\\\\\n`;
-      resposta += `   💊 ${nomLaboratorio}\\\\\\n`;
+      resposta += `▪️ *${nomeProduto}*\n`; // FIXED: \\n to \n
+      resposta += `   💊 ${nomLaboratorio}\n`; // FIXED: \\n to \n
 
       if (precoBruto > precoFinalVenda && precoBruto > 0) {
         const descontoPercentual =
@@ -353,15 +353,15 @@ async function consultarEstoqueFlask(
           .toFixed(2)
           .replace('.', ',')}* (🔻${descontoPercentual
           .toFixed(1)
-          .replace('.', ',')}% OFF)\\\\\\n`;
+          .replace('.', ',')}% OFF)\n`; // FIXED: \\n to \n
       } else {
         // CORRIGIDO: Removido o '%' extra após o preço
         resposta += `   💰 *R$ ${precoFinalVenda
           .toFixed(2)
-          .replace('.', ',')}*\\\\\\n`;
+          .replace('.', ',')}*\n`; // FIXED: \\n to \n
       }
-      resposta += `   📦 Estoque: ${qtdEstoque} unidades\\\\\\n`;
-      resposta += `   📋 Código: ${codReduzido}\\\\\\n\\\\\\n`;
+      resposta += `   📦 Estoque: ${qtdEstoque} unidades\n`; // FIXED: \\n to \n
+      resposta += `   📋 Código: ${codReduzido}\n\n`; // FIXED: \\n to \n
     });
 
     resposta += `Digite *COMPRAR CÓDIGO* para adicionar um item ao carrinho. Ex: COMPRAR 12345`;
@@ -382,7 +382,7 @@ async function consultarGoogleInfo(pergunta: string): Promise<string> {
     const data = await res.json();
     if (!data.items?.length)
       return '🔍 Não localizei informações técnicas sobre isso.';
-    return `💊 *Informação Técnica:*\\\\\\n\\\\\\n${data.items[0].snippet}\\\\\\n\\\\\\n🔗 *Fonte:* ${data.items[0].link}`;
+    return `💊 *Informação Técnica:*\n\n${data.items[0].snippet}\n\n🔗 *Fonte:* ${data.items[0].link}`; // FIXED: \\n to \n
   } catch (e) {
     return '⚠️ Erro na busca técnica.';
   }
@@ -532,11 +532,18 @@ async function getProductDetails(
     supabaseAnonKey: string
 ): Promise<any | null> {
     let productInfo = null;
+    // Garante que apenas dígitos sejam usados para a busca de cod_reduzido
+    const cleanProductCode = productCode.replace(/[^0-9]/g, '');
 
-    // 1. Tenta buscar do product_cache (ainda a primeira prioridade)
+    if (!cleanProductCode) {
+        console.warn('[CART] Código de produto limpo está vazio.');
+        return null;
+    }
+
+    // 1. Tenta buscar do product_cache (primeira prioridade)
     try {
         const res = await fetch(
-            `${supabaseUrl}/rest/v1/product_cache?cod_reduzido=eq.${productCode}&select=nome_produto,preco_final_venda&limit=1`,
+            `${supabaseUrl}/rest/v1/product_cache?cod_reduzido=eq.${cleanProductCode}&select=nome_produto,preco_final_venda&limit=1`,
             { headers: { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${supabaseAnonKey}` } }
         );
         const products = await res.json();
@@ -546,41 +553,39 @@ async function getProductDetails(
                 preco_final_venda: Number(products[0].preco_final_venda || 0)
             };
             if (productInfo.preco_final_venda > 0) {
-                console.log(`[CART] Produto ${productCode} encontrado no cache com preço válido.`);
+                console.log(`[CART] Produto ${cleanProductCode} encontrado no cache com preço válido.`);
                 return productInfo;
             } else {
-                console.warn(`[CART] Produto ${productCode} encontrado no cache, mas com preço inválido (0 ou menos).`);
+                console.warn(`[CART] Produto ${cleanProductCode} encontrado no cache, mas com preço inválido (0 ou menos).`);
             }
         } else {
-            console.warn(`[CART] Produto ${productCode} não encontrado no cache.`);
+            console.warn(`[CART] Produto ${cleanProductCode} não encontrado no cache.`);
         }
     } catch (e) {
         console.error('[CART] ❌ Erro ao buscar produto no cache:', e);
     }
 
-    // 2. Se não encontrou no cache ou preço inválido, tenta a rota /api/chatbot/buscar-produto do Flask API
-    console.log(`[CART] Produto ${productCode} não encontrado no cache ou preço inválido. Tentando Flask API via /api/chatbot/buscar-produto.`);
+    // 2. Se não encontrou no cache ou preço inválido, tenta a rota /api/chatbot/buscar-reduzido do Flask API
+    console.log(`[CART] Produto ${cleanProductCode} não encontrado no cache ou preço inválido. Tentando Flask API via /api/chatbot/buscar-reduzido.`);
     try {
         const base = flaskApiUrl.endsWith('/') ? flaskApiUrl.slice(0, -1) : flaskApiUrl;
-        const res = await fetch(`${base}/api/chatbot/buscar-produto`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ termo: productCode }), // Envia o código como termo no body
+        // Usa a rota direta de código reduzido para a busca
+        const res = await fetch(`${base}/api/chatbot/buscar-reduzido/${cleanProductCode}`, {
+            method: 'GET',
             signal: AbortSignal.timeout(8000)
         });
         const data = await res.json();
 
         if (data.success && data.encontrado && data.produto) {
-            console.log(`[CART] Produto ${productCode} encontrado na Flask API via /api/chatbot/buscar-produto.`);
+            console.log(`[CART] Produto ${cleanProductCode} encontrado na Flask API via /api/chatbot/buscar-reduzido.`);
             const produtoFlask = data.produto;
-            const preco = Number(produtoFlask.preco_final || produtoFlask.preco || 0); // preco_final é o com desconto
+            // 'preco_final' é o preço com desconto, que é o preferido
+            const preco = Number(produtoFlask.preco_final || produtoFlask.preco || 0); 
 
             if (preco > 0) {
-                // Opcionalmente, você pode atualizar o product_cache aqui para futuras buscas
-                // Usando upsert para garantir que, se um produto for encontrado na Flask API
-                // mas não no cache, ele seja adicionado ou atualizado.
+                // Realiza um upsert no product_cache para evitar futuras chamadas à API Flask para este produto
                 await fetch(`${supabaseUrl}/rest/v1/product_cache`, {
-                    method: 'POST',
+                    method: 'POST', 
                     headers: {
                         'apikey': supabaseAnonKey,
                         'Authorization': `Bearer ${supabaseAnonKey}`,
@@ -590,11 +595,11 @@ async function getProductDetails(
                     body: JSON.stringify({
                         cod_reduzido: produtoFlask.cod_reduzido?.toString(),
                         nome_produto: produtoFlask.nome || 'Produto sem nome',
-                        // nom_laboratorio não vem nesta rota, pode ser deixado em branco ou padronizado
+                        // A rota /buscar-reduzido do Flask não retorna 'nom_laboratorio', pode ser omitido ou padronizado
                         preco_final_venda: preco,
                         unit_price: preco,
                         qtd_estoque: produtoFlask.estoque,
-                        api_source: `${flaskApiUrl} (chatbot/buscar-produto)`,
+                        api_source: `${flaskApiUrl} (chatbot/buscar-reduzido)`,
                         updated_at: new Date().toISOString()
                     })
                 });
@@ -604,14 +609,18 @@ async function getProductDetails(
                     preco_final_venda: preco
                 };
             } else {
-                console.warn(`[CART] Produto ${productCode} da Flask API tem preço inválido: ${preco}`);
+                console.warn(`[CART] Produto ${cleanProductCode} da Flask API tem preço inválido: ${preco}`);
             }
         } else {
-            console.warn(`[CART] Flask API /api/chatbot/buscar-produto não encontrou ${productCode} ou retornou erro:`, data.message || data.error);
+            console.warn(`[CART] Flask API /api/chatbot/buscar-reduzido não encontrou ${cleanProductCode} ou retornou erro:`, data.message || data.error);
         }
     } catch (e) {
-        console.error('[CART] ❌ Erro ao buscar produto na Flask API via /api/chatbot/buscar-produto:', e);
+        console.error('[CART] ❌ Erro ao buscar produto na Flask API via /api/chatbot/buscar-reduzido:', e);
     }
+    
+    // Removido o fallback anterior para /api/chatbot/buscar-produto (POST)
+    // pois o `productCode` neste contexto (ex: "COMPRAR 12345") implica um ID de produto direto,
+    // para o qual /buscar-reduzido é o endpoint mais apropriado e específico.
 
     return null;
 }
@@ -625,12 +634,13 @@ async function addItemToCart(
   supabaseAnonKey: string
 ): Promise<string> {
   try {
-    const cleanProductCode = productCode.replace(/[^a-zA-Z0-9-]/g, '').toUpperCase();
+    // Garante que o productCode esteja limpo e contenha apenas dígitos para a busca de cod_reduzido.
+    const cleanProductCode = productCode.replace(/[^0-9]/g, '');
     if (!cleanProductCode) {
         return '❌ Por favor, informe um código de produto válido para adicionar ao carrinho.';
     }
 
-    // Usar a função unificada getProductDetails
+    // Usa a função unificada getProductDetails
     const productDetails = await getProductDetails(cleanProductCode, flaskApiUrl, supabaseUrl, supabaseAnonKey);
     
     // Validação robusta
@@ -718,7 +728,7 @@ async function addItemToCart(
       body: JSON.stringify({ total_amount: total })
     });
 
-    return `✅ *${productName}* adicionado ao carrinho.\\\\\\n\\\\\\nDigite *CARRINHO* para ver os itens ou *FINALIZAR* para concluir o pedido.`;
+    return `✅ *${productName}* adicionado ao carrinho.\n\nDigite *CARRINHO* para ver os itens ou *FINALIZAR* para concluir o pedido.`; // FIXED: \\n to \n
   } catch (e) {
     console.error('[CART] ❌ Erro em addItemToCart:', e);
     return '⚠️ Não consegui adicionar o item ao carrinho. Tente novamente em instantes.';
@@ -747,7 +757,7 @@ async function getCartSummary(
     });
     const cartData = await resCart.json();
     if (!cartData?.[0]?.id) {
-      return '🛒 Seu carrinho está vazio no momento.\\\\\\n\\\\\\nDigite o nome de um produto ou use *COMPRAR CÓDIGO* para adicionar itens.';
+      return '🛒 Seu carrinho está vazio no momento.\n\nDigite o nome de um produto ou use *COMPRAR CÓDIGO* para adicionar itens.'; // FIXED: \\n to \n
     }
 
     const orderId = cartData[0].id as string;
@@ -765,25 +775,25 @@ async function getCartSummary(
     const items = await itemsRes.json();
 
     if (!items || items.length === 0) {
-      return '🛒 Seu carrinho está vazio no momento.\\\\\\n\\\\\\nDigite o nome de um produto ou use *COMPRAR CÓDIGO* para adicionar itens.';
+      return '🛒 Seu carrinho está vazio no momento.\n\nDigite o nome de um produto ou use *COMPRAR CÓDIGO* para adicionar itens.'; // FIXED: \\n to \n
     }
 
-    let resposta = '🛒 *Seu Carrinho Atual:*\\\\\\n\\\\\\n';
+    let resposta = '🛒 *Seu Carrinho Atual:*\n\n'; // FIXED: \\n to \n
     items.forEach((it: any) => {
       const nome = it.product_name || `Produto código ${it.product_api_id}`;
       const qtd = it.quantity || 1;
       const precoUnit = Number(it.unit_price || 0); // Preço unitário
       const totalItem = Number(it.total_price || 0); // Total do item
 
-      resposta += `▪️ *${nome}*\\\\\\n`;
-      resposta += `   🔢 Qtde: ${qtd} x R$ ${precoUnit.toFixed(2).replace('.', ',')}\\\\\\n`;
-      resposta += `   💰 Subtotal: R$ ${totalItem.toFixed(2).replace('.', ',')}\\\\\\n\\\\\\n`;
+      resposta += `▪️ *${nome}*\n`; // FIXED: \\n to \n
+      resposta += `   🔢 Qtde: ${qtd} x R$ ${precoUnit.toFixed(2).replace('.', ',')}\n`; // FIXED: \\n to \n
+      resposta += `   💰 Subtotal: R$ ${totalItem.toFixed(2).replace('.', ',')}\n\n`; // FIXED: \\n to \n
     });
 
     resposta += `*Total do carrinho:* R$ ${totalAmount
       .toFixed(2)
-      .replace('.', ',')}\\\\\\n\\\\\\n`;
-    resposta += `Para concluir, digite *FINALIZAR*.\\\\\\nPara adicionar mais itens, pesquise o produto ou use *COMPRAR CÓDIGO*.`;
+      .replace('.', ',')}\n\n`; // FIXED: \\n to \n
+    resposta += `Para concluir, digite *FINALIZAR*.\nPara adicionar mais itens, pesquise o produto ou use *COMPRAR CÓDIGO*.`; // FIXED: \\n to \n
     return resposta;
   } catch (e) {
     console.error('[CART] ❌ Erro em getCartSummary:', e);
@@ -839,8 +849,8 @@ async function finishCart(
     });
 
     return (
-      `✅ Pedido *#${orderId.substring(0, 8).toUpperCase()}* recebido com sucesso!\\\\\\n\\\\\\n` +
-      `Valor total: R$ ${totalAmount.toFixed(2).replace('.', ',')}\\\\\\n\\\\\\n` +
+      `✅ Pedido *#${orderId.substring(0, 8).toUpperCase()}* recebido com sucesso!\n\n` + // FIXED: \\n to \n
+      `Valor total: R$ ${totalAmount.toFixed(2).replace('.', ',')}\n\n` + // FIXED: \\n to \n
       `Um atendente irá confirmar os detalhes e combinar o pagamento/entrega com você. Obrigado pela preferência!`
     );
   } catch (e) {
@@ -865,7 +875,7 @@ async function processarFluxoPrincipal(
   const cliqueBotao = msg.interactive?.button_reply?.id;
 
   console.log(
-    `\\\\\\n[RASTREAMENTO] 📥 Msg de ${originalCustomerPhoneNumber}: ${
+    `\n[RASTREAMENTO] 📥 Msg de ${originalCustomerPhoneNumber}: ${ // FIXED: Removed extra \ for consistency.
       textoUsuario || '[Botão: ' + cliqueBotao + ']'
     }`
   );
@@ -975,13 +985,13 @@ async function processarFluxoPrincipal(
     let msgContexto = '';
     if (cliqueBotao === 'menu_estoque')
       msgContexto =
-        '📦 *Consulta de Estoque*\\\\\\n\\\\\\nPor favor, digite o *nome do produto* que deseja consultar.';
+        '📦 *Consulta de Estoque*\n\nPor favor, digite o *nome do produto* que deseja consultar.'; // FIXED: \\n to \n
     else if (cliqueBotao === 'menu_info')
       msgContexto =
-        '📖 *Informação Médica*\\\\\\n\\\\\\nQual medicamento você quer pesquisar?';
+        '📖 *Informação Médica*\n\nQual medicamento você quer pesquisar?'; // FIXED: \\n to \n
     else if (cliqueBotao === 'menu_outros')
       msgContexto =
-        '🤖 *Assistente Virtual*\\\\\\n\\\\\\nComo posso ajudar com outros assuntos?';
+        '🤖 *Assistente Virtual*\n\nComo posso ajudar com outros assuntos?'; // FIXED: \\n to \n
 
     await sendWhatsappMessageAndSaveHistory(
       originalCustomerPhoneNumber,
@@ -1021,7 +1031,7 @@ async function processarFluxoPrincipal(
     if (!codigo) {
       await sendWhatsappMessageAndSaveHistory(
         originalCustomerPhoneNumber,
-        'Para adicionar ao carrinho, use: *COMPRAR CÓDIGO*.\\\\\\nEx: COMPRAR 12345',
+        'Para adicionar ao carrinho, use: *COMPRAR CÓDIGO*.\nEx: COMPRAR 12345', // FIXED: \\n to \n
         supabaseUrl,
         supabaseAnonKey
       );
