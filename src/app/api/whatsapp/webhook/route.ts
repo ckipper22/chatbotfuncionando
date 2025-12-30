@@ -110,7 +110,7 @@ const cacheEstados = new Map<string, string>();
 // =========================================================================
 
 function formatarNumeroWhatsAppParaEnvio(numero: string): string {
-  let limpo = numero.replace(/\D/g, '');
+  let limpo = numero.replace(/\D/g, ''); // FIXED: Removed extra \ for consistency.
 
   if (limpo.startsWith('55')) {
     if (limpo.length === 12 && !limpo.startsWith('559', 2)) {
@@ -211,7 +211,7 @@ async function enviarMenuBoasVindas(
       type: 'button',
       header: { type: 'text', text: nomeFarmacia.substring(0, 60) },
       body: {
-        text: 'Olá! Como posso ajudar você hoje?\nEscolha uma das opções abaixo para começar:' // FIXED: \\n to \n
+        text: 'Olá! Como posso ajudar você hoje?\nEscolha uma das opções abaixo para começar:' // FIXED: \\\\n to \n
       },
       footer: { text: 'Assistente Virtual Farmacêutico' },
       action: {
@@ -268,8 +268,8 @@ function parseCurrencyStringToFloat(currencyString: string | undefined): number 
 async function consultarEstoqueFlask(
   termo: string,
   apiBase: string,
-  supabaseUrl: string, // Adicionado para salvar no cache
-  supabaseAnonKey: string // Adicionado para salvar no cache
+  supabaseUrl: string,
+  supabaseAnonKey: string
 ): Promise<string> {
   console.log(`[FLASK] 🔍 Buscando: "${termo}" em ${apiBase}`);
   try {
@@ -287,7 +287,7 @@ async function consultarEstoqueFlask(
     const data = await res.json();
     const produtos = data.data || [];
 
-    // NOVO: Salvar produtos encontrados no product_cache do Supabase
+    // NOVO: Salvar produtos encontrados no product_cache do Supabase (mantido como está)
     if (produtos.length > 0) {
       for (const p of produtos) {
         try {
@@ -326,49 +326,68 @@ async function consultarEstoqueFlask(
     }
     // FIM NOVO: Salvar produtos
 
-    if (produtos.length === 0)
-      return `❌ Não encontrei "*${termo}*" em estoque agora.`;
+    if (produtos.length === 0) {
+      return `❌ Não encontrei "*${termo}*" no sistema. Por favor, verifique a escrita ou tente um nome diferente.`; // Melhorar a mensagem para quando não há produtos
+    }
 
-    let resposta = `✅ *Produtos Encontrados:*\n\n`; // FIXED: \\n to \n
+    // --- MODIFICAÇÃO PRINCIPAL AQUI (mantida da última revisão) ---
+    let inStockMessages: string[] = [];
+    let outOfStockMessages: string[] = [];
+
     produtos.forEach((p: any) => {
-      const nomeProduto = p.nome_produto || 'Produto sem nome';
-      const nomLaboratorio = p.nom_laboratorio || 'Laboratório não informado';
-
-      const precoBruto = parseCurrencyStringToFloat(p.vlr_venda); // Agora são floats
-      const precoFinalVenda = parseCurrencyStringToFloat(p.preco_final_venda); // Agora são floats
-
-      const qtdEstoque = p.qtd_estoque !== undefined ? p.qtd_estoque : '0';
-      const codReduzido = p.cod_reduzido || 'N/A';
-
-      resposta += `▪️ *${nomeProduto}*\n`; // FIXED: \\n to \n
-      resposta += `   💊 ${nomLaboratorio}\n`; // FIXED: \\n to \n
-
-      if (precoBruto > precoFinalVenda && precoBruto > 0) {
-        const descontoPercentual =
-          ((precoBruto - precoFinalVenda) / precoBruto) * 100;
-        // CORRIGIDO: Removido o '%' extra após o preço
-        resposta += `   💰 ~~R$ ${precoBruto
-          .toFixed(2)
-          .replace('.', ',')}~~ *R$ ${precoFinalVenda
-          .toFixed(2)
-          .replace('.', ',')}* (🔻${descontoPercentual
-          .toFixed(1)
-          .replace('.', ',')}% OFF)\n`; // FIXED: \\n to \n
+      // A Flask API já prepara a whatsapp_string com a mensagem de estoque ou encomenda
+      if (p.whatsapp_string) {
+        if (p.qtd_estoque > 0) {
+          inStockMessages.push(p.whatsapp_string);
+        } else {
+          outOfStockMessages.push(p.whatsapp_string);
+        }
       } else {
-        // CORRIGIDO: Removido o '%' extra após o preço
-        resposta += `   💰 *R$ ${precoFinalVenda
-          .toFixed(2)
-          .replace('.', ',')}*\n`; // FIXED: \\n to \n
+        // Fallback caso whatsapp_string não venha por algum motivo,
+        // embora sua API Flask já a crie.
+        const nomeProduto = p.nome_produto || 'Produto sem nome';
+        const precoFinalVenda = parseCurrencyStringToFloat(p.preco_final_venda);
+        if (p.qtd_estoque > 0) {
+          inStockMessages.push(
+            `*${nomeProduto}* por *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}* à vista. Temos ${p.qtd_estoque} unidades em estoque.`
+          );
+        } else {
+          outOfStockMessages.push(
+            `*${nomeProduto}* por *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}* à vista. No momento, está esgotado. Gostaria de verificar a encomenda para você?`
+          );
+        }
       }
-      resposta += `   📦 Estoque: ${qtdEstoque} unidades\n`; // FIXED: \\n to \n
-      resposta += `   📋 Código: ${codReduzido}\n\n`; // FIXED: \\n to \n
     });
 
-    resposta += `Digite *COMPRAR CÓDIGO* para adicionar um item ao carrinho. Ex: COMPRAR 12345`;
+    let resposta = '';
+
+    if (inStockMessages.length > 0) {
+      resposta += `✅ *Produtos Disponíveis em Estoque:*\n\n`; // Usando \n
+      resposta += inStockMessages.map(msg => msg.replace(/\\n/g, '\n')).join('\n\n'); // Usando \n e joing com \n\n
+      resposta += '\n\n'; // Adiciona espaço entre seções
+    }
+
+    if (outOfStockMessages.length > 0) {
+      if (inStockMessages.length > 0) {
+        resposta += `---\n\n`; // Separador visual se houver ambas as seções
+      }
+      resposta += `⚠️ *Produtos Sem Estoque no momento (mas podemos verificar a encomenda para você):*\n\n`; // Usando \n
+      resposta += outOfStockMessages.map(msg => msg.replace(/\\n/g, '\n')).join('\n\n'); // Usando \n e joing com \n\n
+      resposta += '\n\n'; // Adiciona espaço entre seções
+    }
+    
+    // Se não há nenhum produto disponível (nem em estoque, nem para encomenda, ou seja, lista vazia)
+    if (inStockMessages.length === 0 && outOfStockMessages.length === 0) {
+      return `❌ Não encontrei "*${termo}*" no sistema. Por favor, verifique a escrita ou tente um nome diferente.`;
+    }
+
+    resposta += `Para adicionar um item ao carrinho, digite *COMPRAR* seguido do *CÓDIGO* do produto. Ex: *COMPRAR 12345*\n`; // Mensagem única para o carrinho
+    resposta += `Para buscar opções genéricas mais baratas, digite *GENÉRICO* seguido do *CÓDIGO* do produto. Ex: *GENÉRICO 12345*`; // NOVO: Sugestão para genéricos
+
     return resposta;
   } catch (e) {
     console.error(`[FLASK] ❌ Erro:`, e);
-    return '⚠️ Erro ao consultar o estoque local.';
+    return '⚠️ Erro ao consultar o estoque local. Por favor, tente novamente em instantes.';
   }
 }
 
@@ -382,11 +401,53 @@ async function consultarGoogleInfo(pergunta: string): Promise<string> {
     const data = await res.json();
     if (!data.items?.length)
       return '🔍 Não localizei informações técnicas sobre isso.';
-    return `💊 *Informação Técnica:*\n\n${data.items[0].snippet}\n\n🔗 *Fonte:* ${data.items[0].link}`; // FIXED: \\n to \n
+    return `💊 *Informação Técnica:*\n\n${data.items[0].snippet}\n\n🔗 *Fonte:* ${data.items[0].link}`; // FIXED: \\\\n to \n
   } catch (e) {
     return '⚠️ Erro na busca técnica.';
   }
 }
+
+// NOVO: Função para consultar genéricos na API Flask
+async function consultarGenericoFlask(
+  productCode: string,
+  apiBase: string
+): Promise<string> {
+  console.log(`[FLASK] 🔍 Buscando genérico para: "${productCode}" em ${apiBase}`);
+  try {
+    const base = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
+    if (!apiBase) {
+      console.warn(`[FLASK] ⚠️ apiBase está vazia ou inválida, pulando consulta de genérico.`);
+      return '⚠️ Serviço de consulta de genéricos indisponível. Por favor, contate o administrador.';
+    }
+
+    // Garante que apenas dígitos sejam usados para a busca de cod_reduzido
+    const cleanProductCode = productCode.replace(/[^0-9]/g, '');
+    if (!cleanProductCode) {
+        return '❌ Por favor, informe um código de produto válido para buscar genéricos.';
+    }
+
+    const res = await fetch(
+      `${base}/api/chatbot/buscar-generico/${cleanProductCode}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    const data = await res.json();
+
+    if (data.success && data.tem_generico) {
+      // O Flask API já fornece a mensagem formatada com '\n'
+      return data.message;
+    } else if (data.success && !data.tem_generico) {
+      // Mensagem do Flask: "Este já é o melhor preço disponível!" ou "A economia seria de apenas X%. Este já é um bom preço!"
+      return data.message;
+    } else {
+      // Erro ou não encontrado, com mensagem do Flask se disponível
+      return `❌ Não foi possível encontrar opções genéricas para o código *${productCode}*. Detalhes: ${data.message || 'Erro desconhecido.'}`;
+    }
+  } catch (e) {
+    console.error(`[FLASK] ❌ Erro ao consultar genérico:`, e);
+    return '⚠️ Erro ao consultar opções genéricas. Tente novamente mais tarde.';
+  }
+}
+
 
 // =========================================================================
 // NOVO: RATE LIMIT POR NÚMERO (whatsapp_messages)
@@ -728,7 +789,7 @@ async function addItemToCart(
       body: JSON.stringify({ total_amount: total })
     });
 
-    return `✅ *${productName}* adicionado ao carrinho.\n\nDigite *CARRINHO* para ver os itens ou *FINALIZAR* para concluir o pedido.`; // FIXED: \\n to \n
+    return `✅ *${productName}* adicionado ao carrinho.\n\nDigite *CARRINHO* para ver os itens ou *FINALIZAR* para concluir o pedido.`; // FIXED: \\\\n to \n
   } catch (e) {
     console.error('[CART] ❌ Erro em addItemToCart:', e);
     return '⚠️ Não consegui adicionar o item ao carrinho. Tente novamente em instantes.';
@@ -757,7 +818,7 @@ async function getCartSummary(
     });
     const cartData = await resCart.json();
     if (!cartData?.[0]?.id) {
-      return '🛒 Seu carrinho está vazio no momento.\n\nDigite o nome de um produto ou use *COMPRAR CÓDIGO* para adicionar itens.'; // FIXED: \\n to \n
+      return '🛒 Seu carrinho está vazio no momento.\n\nDigite o nome de um produto ou use *COMPRAR CÓDIGO* para adicionar itens.'; // FIXED: \\\\n to \n
     }
 
     const orderId = cartData[0].id as string;
@@ -775,25 +836,25 @@ async function getCartSummary(
     const items = await itemsRes.json();
 
     if (!items || items.length === 0) {
-      return '🛒 Seu carrinho está vazio no momento.\n\nDigite o nome de um produto ou use *COMPRAR CÓDIGO* para adicionar itens.'; // FIXED: \\n to \n
+      return '🛒 Seu carrinho está vazio no momento.\n\nDigite o nome de um produto ou use *COMPRAR CÓDIGO* para adicionar itens.'; // FIXED: \\\\n to \n
     }
 
-    let resposta = '🛒 *Seu Carrinho Atual:*\n\n'; // FIXED: \\n to \n
+    let resposta = '🛒 *Seu Carrinho Atual:*\n\n'; // FIXED: \\\\n to \n
     items.forEach((it: any) => {
       const nome = it.product_name || `Produto código ${it.product_api_id}`;
       const qtd = it.quantity || 1;
       const precoUnit = Number(it.unit_price || 0); // Preço unitário
       const totalItem = Number(it.total_price || 0); // Total do item
 
-      resposta += `▪️ *${nome}*\n`; // FIXED: \\n to \n
-      resposta += `   🔢 Qtde: ${qtd} x R$ ${precoUnit.toFixed(2).replace('.', ',')}\n`; // FIXED: \\n to \n
-      resposta += `   💰 Subtotal: R$ ${totalItem.toFixed(2).replace('.', ',')}\n\n`; // FIXED: \\n to \n
+      resposta += `▪️ *${nome}*\n`; // FIXED: \\\\n to \n
+      resposta += `   🔢 Qtde: ${qtd} x R$ ${precoUnit.toFixed(2).replace('.', ',')}\n`; // FIXED: \\\\n to \n
+      resposta += `   💰 Subtotal: R$ ${totalItem.toFixed(2).replace('.', ',')}\n\n`; // FIXED: \\\\n to \n
     });
 
     resposta += `*Total do carrinho:* R$ ${totalAmount
       .toFixed(2)
-      .replace('.', ',')}\n\n`; // FIXED: \\n to \n
-    resposta += `Para concluir, digite *FINALIZAR*.\nPara adicionar mais itens, pesquise o produto ou use *COMPRAR CÓDIGO*.`; // FIXED: \\n to \n
+      .replace('.', ',')}\n\n`; // FIXED: \\\\n to \n
+    resposta += `Para concluir, digite *FINALIZAR*.\nPara adicionar mais itens, pesquise o produto ou use *COMPRAR CÓDIGO*.`; // FIXED: \\\\n to \n
     return resposta;
   } catch (e) {
     console.error('[CART] ❌ Erro em getCartSummary:', e);
@@ -849,8 +910,8 @@ async function finishCart(
     });
 
     return (
-      `✅ Pedido *#${orderId.substring(0, 8).toUpperCase()}* recebido com sucesso!\n\n` + // FIXED: \\n to \n
-      `Valor total: R$ ${totalAmount.toFixed(2).replace('.', ',')}\n\n` + // FIXED: \\n to \n
+      `✅ Pedido *#${orderId.substring(0, 8).toUpperCase()}* recebido com sucesso!\n\n` + // FIXED: \\\\n to \n
+      `Valor total: R$ ${totalAmount.toFixed(2).replace('.', ',')}\n\n` + // FIXED: \\\\n to \n
       `Um atendente irá confirmar os detalhes e combinar o pagamento/entrega com você. Obrigado pela preferência!`
     );
   } catch (e) {
@@ -985,13 +1046,13 @@ async function processarFluxoPrincipal(
     let msgContexto = '';
     if (cliqueBotao === 'menu_estoque')
       msgContexto =
-        '📦 *Consulta de Estoque*\n\nPor favor, digite o *nome do produto* que deseja consultar.'; // FIXED: \\n to \n
+        '📦 *Consulta de Estoque*\n\nPor favor, digite o *nome do produto* que deseja consultar.'; // FIXED: \\\\n to \n
     else if (cliqueBotao === 'menu_info')
       msgContexto =
-        '📖 *Informação Médica*\n\nQual medicamento você quer pesquisar?'; // FIXED: \\n to \n
+        '📖 *Informação Médica*\n\nQual medicamento você quer pesquisar?'; // FIXED: \\\\n to \n
     else if (cliqueBotao === 'menu_outros')
       msgContexto =
-        '🤖 *Assistente Virtual*\n\nComo posso ajudar com outros assuntos?'; // FIXED: \\n to \n
+        '🤖 *Assistente Virtual*\n\nComo posso ajudar com outros assuntos?'; // FIXED: \\\\n to \n
 
     await sendWhatsappMessageAndSaveHistory(
       originalCustomerPhoneNumber,
@@ -1031,7 +1092,7 @@ async function processarFluxoPrincipal(
     if (!codigo) {
       await sendWhatsappMessageAndSaveHistory(
         originalCustomerPhoneNumber,
-        'Para adicionar ao carrinho, use: *COMPRAR CÓDIGO*.\nEx: COMPRAR 12345', // FIXED: \\n to \n
+        'Para adicionar ao carrinho, use: *COMPRAR CÓDIGO*.\nEx: COMPRAR 12345', // FIXED: \\\\n to \n
         supabaseUrl,
         supabaseAnonKey
       );
@@ -1150,9 +1211,31 @@ async function processarFluxoPrincipal(
     return;
   }
 
+  // NOVO: 7.5 FLUXO DE GENÉRICOS (PRIORIDADE MÉDIA-ALTA)
+  if (textoLimpo?.startsWith('generico ') && textoUsuario) {
+    const codigo = textoUsuario.substring('generico '.length).trim();
+    if (!codigo) {
+      await sendWhatsappMessageAndSaveHistory(
+        originalCustomerPhoneNumber,
+        'Para buscar genéricos, use: *GENÉRICO CÓDIGO*.\nEx: GENÉRICO 12345',
+        supabaseUrl,
+        supabaseAnonKey
+      );
+      return;
+    }
+
+    const respGenerico = await consultarGenericoFlask(codigo, apiFlask);
+    await sendWhatsappMessageAndSaveHistory(
+      originalCustomerPhoneNumber,
+      respGenerico,
+      supabaseUrl,
+      supabaseAnonKey
+    );
+    return;
+  }
+
   // 8. FLUXO ESTOQUE (baseado no estado 'menu_estoque')
   if (estadoAtual === 'menu_estoque' && textoUsuario) {
-    // Corrigido: `consultarEstoqueFlask` agora precisa de supabaseUrl e supabaseAnonKey
     const res = await consultarEstoqueFlask(textoUsuario, apiFlask, supabaseUrl, supabaseAnonKey);
     await sendWhatsappMessageAndSaveHistory(
       originalCustomerPhoneNumber,
