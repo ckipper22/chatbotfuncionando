@@ -110,7 +110,7 @@ const cacheEstados = new Map<string, string>();
 // =========================================================================
 
 function formatarNumeroWhatsAppParaEnvio(numero: string): string {
-  let limpo = numero.replace(/\D/g, ''); // Corrigido regex
+  let limpo = numero.replace(/\D/g, ''); // Corrigido regex: D com apenas 1 barra
 
   if (limpo.startsWith('55')) {
     if (limpo.length === 12 && !limpo.startsWith('559', 2)) {
@@ -211,7 +211,7 @@ async function enviarMenuBoasVindas(
       type: 'button',
       header: { type: 'text', text: nomeFarmacia.substring(0, 60) },
       body: {
-        text: 'Olá! Como posso ajudar você hoje?\\nEscolha uma das opções abaixo para começar:'
+        text: 'Olá! Como posso ajudar você hoje?\nEscolha uma das opções abaixo para começar:' // FIXED: \n
       },
       footer: { text: 'Assistente Virtual Farmacêutico' },
       action: {
@@ -264,7 +264,7 @@ async function consultarEstoqueFlask(
   supabaseUrl: string,
   supabaseAnonKey: string
 ): Promise<string> {
-  console.log(`[FLASK] 🔍 Buscando: "${termo}" em ${apiBase}`);
+  console.log(`[FLASK] 🔍 Buscando: "${termo}" em ${apiBase}`); // FIXED: aspas
   try {
     const base = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
     if (!apiBase) {
@@ -273,26 +273,33 @@ async function consultarEstoqueFlask(
       );
       return '⚠️ Serviço de consulta de estoque indisponível. Por favor, contate o administrador.';
     }
+
+    // Ajuste para pesquisa multi-palavra (ex: "Losartana 100")
+    let finalSearchTerm = termo;
+    const words = termo.split(' ').filter(word => word.length > 0);
+    if (words.length > 1) {
+        finalSearchTerm = '%' + words.join('%') + '%';
+    }
+
     const res = await fetch(
-      `${base}/api/products/search?q=${encodeURIComponent(termo)}`,
+      `${base}/api/products/search?q=${encodeURIComponent(finalSearchTerm)}`, // Usando finalSearchTerm
       { signal: AbortSignal.timeout(8000) }
     );
     const data = await res.json();
     const produtos = data.data || [];
 
-    // NOVO: Salvar produtos encontrados no product_cache do Supabase (mantido como está)
+    // Salvar produtos encontrados no product_cache do Supabase (mantido como está)
     if (produtos.length > 0) {
       for (const p of produtos) {
         try {
-          const productCode = p.cod_reduzido?.toString(); // Garante string
+          const productCode = p.cod_reduzido?.toString();
           if (!productCode) continue;
 
-          // Os valores de preço vindo do Flask agora são floats graças à correção no app.py
-          const precoFinalVenda = p.vlr_liquido_raw_float; // Usando o float bruto
+          const precoFinalVenda = p.vlr_liquido_raw_float;
           const qtdEstoque = p.qtd_estoque;
 
           await fetch(`${supabaseUrl}/rest/v1/product_cache`, {
-            method: 'POST', // Usamos POST com onConflict para UPSERT
+            method: 'POST',
             headers: {
               'apikey': supabaseAnonKey,
               'Authorization': `Bearer ${supabaseAnonKey}`,
@@ -304,7 +311,7 @@ async function consultarEstoqueFlask(
               nome_produto: p.nome_produto || 'Produto sem nome',
               nom_laboratorio: p.nom_laboratorio || 'Não informado',
               preco_final_venda: precoFinalVenda,
-              unit_price: precoFinalVenda, // Adicionado para compatibilidade, se necessário
+              unit_price: precoFinalVenda,
               qtd_estoque: qtdEstoque,
               api_source: apiBase,
               updated_at: new Date().toISOString()
@@ -312,14 +319,12 @@ async function consultarEstoqueFlask(
           });
         } catch (cacheError) {
           console.error(`[CACHE] ❌ Erro ao salvar produto no cache ${p.cod_reduzido}:`, cacheError);
-          // Continua o loop mesmo com erro no cache para não bloquear o usuário
         }
       }
     }
-    // FIM NOVO: Salvar produtos
 
     if (produtos.length === 0) {
-      return `❌ Não encontrei "*${termo}*" no sistema. Por favor, verifique a escrita ou tente um nome diferente.`; // Melhorar a mensagem para quando não há produtos
+      return `❌ Não encontrei "${termo}" no sistema. Por favor, verifique a escrita ou tente um nome diferente.`; // FIXED: aspas
     }
 
     let inStockMessages: string[] = [];
@@ -337,25 +342,25 @@ async function consultarEstoqueFlask(
       let productMessage = `*${nomeProduto}* (Cód: ${codReduzido})`;
 
       if (nomLaboratorio && nomLaboratorio !== 'N/A') {
-          productMessage += `\\n   💊 Laboratório: ${nomLaboratorio}`;
+          productMessage += `\n   💊 Laboratório: ${nomLaboratorio}`; // FIXED: \n
       }
 
       if (precoFinalVenda > 0) {
           if (precoBruto > precoFinalVenda && precoBruto > 0) {
               const descontoPercentual = ((precoBruto - precoFinalVenda) / precoBruto) * 100;
-              productMessage += `\\n   💰 ~~R$ ${precoBruto.toFixed(2).replace('.', ',')}~~ por *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}* à vista (🔻${descontoPercentual.toFixed(1).replace('.', ',')}% OFF)`;
+              productMessage += `\n   💰 ~~R$ ${precoBruto.toFixed(2).replace('.', ',')}~~ por *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}* à vista (🔻${descontoPercentual.toFixed(1).replace('.', ',')}% OFF)`; // FIXED: \n
           } else {
-              productMessage += `\\n   💰 *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}* à vista`;
+              productMessage += `\n   💰 *R$ ${precoFinalVenda.toFixed(2).replace('.', ',')}* à vista`; // FIXED: \n
           }
       } else {
-          productMessage += `\\n   💰 Preço: Não informado`;
+          productMessage += `\n   💰 Preço: Não informado`; // FIXED: \n
       }
 
       if (qtdEstoque > 0) {
-        productMessage += `\\n   📦 Temos ${qtdEstoque} unidades em estoque.`;
+        productMessage += `\n   📦 Temos ${qtdEstoque} unidades em estoque.`; // FIXED: \n
         inStockMessages.push(productMessage);
       } else {
-        productMessage += `\\n   ⚠️ No momento, está esgotado.`;
+        productMessage += `\n   ⚠️ No momento, está esgotado.`; // FIXED: \n
         if (precoFinalVenda > 0) {
             productMessage += ` Gostaria de verificar a encomenda para você?`;
         }
@@ -366,25 +371,25 @@ async function consultarEstoqueFlask(
     let resposta = '';
 
     if (inStockMessages.length > 0) {
-      resposta += `✅ *Produtos Disponíveis em Estoque:*\\n\\n`;
-      resposta += inStockMessages.join('\\n\\n');
-      resposta += '\\n\\n';
+      resposta += `✅ *Produtos Disponíveis em Estoque:*\n\n`; // FIXED: \n
+      resposta += inStockMessages.join('\n\n'); // FIXED: \n
+      resposta += '\n\n'; // FIXED: \n
     }
 
     if (outOfStockMessages.length > 0) {
       if (inStockMessages.length > 0) {
-        resposta += `---\\n\\n`;
+        resposta += `---\n\n`; // FIXED: \n
       }
-      resposta += `⚠️ *Produtos Sem Estoque no momento (mas podemos verificar a encomenda para você):*\\n\\n`;
-      resposta += outOfStockMessages.join('\\n\\n');
-      resposta += '\\n\\n';
+      resposta += `⚠️ *Produtos Sem Estoque no momento (mas podemos verificar a encomenda para você):*\n\n`; // FIXED: \n
+      resposta += outOfStockMessages.join('\n\n'); // FIXED: \n
+      resposta += '\n\n'; // FIXED: \n
     }
     
     if (inStockMessages.length === 0 && outOfStockMessages.length === 0) {
-      return `❌ Não encontrei "*${termo}*" no sistema. Por favor, verifique a escrita ou tente um nome diferente.`;
+      return `❌ Não encontrei "${termo}" no sistema. Por favor, verifique a escrita ou tente um nome diferente.`; // FIXED: aspas
     }
 
-    resposta += `Para adicionar um item ao carrinho, digite *COMPRAR* seguido do *CÓDIGO* do produto. Ex: *COMPRAR 12345*\\n`;
+    resposta += `Para adicionar um item ao carrinho, digite *COMPRAR* seguido do *CÓDIGO* do produto. Ex: *COMPRAR 12345*\n`; // FIXED: \n
     resposta += `Para buscar opções genéricas mais baratas, digite *GENÉRICO* seguido do *CÓDIGO* do produto. Ex: *GENÉRICO 12345*`;
 
     return resposta;
@@ -395,7 +400,7 @@ async function consultarEstoqueFlask(
 }
 
 async function consultarGoogleInfo(pergunta: string): Promise<string> {
-  console.log(`[GOOGLE] 🌐 Buscando info para: "${pergunta}"`);
+  console.log(`[GOOGLE] 🌐 Buscando info para: "${pergunta}"`); // FIXED: aspas
   try {
     const url = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_CSE_KEY}&cx=${GOOGLE_CSE_CX}&q=${encodeURIComponent(
       pergunta
@@ -404,7 +409,7 @@ async function consultarGoogleInfo(pergunta: string): Promise<string> {
     const data = await res.json();
     if (!data.items?.length)
       return '🔍 Não localizei informações técnicas sobre isso.';
-    return `💊 *Informação Técnica:*\\n\\n${data.items[0].snippet}\\n\\n🔗 *Fonte:* ${data.items[0].link}`;
+    return `💊 *Informação Técnica:*\n\n${data.items[0].snippet}\n\n🔗 *Fonte:* ${data.items[0].link}`; // FIXED: \n
   } catch (e) {
     return '⚠️ Erro na busca técnica.';
   }
@@ -414,7 +419,7 @@ async function consultarGenericoFlask(
   productCode: string,
   apiBase: string
 ): Promise<string> {
-  console.log(`[FLASK] 🔍 Buscando genérico para: "${productCode}" em ${apiBase}`);
+  console.log(`[FLASK] 🔍 Buscando genérico para: "${productCode}" em ${apiBase}`); // FIXED: aspas
   try {
     const base = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
     if (!apiBase) {
@@ -770,7 +775,7 @@ async function addItemToCart(
       body: JSON.stringify({ total_amount: total })
     });
 
-    return `✅ *${productName}* adicionado ao carrinho.\\n\\nDigite *CARRINHO* para ver os itens ou *FINALIZAR* para concluir o pedido.`;
+    return `✅ *${productName}* adicionado ao carrinho.\n\nDigite *CARRINHO* para ver os itens ou *FINALIZAR* para concluir o pedido.`; // FIXED: \n
   } catch (e) {
     console.error('[CART] ❌ Erro em addItemToCart:', e);
     return '⚠️ Não consegui adicionar o item ao carrinho. Tente novamente em instantes.';
@@ -799,7 +804,7 @@ async function getCartSummary(
     });
     const cartData = await resCart.json();
     if (!cartData?.[0]?.id) {
-      return '🛒 Seu carrinho está vazio no momento.\\n\\nDigite o nome de um produto ou use *COMPRAR CÓDIGO* para adicionar itens.';
+      return '🛒 Seu carrinho está vazio no momento.\n\nDigite o nome de um produto ou use *COMPRAR CÓDIGO* para adicionar itens.'; // FIXED: \n
     }
 
     const orderId = cartData[0].id as string;
@@ -817,25 +822,25 @@ async function getCartSummary(
     const items = await itemsRes.json();
 
     if (!items || items.length === 0) {
-      return '🛒 Seu carrinho está vazio no momento.\\n\\nDigite o nome de um produto ou use *COMPRAR CÓDIGO* para adicionar itens.';
+      return '🛒 Seu carrinho está vazio no momento.\n\nDigite o nome de um produto ou use *COMPRAR CÓDIGO* para adicionar itens.'; // FIXED: \n
     }
 
-    let resposta = '🛒 *Seu Carrinho Atual:*\\n\\n';
+    let resposta = '🛒 *Seu Carrinho Atual:*\n\n'; // FIXED: \n
     items.forEach((it: any) => {
       const nome = it.product_name || `Produto código ${it.product_api_id}`;
       const qtd = it.quantity || 1;
       const precoUnit = Number(it.unit_price || 0);
       const totalItem = Number(it.total_price || 0);
 
-      resposta += `▪️ *${nome}*\\n`;
-      resposta += `   🔢 Qtde: ${qtd} x R$ ${precoUnit.toFixed(2).replace('.', ',')}\\n`;
-      resposta += `   💰 Subtotal: R$ ${totalItem.toFixed(2).replace('.', ',')}\\n\\n`;
+      resposta += `▪️ *${nome}*\n`; // FIXED: \n
+      resposta += `   🔢 Qtde: ${qtd} x R$ ${precoUnit.toFixed(2).replace('.', ',')}\n`; // FIXED: \n
+      resposta += `   💰 Subtotal: R$ ${totalItem.toFixed(2).replace('.', ',')}\n\n`; // FIXED: \n
     });
 
     resposta += `*Total do carrinho:* R$ ${totalAmount
       .toFixed(2)
-      .replace('.', ',')}\\n\\n`;
-    resposta += `Para concluir, digite *FINALIZAR*.\\nPara adicionar mais itens, pesquise o produto ou use *COMPRAR CÓDIGO*.`;
+      .replace('.', ',')}\n\n`; // FIXED: \n
+    resposta += `Para concluir, digite *FINALIZAR*.\nPara adicionar mais itens, pesquise o produto ou use *COMPRAR CÓDIGO*.`; // FIXED: \n
     return resposta;
   } catch (e) {
     console.error('[CART] ❌ Erro em getCartSummary:', e);
@@ -890,8 +895,8 @@ async function finishCart(
     });
 
     return (
-      `✅ Pedido *#${orderId.substring(0, 8).toUpperCase()}* recebido com sucesso!\\n\\n` +
-      `Valor total: R$ ${totalAmount.toFixed(2).replace('.', ',')}\\n\\n` +
+      `✅ Pedido *#${orderId.substring(0, 8).toUpperCase()}* recebido com sucesso!\n\n` + // FIXED: \n
+      `Valor total: R$ ${totalAmount.toFixed(2).replace('.', ',')}\n\n` + // FIXED: \n
       `Um atendente irá confirmar os detalhes e combinar o pagamento/entrega com você. Obrigado pela preferência!`
     );
   } catch (e) {
@@ -913,19 +918,19 @@ async function processarFluxoPrincipal(
 ) {
   const textoUsuario: string | undefined = msg.text?.body?.trim();
   // Transforma o texto do usuário para minúsculas e remove acentos para a detecção robusta do comando
-  const textoComparavel = textoUsuario?.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const textoComparavel = textoUsuario?.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // FIXED: regex \u0300
   const textoLimpo = textoUsuario?.toLowerCase(); // Mantém o texto apenas em minúsculas para outras comparações/substrings
   const cliqueBotao = msg.interactive?.button_reply?.id;
 
   console.log(
-    `\n[RASTREAMENTO] 📥 Msg de ${originalCustomerPhoneNumber}: ${
+    `\n[RASTREAMENTO] 📥 Msg de ${originalCustomerPhoneNumber}: ${ // FIXED: \n
       textoUsuario || '[Botão: ' + cliqueBotao + ']'
     }`
   );
   // [DEBUG] Adicionado para ajudar a verificar o problema
-  console.log(`[DEBUG] textoUsuario: "${textoUsuario}"`);
-  console.log(`[DEBUG] textoLimpo: "${textoLimpo}"`);
-  console.log(`[DEBUG] textoComparavel: "${textoComparavel}"`);
+  console.log(`[DEBUG] textoUsuario: "${textoUsuario}"`); // FIXED: aspas
+  console.log(`[DEBUG] textoLimpo: "${textoLimpo}"`); // FIXED: aspas
+  console.log(`[DEBUG] textoComparavel: "${textoComparavel}"`); // FIXED: aspas
 
 
   // 1. RATE LIMIT antes de tudo
@@ -1033,13 +1038,13 @@ async function processarFluxoPrincipal(
     let msgContexto = '';
     if (cliqueBotao === 'menu_estoque')
       msgContexto =
-        '📦 *Consulta de Estoque*\\n\\nPor favor, digite o *nome do produto* que deseja consultar.';
+        '📦 *Consulta de Estoque*\n\nPor favor, digite o *nome do produto* que deseja consultar.'; // FIXED: \n
     else if (cliqueBotao === 'menu_info')
       msgContexto =
-        '📖 *Informação Médica*\\n\\nQual medicamento você quer pesquisar?';
+        '📖 *Informação Médica*\n\nQual medicamento você quer pesquisar?'; // FIXED: \n
     else if (cliqueBotao === 'menu_outros')
       msgContexto =
-        '🤖 *Assistente Virtual*\\n\\nComo posso ajudar com outros assuntos?';
+        '🤖 *Assistente Virtual*\n\nComo posso ajudar com outros assuntos?'; // FIXED: \n
 
     await sendWhatsappMessageAndSaveHistory(
       originalCustomerPhoneNumber,
@@ -1074,13 +1079,12 @@ async function processarFluxoPrincipal(
   );
 
   // 7. FLUXO DE CARRINHO (PRIORIDADE ALTA)
-  // Utiliza textoComparavel para detecção robusta
   if (textoComparavel?.startsWith('comprar ') && textoUsuario) {
-    const codigo = textoUsuario.substring('comprar '.length).trim(); // Usa textoUsuario original para extrair o código
+    const codigo = textoUsuario.substring('comprar '.length).trim();
     if (!codigo) {
       await sendWhatsappMessageAndSaveHistory(
         originalCustomerPhoneNumber,
-        'Para adicionar ao carrinho, use: *COMPRAR CÓDIGO*.\\nEx: COMPRAR 12345',
+        'Para adicionar ao carrinho, use: *COMPRAR CÓDIGO*.\nEx: COMPRAR 12345', // FIXED: \n
         supabaseUrl,
         supabaseAnonKey
       );
@@ -1202,13 +1206,16 @@ async function processarFluxoPrincipal(
   // NOVO: 7.5 FLUXO DE GENÉRICOS (PRIORIDADE MÉDIA-ALTA)
   // Usa textoComparavel para a detecção robusta do comando "generico "
   if (textoComparavel?.startsWith('generico ') && textoUsuario) {
-    // Usa textoUsuario original para extrair o código após o comando "generico "
-    const codigo = textoUsuario.substring(textoComparavel.indexOf('generico ') + 'generico '.length).trim();
-    
+    // Extrai o código numérico do produto da string original do usuário.
+    // Usamos o startIndex do textoComparavel para obter a parte correta do textoUsuario.
+    const startIndex = textoComparavel.indexOf('generico ') + 'generico '.length;
+    const rawCodePart = textoUsuario.substring(startIndex).trim();
+    const codigo = rawCodePart.replace(/[^0-9]/g, ''); // Garante que é apenas o número
+
     if (!codigo) {
       await sendWhatsappMessageAndSaveHistory(
         originalCustomerPhoneNumber,
-        'Para buscar genéricos, use: *GENÉRICO CÓDIGO*.\\nEx: GENÉRICO 12345',
+        'Para buscar genéricos, use: *GENÉRICO CÓDIGO*.\nEx: GENÉRICO 12345', // FIXED: \n
         supabaseUrl,
         supabaseAnonKey
       );
@@ -1278,7 +1285,7 @@ async function processarFluxoPrincipal(
     const dataGemini = await resGemini.json();
     const textoIA =
       dataGemini.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "Desculpe, não entendi. Digite 'menu' para ver as opções.";
+      "Desculpe, não entendi. Digite 'menu' para ver as opções."; // FIXED: aspas
     await sendWhatsappMessageAndSaveHistory(
       originalCustomerPhoneNumber,
       textoIA,
@@ -1288,7 +1295,7 @@ async function processarFluxoPrincipal(
   } catch (e) {
     await sendWhatsappMessageAndSaveHistory(
       originalCustomerPhoneNumber,
-      "Olá! Como posso ajudar? Digite 'menu' para ver as opções principais.",
+      "Olá! Como posso ajudar? Digite 'menu' para ver as opções principais.", // FIXED: aspas
       supabaseUrl,
       supabaseAnonKey
     );
